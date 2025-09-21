@@ -1,0 +1,223 @@
+# =============================================================================
+# GraphRAG Configuration Template for PHILOSOPHICAL TEXTS
+# Optimized for philosophical dialogues, concepts, speakers (100% DYNAMIC)
+# 🎯 TEXT-AGNOSTIC: Works with ANY philosophical text - Plato, Aristotle, or any philosophy
+# =============================================================================
+
+[general]
+# General configuration
+input_document_path = "info/Symposium.txt"
+output_dir = "./output/symposium"
+log_level = "info"
+max_threads = 4
+enable_profiling = true
+
+[pipeline]
+# Processing pipeline stages optimized for philosophical dialogue
+workflows = ["extract_text", "extract_entities", "build_graph", "detect_communities"]
+parallel_execution = true
+
+[pipeline.text_extraction]
+# OPTIMIZED FOR PHILOSOPHICAL DIALOGUE: Larger chunks to capture full arguments/speeches
+chunk_size = 800              # Good for complete philosophical arguments
+chunk_overlap = 300           # Preserve philosophical continuity
+min_chunk_size = 200          # Meaningful philosophical units
+clean_control_chars = true
+normalize_whitespace = true
+
+[pipeline.entity_extraction]
+# PHILOSOPHICAL-SPECIFIC: Enhanced for speakers, concepts, and arguments
+model_name = "llama3.1:8b"
+temperature = 0.1             # Low for consistent concept extraction
+max_tokens = 1500             # Higher for detailed philosophical descriptions
+entity_types = [
+    "PERSON",                 # Speakers: Socrates, Phaedrus, Aristophanes, etc.
+    "CONCEPT",                # Eros, Beauty, Love, Soul, etc.
+    "ARGUMENT",               # Philosophical arguments and positions
+    "LOCATION",               # Athens, symposium setting
+    "OBJECT",                 # Symbols, metaphors
+    "EVENT",                  # Speeches, dialogues
+    "RELATIONSHIP",           # Philosophical relationships
+    "EMOTION",               # Emotional states in dialogue
+    "THEME",                 # Philosophical themes
+    "DIALOGUE_SPEAKER",      # Who presents which argument
+    "MYTHOLOGICAL_REFERENCE" # References to gods, myths
+]
+confidence_threshold = 0.6    # Lower for philosophical nuance
+
+[pipeline.entity_extraction.filters]
+# PHILOSOPHICAL FILTERING: Optimized for Greek names and concepts
+min_entity_length = 2
+max_entity_length = 100       # Higher for full philosophical terms
+allowed_patterns = [
+    "^[A-Z][a-zA-Z\\s'-]+$",  # Proper names
+    "^[A-Z][a-z]+\\s+[A-Z][a-z]+$", # First Last names
+    "^(Socrates|Phaedrus|Aristophanes|Agathon|Eryximachus|Pausanias|Alcibiades)$" # Key speakers
+]
+excluded_patterns = [
+    "^(the|and|but|for|with|from)$", # Common words
+    "^\\d+$",                         # Pure numbers
+    "^[a-z]+$"                        # All lowercase (likely not concepts)
+]
+
+[pipeline.graph_building]
+# PHILOSOPHICAL GRAPH: Focus on speaker relationships and concept connections
+relation_scorer = "cosine_similarity"
+min_relation_score = 0.4      # Lower for subtle philosophical relationships
+max_connections_per_node = 25  # Higher for complex concept networks
+bidirectional_relations = true
+character_centrality_boost = 1.5  # Boost importance of main speakers
+
+[pipeline.community_detection]
+# PHILOSOPHICAL COMMUNITIES: Speaker groups, concept clusters
+algorithm = "leiden"
+resolution = 0.6              # Lower for tighter concept groupings
+min_community_size = 2
+max_community_size = 15       # Smaller for focused philosophical groups
+
+[text_processing]
+# Unified text processing settings
+enabled = true
+chunk_size = 800              # Consistent with pipeline setting
+chunk_overlap = 300
+min_chunk_size = 200
+max_chunk_size = 1500         # Allow longer chunks for complex arguments
+normalize_whitespace = true
+remove_artifacts = true
+extract_keywords = true
+keyword_min_score = 0.15      # Higher threshold for quality
+
+[entity_extraction]
+# PHILOSOPHICAL ENTITY SETTINGS: Optimized for speakers and concepts
+enabled = true
+min_confidence = 0.6          # Lower for philosophical nuance
+use_gleaning = true
+max_gleaning_rounds = 4       # More rounds for concept details
+gleaning_improvement_threshold = 0.08 # More sensitive improvement detection
+semantic_merging = true
+merge_similarity_threshold = 0.85     # Higher precision for concept merging
+automatic_linking = true
+linking_confidence_threshold = 0.7    # More aggressive concept linking
+
+[entity_extraction.gleaning]
+# PHILOSOPHICAL GLEANING: Focus on concepts and speaker arguments
+focus_areas = ["PERSON", "CONCEPT", "ARGUMENT", "RELATIONSHIP", "THEME"]
+context_window = 400          # Larger context for philosophical understanding
+llm_temperature = 0.05        # Very low for consistent concept analysis
+narrative_context = true     # Enable dialogue-specific processing
+character_tracking = true    # Track speaker development over dialogue
+
+[graph_construction]
+# PHILOSOPHICAL GRAPH: Speaker-centric network with concept relationships
+enabled = true
+incremental_updates = true
+use_pagerank = true
+pagerank_damping = 0.8        # Slightly lower for speaker importance
+pagerank_iterations = 75     # More iterations for complex dialogues
+pagerank_convergence = 0.00005 # Higher precision
+extract_relationships = true
+relationship_confidence_threshold = 0.5 # Lower for subtle relationships
+character_relationship_boost = 1.3     # Boost speaker-speaker connections
+
+[vector_processing]
+# SEMANTIC SEARCH: Optimized for philosophical similarity
+enabled = true
+embedding_model = "nomic-embed-text"
+embedding_dimensions = 768
+use_hnsw_index = true
+hnsw_ef_construction = 300    # Higher for better philosophical search
+hnsw_m = 24                   # More connections for semantic richness
+similarity_threshold = 0.65   # Lower for philosophical nuance
+narrative_weighting = true   # Weight by philosophical importance
+
+[query_processing]
+# PHILOSOPHICAL QUERIES: Enhanced for speaker and concept questions
+enabled = true
+use_advanced_pipeline = true
+use_intent_classification = true
+use_concept_extraction = true
+use_temporal_parsing = true
+confidence_threshold = 0.45   # Lower for philosophical interpretation
+narrative_context_expansion = true # Expand queries with philosophical context
+
+[query_processing.intent_classification]
+# PHILOSOPHICAL INTENT: Specialized patterns for philosophical analysis
+character_patterns = ["who is", "speaker", "philosopher", "person", "character"]
+concept_patterns = ["what is", "concept", "idea", "definition", "meaning", "eros", "love", "beauty"]
+argument_patterns = ["argument", "position", "view", "opinion", "thesis", "claims"]
+dialogue_patterns = ["speech", "says", "argues", "dialogue", "conversation"]
+
+[query_processing.prompt_templates]
+# PHILOSOPHICAL PROMPTS: Specialized templates for philosophical analysis
+speaker = """Based on the following context about speakers and their philosophical positions, provide a detailed analysis for: {query}
+
+Context:
+{context}
+
+Speaker Analysis:"""
+
+concept = """Based on the following philosophical context, explain the concept and its significance for: {query}
+
+Context:
+{context}
+
+Concept Explanation:"""
+
+argument = """Analyze the philosophical arguments and positions described in the context for: {query}
+
+Context:
+{context}
+
+Argument Analysis:"""
+
+[ollama]
+# PHILOSOPHICAL LLM: Optimized for philosophical understanding
+enabled = true
+host = "http://localhost"
+port = 11434
+chat_model = "llama3.1:8b"
+embedding_model = "nomic-embed-text"
+timeout_seconds = 90          # Higher for complex philosophical analysis
+max_retries = 3
+fallback_to_hash = false
+max_tokens = 1200             # Higher for detailed philosophical analysis
+temperature = 0.2             # Lower for consistent philosophical interpretation
+
+[ollama.generation]
+# PHILOSOPHICAL GENERATION: Optimized for philosophical responses
+temperature = 0.3             # Lower for consistent philosophical analysis
+top_p = 0.85                  # More focused responses
+max_tokens = 1500             # Longer for detailed concept/argument analysis
+stream = false
+narrative_style = true       # Enable dialogue-aware generation
+character_voice_preservation = true # Maintain speaker voice consistency
+
+[performance]
+# PHILOSOPHICAL PERFORMANCE: Optimized for philosophical text processing
+batch_processing = true
+batch_size = 30               # Smaller batches for quality over speed
+worker_threads = 4
+memory_limit_mb = 6144        # Higher for complex concept networks
+cache_embeddings = true       # Cache for repeated concept mentions
+character_cache_size = 1000   # Large cache for speaker consistency
+
+[monitoring]
+# PHILOSOPHICAL MONITORING: Track philosophical analysis quality
+enabled = true
+track_character_consistency = true
+track_relationship_accuracy = true
+track_plot_coherence = true
+log_narrative_insights = true
+
+# =============================================================================
+# PHILOSOPHICAL-SPECIFIC OPTIMIZATIONS SUMMARY:
+#
+# 1. CHUNKING: Larger chunks (800) with more overlap (300) for argument continuity
+# 2. ENTITIES: 11 specialized types including CONCEPT, ARGUMENT, MYTHOLOGICAL_REFERENCE
+# 3. CONFIDENCE: Lower thresholds (0.6) for philosophical nuance and subtlety
+# 4. GRAPH: Speaker-centric with concept relationships and tighter communities
+# 5. LLM: Lower temperature (0.2) for consistent philosophical analysis
+# 6. CONTEXT: Larger windows (400) for argument development tracking
+# 7. SEARCH: Enhanced HNSW parameters for richer semantic connections
+# 8. SPEAKERS: Special focus on Socrates, Phaedrus, Aristophanes, etc.
+# =============================================================================

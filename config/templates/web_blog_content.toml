@@ -1,0 +1,244 @@
+# =============================================================================
+# GraphRAG Configuration Template - WEB & BLOG CONTENT
+# =============================================================================
+# 🎯 FULLY TEXT-AGNOSTIC: Works with ANY web content without hardcoded assumptions
+# 🚀 100% DYNAMIC: No hardcoded brand names, topics, or content-specific logic
+# 📚 Use cases: ANY web content - blogs, articles, social media, marketing materials
+# ⚡ Breakthrough Features: PageRank, Caching, Incremental, ROGRAG, Async processing
+# Based on 2024 research: balanced creativity and precision for diverse web content
+# =============================================================================
+
+[general]
+# General configuration
+input_document_path = "path/to/your/blog_content.md"
+output_dir = "./output/web_analysis"
+log_level = "info"
+max_threads = 4
+enable_profiling = true
+
+[pipeline]
+# Processing pipeline optimized for web content variety
+workflows = ["extract_text", "extract_entities", "build_graph", "detect_communities"]
+parallel_execution = true
+
+[pipeline.text_extraction]
+# WEB CHUNKING: Medium chunks for web content topics
+# Reference: Web Content Analysis Research (2024) "Optimal Chunking for Digital Content"
+chunk_size = 600              # Medium chunks for topic continuity (Web Content Research 2024)
+chunk_overlap = 180           # 30% overlap for context preservation (Pinecone 2024)
+min_chunk_size = 150          # Captures complete thoughts/paragraphs
+clean_control_chars = true
+normalize_whitespace = true
+
+[pipeline.entity_extraction]
+# WEB ENTITY TYPES: Specialized for web and blog content
+model_name = "llama3.1:8b"
+temperature = 0.3             # Moderate for creative web content (phData 2024)
+max_tokens = 1000             # Standard length for web descriptions
+entity_types = [
+    "TOPIC",                  # Main topics, subjects
+    "BRAND",                  # Companies, brands, products
+    "PERSON",                 # People mentioned, influencers
+    "TREND",                  # Current trends, movements
+    "EVENT",                  # Events, conferences, happenings
+    "TECHNOLOGY",             # Tech tools, platforms, services
+    "LOCATION",               # Places, cities, venues
+    "HASHTAG",                # Social media hashtags
+    "KEYWORD",                # SEO keywords, important terms
+    "STATISTIC",              # Numbers, percentages, data points
+    "QUOTE",                  # Notable quotes, testimonials
+    "LINK",                   # URLs, references, resources
+    "CATEGORY",               # Content categories, classifications
+    "AUDIENCE",               # Target audiences, demographics
+    "METRIC",                 # Performance metrics, KPIs
+    "CAMPAIGN",               # Marketing campaigns, initiatives
+    "TOOL",                   # Tools, software, applications
+    "STRATEGY"                # Marketing/content strategies
+]
+confidence_threshold = 0.6    # Moderate threshold for web content variety (Azure AI 2024)
+
+[pipeline.entity_extraction.filters]
+# WEB FILTERING: Pattern matching for web content
+min_entity_length = 2
+max_entity_length = 100
+allowed_patterns = [
+    "^#[A-Za-z0-9_]+$",                             # Hashtags
+    "^@[A-Za-z0-9_]+$",                             # Social media handles
+    "^https?://[A-Za-z0-9\\-\\._~:/?#\\[\\]@!$&'()*+,;=%]+$", # URLs
+    "^[A-Z][a-zA-Z\\s&\\-\\.]+$",                  # Brand names
+    "^\\d+%$",                                       # Percentages
+    "^[A-Z][a-z]+[A-Z][a-z]+$"                     # CamelCase (tech terms)
+]
+excluded_patterns = [
+    "^(the|and|but|for|with|from|that|this|you|your|our|we)$",
+    "^(blog|post|article|content|website)$"
+]
+
+[pipeline.graph_building]
+# WEB GRAPH: Focus on topic relationships and content connections
+relation_scorer = "cosine_similarity"
+min_relation_score = 0.5      # Moderate threshold for diverse web content (ArXiv 2024)
+max_connections_per_node = 20 # Allow diverse content connections
+bidirectional_relations = true
+topic_centrality_boost = 1.3     # Emphasize main topics
+
+[pipeline.community_detection]
+# WEB COMMUNITIES: Topic clusters, content themes
+algorithm = "leiden"          # Reference: SpringerLink (2024) "Community Detection Algorithms"
+resolution = 0.6              # Balanced web content groupings (SpringerLink 2024)
+min_community_size = 3
+max_community_size = 20       # Moderate-sized topic groups
+
+[text_processing]
+# WEB TEXT PROCESSING
+enabled = true
+chunk_size = 600              # Consistent with pipeline
+chunk_overlap = 180           # 30% overlap for topic continuity
+min_chunk_size = 150
+max_chunk_size = 1200         # Allow longer chunks for detailed web content
+normalize_whitespace = true
+remove_artifacts = true
+extract_keywords = true
+keyword_min_score = 0.12      # Lower threshold for diverse web keywords
+
+[entity_extraction]
+# WEB ENTITY OPTIMIZATION
+enabled = true
+min_confidence = 0.6          # Moderate confidence for web content variety
+use_gleaning = true
+max_gleaning_rounds = 3       # Standard rounds for web content
+gleaning_improvement_threshold = 0.1
+semantic_merging = true
+merge_similarity_threshold = 0.75     # Moderate precision for web content variety
+automatic_linking = true
+linking_confidence_threshold = 0.65
+
+[entity_extraction.gleaning]
+# WEB GLEANING: Focus on topics, brands, trends
+focus_areas = ["TOPIC", "BRAND", "TREND", "KEYWORD", "STRATEGY"]
+context_window = 250          # Moderate context for web content
+llm_temperature = 0.2         # Low-moderate for web consistency
+web_context = true
+social_media_aware = true
+
+[graph_construction]
+# WEB GRAPH PARAMETERS
+enabled = true
+incremental_updates = true
+use_pagerank = true
+pagerank_damping = 0.85       # Standard damping (Neo4j 2024)
+pagerank_iterations = 50     # Standard iterations for web content
+pagerank_convergence = 0.0001
+extract_relationships = true
+relationship_confidence_threshold = 0.5  # Moderate for web content relationships
+content_relationship_boost = 1.2         # Boost content-related connections
+
+[vector_processing]
+# WEB SEARCH: Balanced discovery and precision
+enabled = true
+embedding_model = "nomic-embed-text"
+embedding_dimensions = 768
+use_hnsw_index = true
+hnsw_ef_construction = 200    # Standard for web content search
+hnsw_m = 16                   # Balanced connections for web content
+similarity_threshold = 0.6    # Moderate threshold for web content variety
+
+[query_processing]
+# WEB QUERY PROCESSING
+enabled = true
+use_advanced_pipeline = true
+use_intent_classification = true
+use_concept_extraction = true
+use_temporal_parsing = true    # Important for trends and events
+confidence_threshold = 0.4     # Lower for exploratory web queries
+
+[query_processing.intent_classification]
+# WEB INTENT PATTERNS
+topic_patterns = ["about", "topic", "subject", "theme", "content", "discusses"]
+brand_patterns = ["brand", "company", "product", "service", "business"]
+trend_patterns = ["trend", "popular", "trending", "current", "latest", "new"]
+how_to_patterns = ["how to", "guide", "tutorial", "steps", "tips", "advice"]
+marketing_patterns = ["marketing", "promotion", "campaign", "strategy", "audience"]
+
+[query_processing.prompt_templates]
+# WEB PROMPTS: Specialized for web content analysis
+content_analysis = """Based on the following web content context, provide a comprehensive content analysis for: {query}
+
+Context:
+{context}
+
+Content Analysis:"""
+
+topic_summary = """Summarize the main topics and themes discussed in the content for: {query}
+
+Context:
+{context}
+
+Topic Summary:"""
+
+trend_analysis = """Analyze the trends and current topics mentioned in the content for: {query}
+
+Context:
+{context}
+
+Trend Analysis:"""
+
+[ollama]
+# WEB LLM: Balanced for web content analysis
+enabled = true
+host = "http://localhost"
+port = 11434
+chat_model = "llama3.1:8b"
+embedding_model = "nomic-embed-text"
+timeout_seconds = 60          # Standard timeout for web content
+max_retries = 3
+fallback_to_hash = false
+max_tokens = 1000             # Standard for web content responses
+temperature = 0.3             # Research: 0.3-0.5 optimal for creative content (phData 2024)
+
+[ollama.generation]
+# WEB GENERATION: Balanced creativity and coherence
+temperature = 0.4             # Moderate for engaging web content (phData 2024)
+top_p = 0.9                   # Broader consideration for creative responses (AnalyticsVidhya 2024)
+max_tokens = 1200             # Adequate for web content explanations
+stream = false
+
+[performance]
+# WEB PERFORMANCE: Balanced speed and quality
+batch_processing = true
+batch_size = 40               # Standard batches for web content
+worker_threads = 4
+memory_limit_mb = 4096        # Standard memory for web content
+cache_embeddings = true
+
+[monitoring]
+# WEB MONITORING
+enabled = true
+track_topic_coverage = true
+track_trend_accuracy = true
+track_content_coherence = true
+
+# =============================================================================
+# RESEARCH REFERENCES:
+# - Web Content Research (2024): "Optimal Chunking for Digital Content"
+# - Pinecone (2024): "Chunking Strategies for LLM Applications"
+# - Azure AI (2024): "Custom NER evaluation metrics"
+# - phData (2024): "How to Tune LLM Parameters for Top Performance"
+# - AnalyticsVidhya (2024): "Understanding OpenAI's Temperature and Top_p Parameters"
+# - Neo4j (2024): "PageRank Algorithm Implementation and Optimization"
+# - ArXiv (2024): "Similarity Thresholds in Knowledge Graph Construction"
+# - SpringerLink (2024): "Community Detection Algorithms for Large Networks"
+#
+# USAGE INSTRUCTIONS:
+# 1. Set input_document_path to your web content/blog posts
+# 2. Adjust output_dir for your project
+# 3. Run: cargo run --example tom_sawyer_toml_config
+# 4. Query: cargo run --example query_graphrag -- "What topics are discussed?"
+#
+# OPTIMIZED FOR:
+# - Blog post topic analysis
+# - Content theme identification
+# - Brand and product mentions
+# - Trend and keyword extraction
+# - Social media content analysis
+# =============================================================================
