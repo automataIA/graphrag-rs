@@ -1,0 +1,14 @@
+{
+  "rust-analyzer.diagnostics.enable": true,
+  "rust-analyzer.diagnostics.experimental.enable": true,
+  "rust-analyzer.diagnostics.styleLints.enable": true,
+  "rust-analyzer.check.command": "clippy",
+  "rust-analyzer.check.allTargets": true,
+  "rust-analyzer.cargo.allFeatures": true,
+  "rust-analyzer.check.ignore": [],
+  "rust-analyzer.diagnostics.disabled": [],
+  "rust-analyzer.check.overrideCommand": [
+    "cargo", "clippy", "--all-targets", "--all-features",
+    "--message-format=json", "--", "-W", "clippy::all"
+  ]
+}

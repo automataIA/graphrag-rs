@@ -1,0 +1,212 @@
+[package]
+name = "graphrag-rs"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["memory-storage", "basic-retrieval", "ollama", "parallel-processing", "toml-support", "rograg", "async-traits", "test-utils", "lightrag", "neural-embeddings", "corpus-processing"]
+
+# Storage backends
+memory-storage = []
+persistent-storage = ["serde_json"]
+
+# LLM providers
+ollama = ["ollama-rs", "tokio", "serde_json", "futures", "parking_lot"]
+openai = ["async-openai"]
+
+# Retrieval methods
+basic-retrieval = []
+graph-retrieval = []
+hybrid-retrieval = ["basic-retrieval", "graph-retrieval"]
+pagerank = ["sprs", "nalgebra", "parking_lot", "lru"]
+# Processing features
+parallel-processing = ["rayon", "num_cpus"]
+function-calling = []
+
+# Vector stores
+vector-hnsw = ["instant-distance"]
+vector-faiss = []
+
+# Monitoring and benchmarking
+monitoring = []
+benchmarking = []
+
+# Serialization formats
+yaml-support = ["serde_yaml"]
+toml-support = ["toml"]
+
+# Testing features
+test-utils = []
+
+# Caching features
+caching = ["moka", "sha2", "serde_json", "thiserror", "tokio"]
+
+# Incremental updates feature
+incremental = ["serde_json", "tokio", "parking_lot", "uuid", "dashmap", "async-trait"]
+
+# ROGRAG (Robustly Optimized GraphRAG) feature
+rograg = ["thiserror", "derive_more", "strum", "itertools", "tap", "async-trait", "serde_json", "futures"]
+
+# Async traits feature for async/await patterns
+async-traits = ["async-trait", "tokio", "futures"]
+
+# LightRAG dual-level retrieval feature
+lightrag = ["serde_json", "thiserror"]
+
+# Neural embeddings feature
+neural-embeddings = ["async-trait", "tokio", "serde_json", "dirs"]
+
+# Multi-document processing and corpus analysis
+corpus-processing = ["uuid", "serde_json", "regex"]
+
+# Redis storage backend for LightRAG
+redis-storage = ["redis", "lightrag"]
+
+[dependencies]
+# === CORE DEPENDENCIES (always required) ===
+petgraph = { version = "0.6", default-features = false }
+indexmap = { version = "2.0", features = ["serde"] }  # Ordered maps for caching
+text_analysis = "0.3"       # Lightweight NER with capitalization heuristics
+ureq = { version = "2.12", features = ["json"] }  # Tokio-free HTTP client
+json = "0.12"               # Core JSON support (used throughout)
+serde = { version = "1.0", features = ["derive"] }  # Core serialization
+chrono = { version = "0.4", features = ["serde"] }  # Date/time handling (always required)
+
+# === FEATURE-GATED DEPENDENCIES ===
+# Vector similarity search
+instant-distance = { version = "0.6", optional = true }
+
+# Parallel processing
+rayon = { version = "1.8", optional = true }
+num_cpus = { version = "1.16", optional = true }
+
+# PageRank and graph algorithms (optional)
+sprs = { version = "0.11", optional = true }                   # Sparse matrix operations for PageRank
+nalgebra = { version = "0.32", optional = true }              # Linear algebra operations
+parking_lot = { version = "0.12", optional = true }           # High-performance RwLock for concurrent access
+lru = { version = "0.12", optional = true }                   # LRU cache for optimization
+regex = { version = "1.0", optional = true }  # Regular expressions for pattern matching
+
+# Serialization
+serde_json = { version = "1.0.145", optional = true }
+serde_yaml = { version = "0.9", optional = true }
+toml = { version = "0.8", optional = true }
+
+# Ollama integration
+ollama-rs = { version = "0.3.2", optional = true }
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"], optional = true }
+futures = { version = "0.3", optional = true }
+
+# Future OpenAI integration
+async-openai = { version = "0.14", optional = true }
+
+# Testing utilities
+fastrand = { version = "2.0", optional = true }
+
+# Caching dependencies
+moka = { version = "0.12", features = ["future"], optional = true }
+sha2 = { version = "0.10", optional = true }
+
+# Incremental updates dependencies
+uuid = { version = "1.0", features = ["v4", "serde"], optional = true }
+dashmap = { version = "5.5", optional = true }
+async-trait = { version = "0.1", optional = true }
+
+# ROGRAG dependencies
+thiserror = { version = "1.0", optional = true }
+derive_more = { version = "0.99", optional = true }
+strum = { version = "0.25", features = ["derive"], optional = true }
+itertools = { version = "0.12", optional = true }
+tap = { version = "1.0", optional = true }
+
+# Redis client for storage backend
+redis = { version = "0.24", optional = true }
+
+# Directories for model storage
+dirs = { version = "5.0", optional = true }
+
+# Error handling (make thiserror available when caching is enabled)
+# We could also make it a core dependency instead
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+pretty_assertions = "1.4"
+proptest = "1.4"
+tempfile = "3.8"
+
+[[example]]
+name = "function_calling_demo"
+path = "examples/function_calling_demo.rs"
+required-features = ["function-calling"]
+
+[[example]]
+name = "function_calling_simple_test"
+path = "examples/function_calling_simple_test.rs"
+required-features = ["function-calling"]
+
+[[example]]
+name = "function_calling_tom_sawyer"
+path = "examples/function_calling_tom_sawyer.rs"
+required-features = ["function-calling"]
+
+[[example]]
+name = "simple_inference_test"
+path = "examples/simple_inference_test.rs"
+required-features = ["function-calling"]
+
+[[example]]
+name = "ollama_function_calling_demo"
+path = "examples/ollama_function_calling_demo.rs"
+required-features = ["function-calling", "ollama"]
+
+[[example]]
+name = "pagerank_demo"
+path = "examples/pagerank_demo.rs"
+required-features = ["pagerank"]
+
+[[example]]
+name = "lightrag_demo"
+path = "examples/lightrag_demo.rs"
+required-features = ["lightrag"]
+
+[[example]]
+name = "neural_embeddings_demo"
+path = "examples/neural_embeddings_demo.rs"
+required-features = ["neural-embeddings"]
+
+[[example]]
+name = "corpus_processing_demo"
+path = "examples/corpus_processing_demo.rs"
+required-features = ["corpus-processing"]
+
+[[example]]
+name = "complete_integration_demo"
+path = "examples/complete_integration_demo.rs"
+required-features = ["lightrag", "neural-embeddings", "corpus-processing"]
+
+[[bench]]
+name = "graph_construction"
+harness = false
+
+[[bench]]
+name = "vector_search"
+harness = false
+
+[[bench]]
+name = "text_processing"
+harness = false
+
+[[bench]]
+name = "pagerank_retrieval"
+harness = false
+required-features = ["pagerank"]
+
+[[bench]]
+name = "cache_performance"
+harness = false
+required-features = ["caching"]
+
+[[bench]]
+name = "parallel_processing"
+harness = false
+required-features = ["parallel-processing"]

@@ -1,0 +1,107 @@
+# =============================================================================
+# GraphRAG Configuration File
+# Complete configuration with extensive parameters for easy customization
+# =============================================================================
+
+[general]
+log_level = "info"
+output_dir = "./output/symposium"
+input_document_path = "info/Symposium.txt"
+max_threads = 4
+enable_profiling = true
+
+[pipeline]
+workflows = [
+    "extract_text",
+    "extract_entities",
+    "build_graph",
+    "detect_communities",
+]
+parallel_execution = true
+
+[pipeline.text_extraction]
+chunk_size = 800
+chunk_overlap = 300
+clean_control_chars = true
+min_chunk_size = 200
+
+[pipeline.entity_extraction]
+model_name = "llama3.1:8b"
+temperature = 0.10000000149011612
+max_tokens = 1500
+entity_types = [
+    "PERSON",
+    "CONCEPT",
+    "ARGUMENT",
+    "LOCATION",
+    "OBJECT",
+    "EVENT",
+    "RELATIONSHIP",
+    "EMOTION",
+    "THEME",
+    "DIALOGUE_SPEAKER",
+    "MYTHOLOGICAL_REFERENCE",
+]
+confidence_threshold = 0.6000000238418579
+
+[pipeline.entity_extraction.filters]
+min_entity_length = 2
+max_entity_length = 100
+confidence_threshold = 0.800000011920929
+allowed_patterns = [
+    '''^[A-Z][a-zA-Z\s'-]+$''',
+    '^[A-Z][a-z]+\s+[A-Z][a-z]+$',
+    "^(Socrates|Phaedrus|Aristophanes|Agathon|Eryximachus|Pausanias|Alcibiades)$",
+]
+excluded_patterns = [
+    "^(the|and|but|for|with|from)$",
+    '^\d+$',
+    "^[a-z]+$",
+]
+enable_fuzzy_matching = false
+
+[pipeline.graph_building]
+relation_scorer = "cosine_similarity"
+min_relation_score = 0.4000000059604645
+max_connections_per_node = 25
+bidirectional_relations = true
+
+[pipeline.community_detection]
+algorithm = "leiden"
+resolution = 0.6000000238418579
+min_community_size = 2
+max_community_size = 15
+
+[storage]
+database_type = "sqlite"
+database_path = "./graphrag.db"
+enable_wal = true
+
+[models]
+primary_llm = "gpt-4"
+embedding_model = "text-embedding-ada-002"
+max_context_length = 4096
+
+[performance]
+batch_processing = true
+batch_size = 30
+worker_threads = 4
+memory_limit_mb = 6144
+
+[ollama]
+enabled = true
+host = "http://localhost"
+port = 11434
+chat_model = "llama3.1:8b"
+embedding_model = "nomic-embed-text"
+timeout_seconds = 90
+max_retries = 3
+fallback_to_hash = false
+max_tokens = 1200
+temperature = 0.20000000298023224
+
+[experimental]
+neural_reranking = false
+federated_learning = false
+real_time_updates = false
+distributed_processing = false

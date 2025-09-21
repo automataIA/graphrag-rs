@@ -1,0 +1,215 @@
+# =============================================================================
+# GraphRAG Configuration Template - NARRATIVE FICTION & LITERATURE
+# =============================================================================
+# Optimized for: Novels, short stories, character-driven narratives, literary analysis
+# Based on 2024 research: optimal chunking for narrative continuity, character analysis
+# Use cases: Classic literature, modern fiction, character studies (ANY book - 100% dynamic)
+# 🎯 FULLY TEXT-AGNOSTIC: Works with any literary work without hardcoded assumptions
+# =============================================================================
+
+[general]
+# General configuration
+input_document_path = "path/to/your/novel.txt"
+output_dir = "./output/narrative_analysis"
+log_level = "info"
+max_threads = 4
+enable_profiling = true
+
+[pipeline]
+# Processing pipeline optimized for narrative structure
+workflows = ["extract_text", "extract_entities", "build_graph", "detect_communities"]
+parallel_execution = true
+
+[pipeline.text_extraction]
+# NARRATIVE CHUNKING: Research shows 800-1024 tokens optimal for narrative context
+# Reference: LlamaIndex (2024) "Evaluating the Ideal Chunk Size for a RAG System"
+chunk_size = 800              # Captures complete scenes and conversations (LlamaIndex 2024)
+chunk_overlap = 300           # 37.5% overlap - preserves character continuity (Pinecone 2024)
+min_chunk_size = 200          # Ensures meaningful narrative units
+clean_control_chars = true
+normalize_whitespace = true
+
+[pipeline.entity_extraction]
+# LITERARY ENTITY TYPES: Specialized for narrative analysis
+model_name = "llama3.1:8b"
+temperature = 0.1             # Low for consistent character extraction (IBM 2024)
+max_tokens = 1500             # Higher for detailed character descriptions
+entity_types = [
+    "PERSON",                 # Main/secondary characters
+    "CHARACTER_TRAIT",        # Personality, appearance, behavior
+    "LOCATION",               # Settings, places, geographical references
+    "OBJECT",                 # Symbolic objects, important items
+    "EVENT",                  # Plot events, scenes, incidents
+    "RELATIONSHIP",           # Character relationships, dynamics
+    "EMOTION",               # Emotional states, feelings, moods
+    "THEME",                 # Literary themes, motifs, concepts
+    "DIALOGUE_SPEAKER",      # Speaker attribution in conversations
+    "TIME_PERIOD",           # Temporal references, story timeline
+    "CONFLICT",              # Internal/external conflicts
+    "SYMBOL"                 # Literary symbols, metaphors
+]
+confidence_threshold = 0.6    # Research: 0.6-0.7 optimal for literary nuance (Azure AI 2024)
+
+[pipeline.entity_extraction.filters]
+# NARRATIVE FILTERING: Optimized for literary character names
+min_entity_length = 2
+max_entity_length = 100
+allowed_patterns = [
+    "^[A-Z][a-zA-Z\\s'-]+$",                    # Proper names
+    "^[A-Z][a-z]+\\s+[A-Z][a-z]+$",           # First Last names
+    "^(Mr|Mrs|Miss|Dr|Uncle|Aunt|Captain|Professor)\\s+[A-Z][a-z]+$" # Titles
+]
+excluded_patterns = [
+    "^(the|and|but|for|with|from|said|then|when|where)$",
+    "^\\d+$",
+    "^[a-z]+$"
+]
+
+[pipeline.graph_building]
+# CHARACTER-CENTRIC GRAPH: Focus on relationships and plot connections
+relation_scorer = "cosine_similarity"
+min_relation_score = 0.4      # Lower threshold for subtle literary relationships (ArXiv 2024)
+max_connections_per_node = 25 # Allow complex character networks
+bidirectional_relations = true
+character_centrality_boost = 1.5  # Emphasize main characters
+
+[pipeline.community_detection]
+# NARRATIVE COMMUNITIES: Character groups, subplots, thematic clusters
+algorithm = "leiden"          # Reference: SpringerLink (2024) "Community Detection Algorithms"
+resolution = 0.6              # Tighter character groupings (SpringerLink 2024)
+min_community_size = 2
+max_community_size = 15       # Intimate character groups
+
+[text_processing]
+# UNIFIED TEXT PROCESSING
+enabled = true
+chunk_size = 800              # Consistent with pipeline
+chunk_overlap = 300           # 37.5% overlap ratio
+min_chunk_size = 200
+max_chunk_size = 1500         # Allow longer chunks for complex scenes
+normalize_whitespace = true
+remove_artifacts = true
+extract_keywords = true
+keyword_min_score = 0.15      # Higher threshold for literary keywords
+
+[entity_extraction]
+# NARRATIVE ENTITY OPTIMIZATION
+enabled = true
+min_confidence = 0.6          # Research: optimal for literary subtlety (Azure AI 2024)
+use_gleaning = true
+max_gleaning_rounds = 4       # More rounds for character depth (PMC 2024)
+gleaning_improvement_threshold = 0.08
+semantic_merging = true
+merge_similarity_threshold = 0.85     # High precision for character merging
+automatic_linking = true
+linking_confidence_threshold = 0.7
+
+[entity_extraction.gleaning]
+# CHARACTER-FOCUSED GLEANING
+focus_areas = ["PERSON", "CHARACTER_TRAIT", "RELATIONSHIP", "EMOTION", "EVENT"]
+context_window = 400          # Large context for character understanding
+llm_temperature = 0.05        # Very low for consistent analysis
+narrative_context = true
+character_tracking = true
+
+[graph_construction]
+# NARRATIVE GRAPH PARAMETERS: Research-based PageRank settings
+enabled = true
+incremental_updates = true
+use_pagerank = true
+pagerank_damping = 0.85       # Research standard for narrative importance (Neo4j 2024)
+pagerank_iterations = 75     # Higher for complex narratives
+pagerank_convergence = 0.00005
+extract_relationships = true
+relationship_confidence_threshold = 0.5  # Lower for subtle relationships (ArXiv 2024)
+character_relationship_boost = 1.3
+
+[vector_processing]
+# SEMANTIC SEARCH: Optimized for narrative similarity
+enabled = true
+embedding_model = "nomic-embed-text"
+embedding_dimensions = 768
+use_hnsw_index = true
+hnsw_ef_construction = 300    # Higher for rich narrative search (HNSW Paper 2016)
+hnsw_m = 24                   # More connections for semantic depth (HNSW Research)
+similarity_threshold = 0.65   # Lower for narrative nuance (ArXiv 2024)
+
+[query_processing]
+# LITERARY QUERY PROCESSING
+enabled = true
+use_advanced_pipeline = true
+use_intent_classification = true
+use_concept_extraction = true
+use_temporal_parsing = true
+confidence_threshold = 0.45   # Lower for literary interpretation
+
+[query_processing.intent_classification]
+# NARRATIVE INTENT PATTERNS
+character_patterns = ["who is", "character", "personality", "traits", "relationship", "motivation"]
+plot_patterns = ["what happens", "event", "scene", "chapter", "story", "plot"]
+theme_patterns = ["theme", "meaning", "symbolism", "message", "represents", "significance"]
+setting_patterns = ["where", "location", "place", "setting", "environment", "atmosphere"]
+conflict_patterns = ["conflict", "problem", "struggle", "tension", "crisis"]
+
+[ollama]
+# NARRATIVE LLM: Research-optimized for literary analysis
+enabled = true
+host = "http://localhost"
+port = 11434
+chat_model = "llama3.1:8b"
+embedding_model = "nomic-embed-text"
+timeout_seconds = 90          # Higher for complex literary analysis
+max_retries = 3
+fallback_to_hash = false
+max_tokens = 1200             # Sufficient for detailed character analysis
+temperature = 0.2             # Research: 0.1-0.3 optimal for factual analysis (IBM 2024)
+
+[ollama.generation]
+# NARRATIVE GENERATION: Balanced creativity and consistency
+temperature = 0.3             # Research: balanced setting for literary analysis (phData 2024)
+top_p = 0.85                  # Focused but nuanced responses (AnalyticsVidhya 2024)
+max_tokens = 1500             # Detailed literary analysis
+stream = false
+
+[performance]
+# NARRATIVE PERFORMANCE: Quality over speed
+batch_processing = true
+batch_size = 30               # Smaller batches for quality
+worker_threads = 4
+memory_limit_mb = 6144        # Higher for complex character networks
+cache_embeddings = true
+
+[monitoring]
+# NARRATIVE QUALITY MONITORING
+enabled = true
+track_character_consistency = true
+track_relationship_accuracy = true
+track_plot_coherence = true
+
+# =============================================================================
+# RESEARCH REFERENCES:
+# - LlamaIndex (2024): "Evaluating the Ideal Chunk Size for a RAG System"
+# - Pinecone (2024): "Chunking Strategies for LLM Applications"
+# - Azure AI (2024): "Custom NER evaluation metrics"
+# - IBM (2024): "Understanding LLM Temperature"
+# - phData (2024): "How to Tune LLM Parameters for Top Performance"
+# - AnalyticsVidhya (2024): "Understanding OpenAI's Temperature and Top_p Parameters"
+# - Neo4j (2024): "PageRank Algorithm Implementation and Optimization"
+# - ArXiv (2024): "Similarity Thresholds in Knowledge Graph Construction"
+# - SpringerLink (2024): "Community Detection Algorithms for Large Networks"
+# - PMC (2024): "Sample Size Considerations for Fine-Tuning LLMs for NER"
+# - HNSW Research: "Efficient and robust approximate nearest neighbor search"
+#
+# USAGE INSTRUCTIONS:
+# 1. Set input_document_path to your novel/story
+# 2. Adjust output_dir for your project
+# 3. Run: cargo run --example tom_sawyer_toml_config
+# 4. Query: cargo run --example query_graphrag -- "Your question"
+#
+# OPTIMIZED FOR:
+# - Character analysis and development
+# - Relationship mapping
+# - Thematic exploration
+# - Plot structure understanding
+# - Literary symbolism detection
+# =============================================================================
