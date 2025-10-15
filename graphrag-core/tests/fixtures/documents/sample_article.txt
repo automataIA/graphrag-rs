@@ -1,0 +1,54 @@
+# Introduction to Knowledge Graphs
+
+Knowledge graphs have revolutionized how we represent and query structured information. They provide a flexible framework for modeling complex relationships between entities in various domains.
+
+## What is a Knowledge Graph?
+
+A knowledge graph is a structured representation of knowledge that captures entities, their properties, and the relationships between them. Unlike traditional databases, knowledge graphs use graph structures with nodes and edges to represent information in a way that mirrors human understanding.
+
+The concept was popularized by Google in 2012 when they introduced the Google Knowledge Graph to enhance search results. Since then, knowledge graphs have become fundamental to many AI and data science applications.
+
+## Core Components
+
+### Entities
+
+Entities are the fundamental building blocks of a knowledge graph. They represent real-world objects, concepts, or abstract ideas. For example, a person, organization, location, or event can all be entities in a knowledge graph.
+
+Each entity typically has:
+- A unique identifier
+- A type or category
+- Properties that describe its characteristics
+- Relationships connecting it to other entities
+
+### Relationships
+
+Relationships define how entities are connected. They form the edges in the graph structure. Common relationship types include "works_for", "located_in", "friend_of", and "part_of".
+
+Relationships can have:
+- Direction (source to target)
+- Type (defining the nature of the connection)
+- Properties (metadata about the relationship)
+- Confidence scores (indicating certainty)
+
+### Properties
+
+Properties are attributes that provide additional information about entities and relationships. They can be simple values like strings or numbers, or complex nested structures.
+
+## Applications in Modern Systems
+
+Knowledge graphs are used extensively in:
+
+1. **Search Engines**: Enhancing search results with semantic understanding
+2. **Recommendation Systems**: Finding related items based on graph structure
+3. **Question Answering**: Retrieving precise answers from structured knowledge
+4. **Data Integration**: Unifying information from multiple heterogeneous sources
+
+## Graph Retrieval Augmented Generation
+
+GraphRAG combines knowledge graphs with large language models to improve the quality and accuracy of generated responses. By grounding LLM outputs in structured knowledge, GraphRAG systems can provide more reliable and contextually relevant information.
+
+The key innovation is using graph traversal algorithms to retrieve relevant subgraphs that provide context for the language model. This approach has shown significant improvements in domains requiring factual accuracy and complex reasoning.
+
+## Conclusion
+
+Knowledge graphs represent a powerful paradigm for organizing and accessing information. As AI systems become more sophisticated, the integration of structured knowledge through graphs will play an increasingly important role in building reliable and interpretable systems.
