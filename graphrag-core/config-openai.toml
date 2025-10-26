@@ -1,0 +1,6 @@
+[embeddings]
+provider = "openai"
+model = "text-embedding-3-small"
+api_key = "sk-..."
+batch_size = 100
+dimensions = 1536

@@ -7,6 +7,17 @@
 # 🎯 FULLY TEXT-AGNOSTIC: Works with any literary work without hardcoded assumptions
 # =============================================================================
 
+# -----------------------------------------------------------------------------
+# MODE: Pipeline Approach Selection
+# -----------------------------------------------------------------------------
+[mode]
+# SEMANTIC pipeline recommended for narrative fiction:
+# - Deep character understanding and relationship mapping
+# - LLM-based extraction of emotions, themes, and symbolism
+# - Nuanced comprehension of literary devices and narrative structure
+# - Superior performance on character development and plot analysis
+approach = "semantic"
+
 [general]
 # General configuration
 input_document_path = "path/to/your/novel.txt"

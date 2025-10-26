@@ -1,0 +1,222 @@
+{
+  // ==========================================================================
+  // GraphRAG Configuration - TECHNICAL DOCUMENTATION
+  // ==========================================================================
+  // Converted from: technical_documentation.toml
+  // VSCode: This file has autocomplete! Press Ctrl+Space for suggestions.
+  // ==========================================================================
+
+  "$schema": "../schema/graphrag-config.schema.json",
+  "mode": {
+    "approach": "hybrid"
+  },
+  "general": {
+    "input_document_path": "path/to/your/technical_doc.md",
+    "output_dir": "./output/technical_analysis",
+    "log_level": "info",
+    "max_threads": 6,
+    "enable_profiling": true
+  },
+  "pipeline": {
+    "workflows": [
+      "extract_text",
+      "extract_entities",
+      "build_graph",
+      "detect_communities"
+    ],
+    "parallel_execution": true,
+    "text_extraction": {
+      "chunk_size": 512,
+      "chunk_overlap": 100,
+      "min_chunk_size": 100,
+      "clean_control_chars": true,
+      "normalize_whitespace": true
+    },
+    "entity_extraction": {
+      "model_name": "llama3.1:8b",
+      "temperature": 0.05,
+      "max_tokens": 800,
+      "entity_types": [
+        "API_ENDPOINT",
+        "FUNCTION",
+        "CLASS",
+        "PARAMETER",
+        "RETURN_VALUE",
+        "ERROR_CODE",
+        "CONFIGURATION",
+        "TECHNOLOGY",
+        "VERSION",
+        "FILE_PATH",
+        "DATABASE_FIELD",
+        "PROTOCOL",
+        "FORMAT",
+        "ALGORITHM",
+        "METRIC",
+        "TOOL"
+      ],
+      "confidence_threshold": 0.8,
+      "filters": {
+        "min_entity_length": 1,
+        "max_entity_length": 150,
+        "allowed_patterns": [
+          "^[A-Za-z][A-Za-z0-9_\\.\\-/]*$",
+          "^[A-Z][A-Z0-9_]+$",
+          "^v?\\d+\\.\\d+(\\.\\d+)?$",
+          "^https?://[A-Za-z0-9\\-\\._~:/?#\\[\\]@!$&'()*+,;=%]+$",
+          "^/[A-Za-z0-9\\-\\._/]+$"
+        ],
+        "excluded_patterns": [
+          "^(the|and|but|for|with|from|that|this|then|when|where)$",
+          "^(example|sample|demo|test)$"
+        ]
+      }
+    },
+    "graph_building": {
+      "relation_scorer": "cosine_similarity",
+      "min_relation_score": 0.7,
+      "max_connections_per_node": 15,
+      "bidirectional_relations": true,
+      "technical_dependency_boost": 1.8
+    },
+    "community_detection": {
+      "algorithm": "leiden",
+      "resolution": 0.8,
+      "min_community_size": 3,
+      "max_community_size": 20
+    }
+  },
+  "text_processing": {
+    "enabled": true,
+    "chunk_size": 512,
+    "chunk_overlap": 100,
+    "min_chunk_size": 100,
+    "max_chunk_size": 1000,
+    "normalize_whitespace": true,
+    "remove_artifacts": true,
+    "extract_keywords": true,
+    "keyword_min_score": 0.25
+  },
+  "entity_extraction": {
+    "enabled": true,
+    "min_confidence": 0.8,
+    "use_gleaning": true,
+    "max_gleaning_rounds": 3,
+    "gleaning_improvement_threshold": 0.1,
+    "semantic_merging": true,
+    "merge_similarity_threshold": 0.9,
+    "automatic_linking": true,
+    "linking_confidence_threshold": 0.8,
+    "gleaning": {
+      "focus_areas": [
+        "API_ENDPOINT",
+        "FUNCTION",
+        "PARAMETER",
+        "CONFIGURATION",
+        "ERROR_CODE"
+      ],
+      "context_window": 200,
+      "llm_temperature": 0.02,
+      "technical_context": true,
+      "code_aware": true
+    }
+  },
+  "graph_construction": {
+    "enabled": true,
+    "incremental_updates": true,
+    "use_pagerank": true,
+    "pagerank_damping": 0.85,
+    "pagerank_iterations": 50,
+    "pagerank_convergence": 0.0001,
+    "extract_relationships": true,
+    "relationship_confidence_threshold": 0.7,
+    "dependency_relationship_boost": 1.5
+  },
+  "vector_processing": {
+    "enabled": true,
+    "embedding_model": "nomic-embed-text",
+    "embedding_dimensions": 768,
+    "use_hnsw_index": true,
+    "hnsw_ef_construction": 200,
+    "hnsw_m": 16,
+    "similarity_threshold": 0.75
+  },
+  "query_processing": {
+    "enabled": true,
+    "use_advanced_pipeline": true,
+    "use_intent_classification": true,
+    "use_concept_extraction": true,
+    "use_temporal_parsing": false,
+    "confidence_threshold": 0.6,
+    "intent_classification": {
+      "api_patterns": [
+        "api",
+        "endpoint",
+        "request",
+        "response",
+        "method",
+        "call"
+      ],
+      "function_patterns": [
+        "function",
+        "method",
+        "procedure",
+        "implementation",
+        "algorithm"
+      ],
+      "config_patterns": [
+        "config",
+        "configuration",
+        "setting",
+        "parameter",
+        "option"
+      ],
+      "error_patterns": [
+        "error",
+        "exception",
+        "failure",
+        "bug",
+        "issue",
+        "troubleshoot"
+      ],
+      "how_to_patterns": [
+        "how to",
+        "steps",
+        "tutorial",
+        "guide",
+        "install",
+        "setup"
+      ]
+    }
+  },
+  "ollama": {
+    "enabled": true,
+    "host": "http://localhost",
+    "port": 11434,
+    "chat_model": "llama3.1:8b",
+    "embedding_model": "nomic-embed-text",
+    "timeout_seconds": 60,
+    "max_retries": 3,
+    "fallback_to_hash": false,
+    "max_tokens": 800,
+    "temperature": 0.1,
+    "generation": {
+      "temperature": 0.1,
+      "top_p": 0.7,
+      "max_tokens": 1000,
+      "stream": false
+    }
+  },
+  "performance": {
+    "batch_processing": true,
+    "batch_size": 50,
+    "worker_threads": 6,
+    "memory_limit_mb": 4096,
+    "cache_embeddings": true
+  },
+  "monitoring": {
+    "enabled": true,
+    "track_api_accuracy": true,
+    "track_function_coverage": true,
+    "track_technical_consistency": true
+  }
+}

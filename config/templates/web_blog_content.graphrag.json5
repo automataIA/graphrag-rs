@@ -1,0 +1,230 @@
+{
+  // ==========================================================================
+  // GraphRAG Configuration - WEB BLOG CONTENT
+  // ==========================================================================
+  // Converted from: web_blog_content.toml
+  // VSCode: This file has autocomplete! Press Ctrl+Space for suggestions.
+  // ==========================================================================
+
+  "$schema": "../schema/graphrag-config.schema.json",
+  "mode": {
+    "approach": "hybrid"
+  },
+  "general": {
+    "input_document_path": "path/to/your/blog_content.md",
+    "output_dir": "./output/web_analysis",
+    "log_level": "info",
+    "max_threads": 4,
+    "enable_profiling": true
+  },
+  "pipeline": {
+    "workflows": [
+      "extract_text",
+      "extract_entities",
+      "build_graph",
+      "detect_communities"
+    ],
+    "parallel_execution": true,
+    "text_extraction": {
+      "chunk_size": 600,
+      "chunk_overlap": 180,
+      "min_chunk_size": 150,
+      "clean_control_chars": true,
+      "normalize_whitespace": true
+    },
+    "entity_extraction": {
+      "model_name": "llama3.1:8b",
+      "temperature": 0.3,
+      "max_tokens": 1000,
+      "entity_types": [
+        "TOPIC",
+        "BRAND",
+        "PERSON",
+        "TREND",
+        "EVENT",
+        "TECHNOLOGY",
+        "LOCATION",
+        "HASHTAG",
+        "KEYWORD",
+        "STATISTIC",
+        "QUOTE",
+        "LINK",
+        "CATEGORY",
+        "AUDIENCE",
+        "METRIC",
+        "CAMPAIGN",
+        "TOOL",
+        "STRATEGY"
+      ],
+      "confidence_threshold": 0.6,
+      "filters": {
+        "min_entity_length": 2,
+        "max_entity_length": 100,
+        "allowed_patterns": [
+          "^#[A-Za-z0-9_]+$",
+          "^@[A-Za-z0-9_]+$",
+          "^https?://[A-Za-z0-9\\-\\._~:/?#\\[\\]@!$&'()*+,;=%]+$",
+          "^[A-Z][a-zA-Z\\s&\\-\\.]+$",
+          "^\\d+%$",
+          "^[A-Z][a-z]+[A-Z][a-z]+$"
+        ],
+        "excluded_patterns": [
+          "^(the|and|but|for|with|from|that|this|you|your|our|we)$",
+          "^(blog|post|article|content|website)$"
+        ]
+      }
+    },
+    "graph_building": {
+      "relation_scorer": "cosine_similarity",
+      "min_relation_score": 0.5,
+      "max_connections_per_node": 20,
+      "bidirectional_relations": true,
+      "topic_centrality_boost": 1.3
+    },
+    "community_detection": {
+      "algorithm": "leiden",
+      "resolution": 0.6,
+      "min_community_size": 3,
+      "max_community_size": 20
+    }
+  },
+  "text_processing": {
+    "enabled": true,
+    "chunk_size": 600,
+    "chunk_overlap": 180,
+    "min_chunk_size": 150,
+    "max_chunk_size": 1200,
+    "normalize_whitespace": true,
+    "remove_artifacts": true,
+    "extract_keywords": true,
+    "keyword_min_score": 0.12
+  },
+  "entity_extraction": {
+    "enabled": true,
+    "min_confidence": 0.6,
+    "use_gleaning": true,
+    "max_gleaning_rounds": 3,
+    "gleaning_improvement_threshold": 0.1,
+    "semantic_merging": true,
+    "merge_similarity_threshold": 0.75,
+    "automatic_linking": true,
+    "linking_confidence_threshold": 0.65,
+    "gleaning": {
+      "focus_areas": [
+        "TOPIC",
+        "BRAND",
+        "TREND",
+        "KEYWORD",
+        "STRATEGY"
+      ],
+      "context_window": 250,
+      "llm_temperature": 0.2,
+      "web_context": true,
+      "social_media_aware": true
+    }
+  },
+  "graph_construction": {
+    "enabled": true,
+    "incremental_updates": true,
+    "use_pagerank": true,
+    "pagerank_damping": 0.85,
+    "pagerank_iterations": 50,
+    "pagerank_convergence": 0.0001,
+    "extract_relationships": true,
+    "relationship_confidence_threshold": 0.5,
+    "content_relationship_boost": 1.2
+  },
+  "vector_processing": {
+    "enabled": true,
+    "embedding_model": "nomic-embed-text",
+    "embedding_dimensions": 768,
+    "use_hnsw_index": true,
+    "hnsw_ef_construction": 200,
+    "hnsw_m": 16,
+    "similarity_threshold": 0.6
+  },
+  "query_processing": {
+    "enabled": true,
+    "use_advanced_pipeline": true,
+    "use_intent_classification": true,
+    "use_concept_extraction": true,
+    "use_temporal_parsing": true,
+    "confidence_threshold": 0.4,
+    "intent_classification": {
+      "topic_patterns": [
+        "about",
+        "topic",
+        "subject",
+        "theme",
+        "content",
+        "discusses"
+      ],
+      "brand_patterns": [
+        "brand",
+        "company",
+        "product",
+        "service",
+        "business"
+      ],
+      "trend_patterns": [
+        "trend",
+        "popular",
+        "trending",
+        "current",
+        "latest",
+        "new"
+      ],
+      "how_to_patterns": [
+        "how to",
+        "guide",
+        "tutorial",
+        "steps",
+        "tips",
+        "advice"
+      ],
+      "marketing_patterns": [
+        "marketing",
+        "promotion",
+        "campaign",
+        "strategy",
+        "audience"
+      ]
+    },
+    "prompt_templates": {
+      "content_analysis": "Based on the following web content context, provide a comprehensive content analysis for: {query}\n\nContext:\n{context}\n\nContent Analysis:",
+      "topic_summary": "Summarize the main topics and themes discussed in the content for: {query}\n\nContext:\n{context}\n\nTopic Summary:",
+      "trend_analysis": "Analyze the trends and current topics mentioned in the content for: {query}\n\nContext:\n{context}\n\nTrend Analysis:"
+    }
+  },
+  "ollama": {
+    "enabled": true,
+    "host": "http://localhost",
+    "port": 11434,
+    "chat_model": "llama3.1:8b",
+    "embedding_model": "nomic-embed-text",
+    "timeout_seconds": 60,
+    "max_retries": 3,
+    "fallback_to_hash": false,
+    "max_tokens": 1000,
+    "temperature": 0.3,
+    "generation": {
+      "temperature": 0.4,
+      "top_p": 0.9,
+      "max_tokens": 1200,
+      "stream": false
+    }
+  },
+  "performance": {
+    "batch_processing": true,
+    "batch_size": 40,
+    "worker_threads": 4,
+    "memory_limit_mb": 4096,
+    "cache_embeddings": true
+  },
+  "monitoring": {
+    "enabled": true,
+    "track_topic_coverage": true,
+    "track_trend_accuracy": true,
+    "track_content_coherence": true
+  }
+}

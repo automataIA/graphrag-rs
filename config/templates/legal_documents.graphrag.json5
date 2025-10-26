@@ -1,0 +1,230 @@
+{
+  // ==========================================================================
+  // GraphRAG Configuration - LEGAL DOCUMENTS
+  // ==========================================================================
+  // Converted from: legal_documents.toml
+  // VSCode: This file has autocomplete! Press Ctrl+Space for suggestions.
+  // ==========================================================================
+
+  "$schema": "../schema/graphrag-config.schema.json",
+  "mode": {
+    "approach": "semantic"
+  },
+  "general": {
+    "input_document_path": "path/to/your/legal_document.pdf",
+    "output_dir": "./output/legal_analysis",
+    "log_level": "info",
+    "max_threads": 4,
+    "enable_profiling": true
+  },
+  "pipeline": {
+    "workflows": [
+      "extract_text",
+      "extract_entities",
+      "build_graph",
+      "detect_communities"
+    ],
+    "parallel_execution": true,
+    "text_extraction": {
+      "chunk_size": 512,
+      "chunk_overlap": 150,
+      "min_chunk_size": 128,
+      "clean_control_chars": true,
+      "normalize_whitespace": true
+    },
+    "entity_extraction": {
+      "model_name": "llama3.1:8b",
+      "temperature": 0.05,
+      "max_tokens": 1000,
+      "entity_types": [
+        "PARTY",
+        "CLAUSE",
+        "OBLIGATION",
+        "RIGHT",
+        "STATUTE",
+        "CASE_LAW",
+        "JURISDICTION",
+        "DATE",
+        "MONETARY_AMOUNT",
+        "PENALTY",
+        "CONDITION",
+        "DEFINITION",
+        "REFERENCE",
+        "PROCEDURE",
+        "DOCUMENT_TYPE",
+        "LEGAL_STANDARD",
+        "REMEDY",
+        "LIABILITY"
+      ],
+      "confidence_threshold": 0.85,
+      "filters": {
+        "min_entity_length": 2,
+        "max_entity_length": 300,
+        "allowed_patterns": [
+          "^Section\\s+\\d+(\\.\\d+)*$",
+          "^Article\\s+[IVX]+$",
+          "^\\$[0-9,]+(\\.\\d{2})?$",
+          "^\\d{1,2}/\\d{1,2}/\\d{4}$",
+          "^[A-Z][a-zA-Z\\s\\-\\.]+\\s+v\\.\\s+[A-Z][a-zA-Z\\s\\-\\.]+$",
+          "^[A-Z][A-Z0-9\\s\\-\\.]+$",
+          "^[A-Z][a-z]+\\s+(Code|Act|Law|Regulation)$"
+        ],
+        "excluded_patterns": [
+          "^(the|and|but|for|with|from|that|this|shall|will|may)$",
+          "^(whereas|therefore|furthermore|however|moreover)$"
+        ]
+      }
+    },
+    "graph_building": {
+      "relation_scorer": "cosine_similarity",
+      "min_relation_score": 0.8,
+      "max_connections_per_node": 20,
+      "bidirectional_relations": true,
+      "legal_dependency_boost": 2.0
+    },
+    "community_detection": {
+      "algorithm": "leiden",
+      "resolution": 0.9,
+      "min_community_size": 2,
+      "max_community_size": 15
+    }
+  },
+  "text_processing": {
+    "enabled": true,
+    "chunk_size": 512,
+    "chunk_overlap": 150,
+    "min_chunk_size": 128,
+    "max_chunk_size": 1024,
+    "normalize_whitespace": true,
+    "remove_artifacts": true,
+    "extract_keywords": true,
+    "keyword_min_score": 0.3
+  },
+  "entity_extraction": {
+    "enabled": true,
+    "min_confidence": 0.85,
+    "use_gleaning": true,
+    "max_gleaning_rounds": 2,
+    "gleaning_improvement_threshold": 0.15,
+    "semantic_merging": true,
+    "merge_similarity_threshold": 0.95,
+    "automatic_linking": true,
+    "linking_confidence_threshold": 0.9,
+    "gleaning": {
+      "focus_areas": [
+        "CLAUSE",
+        "OBLIGATION",
+        "RIGHT",
+        "CONDITION",
+        "LIABILITY"
+      ],
+      "context_window": 250,
+      "llm_temperature": 0.01,
+      "legal_context": true,
+      "case_sensitive": true
+    }
+  },
+  "graph_construction": {
+    "enabled": true,
+    "incremental_updates": true,
+    "use_pagerank": true,
+    "pagerank_damping": 0.85,
+    "pagerank_iterations": 40,
+    "pagerank_convergence": 0.0001,
+    "extract_relationships": true,
+    "relationship_confidence_threshold": 0.8,
+    "legal_precedence_boost": 1.8
+  },
+  "vector_processing": {
+    "enabled": true,
+    "embedding_model": "nomic-embed-text",
+    "embedding_dimensions": 768,
+    "use_hnsw_index": true,
+    "hnsw_ef_construction": 150,
+    "hnsw_m": 12,
+    "similarity_threshold": 0.8
+  },
+  "query_processing": {
+    "enabled": true,
+    "use_advanced_pipeline": true,
+    "use_intent_classification": true,
+    "use_concept_extraction": true,
+    "use_temporal_parsing": true,
+    "confidence_threshold": 0.7,
+    "intent_classification": {
+      "obligation_patterns": [
+        "obligation",
+        "duty",
+        "must",
+        "shall",
+        "required",
+        "responsible"
+      ],
+      "right_patterns": [
+        "right",
+        "entitlement",
+        "may",
+        "permitted",
+        "allowed",
+        "authorized"
+      ],
+      "liability_patterns": [
+        "liability",
+        "responsible",
+        "damages",
+        "penalty",
+        "breach"
+      ],
+      "procedure_patterns": [
+        "procedure",
+        "process",
+        "steps",
+        "requirements",
+        "filing"
+      ],
+      "compliance_patterns": [
+        "compliance",
+        "regulation",
+        "law",
+        "statute",
+        "code"
+      ]
+    },
+    "prompt_templates": {
+      "legal_analysis": "Based on the following legal context, provide a precise legal analysis for: {query}\n\nContext:\n{context}\n\nLegal Analysis:",
+      "obligation_analysis": "Analyze the legal obligations and duties described in the context for: {query}\n\nContext:\n{context}\n\nObligation Analysis:",
+      "rights_analysis": "Identify and explain the legal rights described in the context for: {query}\n\nContext:\n{context}\n\nRights Analysis:"
+    }
+  },
+  "ollama": {
+    "enabled": true,
+    "host": "http://localhost",
+    "port": 11434,
+    "chat_model": "llama3.1:8b",
+    "embedding_model": "nomic-embed-text",
+    "timeout_seconds": 90,
+    "max_retries": 3,
+    "fallback_to_hash": false,
+    "max_tokens": 1200,
+    "temperature": 0.05,
+    "generation": {
+      "temperature": 0.05,
+      "top_p": 0.5,
+      "max_tokens": 1500,
+      "stream": false
+    }
+  },
+  "performance": {
+    "batch_processing": true,
+    "batch_size": 20,
+    "worker_threads": 4,
+    "memory_limit_mb": 4096,
+    "cache_embeddings": true
+  },
+  "monitoring": {
+    "enabled": true,
+    "track_legal_accuracy": true,
+    "track_clause_coverage": true,
+    "track_legal_consistency": true
+  }
+}

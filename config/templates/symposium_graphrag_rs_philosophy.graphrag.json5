@@ -1,0 +1,373 @@
+{
+  // ==========================================================================
+  // Symposium: GraphRAG-rs Philosophy (100% Zero-Cost)
+  // ==========================================================================
+  // 🎯 APPROACH: Segue DESIGN_CHOICES_ITALIANO.md - Zero costi su TUTTO
+  // 💰 COST: $0 indexing, $0 query (NO LLM mai!)
+  // ⏱️ TIME: 5-10 secondi processing, 50ms per query
+  // 🎓 USE CASE: Privacy-critical, offline-first, edge deployment
+  //
+  // Filosofia GraphRAG-rs (da DESIGN_CHOICES_ITALIANO.md):
+  //   1. Zero Costi Operativi > Massima Accuratezza
+  //   2. Privacy & Offline > Cloud Convenience
+  //   3. Footprint Minimale > Feature Completeness
+  //   4. Performance Real-Time > Semantic Depth
+  // ==========================================================================
+
+  "$schema": "../schema/graphrag-config.schema.json",
+
+  // ---------------------------------------------------------------------------
+  // MODE: Algorithmic (GraphRAG-rs Native Approach)
+  // ---------------------------------------------------------------------------
+  mode: {
+    approach: "algorithmic"  // 100% algorithmic, NO LLM mai
+  },
+
+  // ---------------------------------------------------------------------------
+  // GENERAL SETTINGS
+  // ---------------------------------------------------------------------------
+  general: {
+    input_document_path: "docs-example/Symposium.txt",
+    output_dir: "./output/symposium_graphrag_rs",
+    log_level: "info",
+    max_threads: 4,
+    enable_profiling: true
+  },
+
+  // ---------------------------------------------------------------------------
+  // ALGORITHMIC PIPELINE: GraphRAG-rs Native (100% Zero-Cost)
+  // ---------------------------------------------------------------------------
+  algorithmic: {
+    // Hash-based embeddings (NO neural models)
+    // Come descritto in DESIGN_CHOICES_ITALIANO.md linea 96-113
+    embeddings: {
+      backend: "hash",                      // Hash invece di LLM
+      hash_size: 768,
+      use_tfidf_weighting: true,           // TF-IDF per importanza
+      min_ngram: 1,
+      max_ngram: 2,
+      lowercase: true,
+      remove_stopwords: true
+    },
+
+    // Pattern-based entity extraction (Regex + Capitalization)
+    // Come descritto in DESIGN_CHOICES_ITALIANO.md linea 176-206
+    entity_extraction: {
+      use_gleaning: false,                  // NO LLM gleaning
+      use_patterns: true,                   // Pattern-based (regex)
+
+      // Estrai nomi capitalizzati (Socrates, Aristophanes...)
+      extract_capitalized: true,
+      extract_acronyms: false,
+      extract_numbers: false,
+      extract_emails: false,
+      extract_urls: false,
+
+      confidence_threshold: 0.6,
+      min_entity_length: 3,
+      max_entity_length: 50,
+
+      // Pattern per testi filosofici (Symposium)
+      entity_patterns: [
+        {
+          type: "PERSON",
+          // Cattura: "Socrates", "Diotima", "Aristophanes"
+          pattern: "[A-Z][a-z]+(?:\\s+[A-Z][a-z]+)?"
+        },
+        {
+          type: "CONCEPT",
+          // Cattura: love, virtue, wisdom, beauty, truth...
+          pattern: "(?i)(?:love|virtue|wisdom|justice|soul|beauty|truth|good|eros|knowledge|philosophy|desire|divine|mortal|god|goddess)"
+        },
+        {
+          type: "SPEAKER",
+          // Speaker del Symposium
+          pattern: "(?:Socrates|Aristophanes|Agathon|Phaedrus|Pausanias|Eryximachus|Alcibiades|Diotima)"
+        },
+        {
+          type: "LOCATION",
+          // Luoghi
+          pattern: "(?:Athens|Greece|Agathon's house)"
+        }
+      ],
+
+      exclude_stopwords: true,
+      custom_stopwords: ["the", "and", "but", "for", "with", "from", "that", "this", "they", "there", "where"]
+    },
+
+    // BM25 keyword retrieval + Graph expansion
+    // Come descritto in DESIGN_CHOICES_ITALIANO.md linea 67-72
+    retrieval: {
+      strategy: "bm25",                     // BM25 (NO semantic embeddings)
+      top_k: 10,
+
+      // BM25 parameters
+      bm25_k1: 1.5,                         // Frequency saturation
+      bm25_b: 0.75,                         // Length normalization
+      bm25_epsilon: 0.25,
+
+      min_keyword_score: 0.1,
+      use_query_expansion: true,            // Graph-based expansion (NO LLM!)
+      max_expansion_terms: 5
+    },
+
+    // Co-occurrence relationships (NO LLM)
+    // Graph expansion come descritto in DESIGN_CHOICES_ITALIANO.md
+    graph_construction: {
+      extract_relationships: true,
+      relationship_confidence_threshold: 0.4,
+
+      // Co-occurrence: entity vicine nello stesso chunk
+      use_cooccurrence: true,
+      cooccurrence_window: 800,
+      min_cooccurrence_count: 2,
+
+      // Graph algorithms per scoring
+      use_pagerank: true,                   // PageRank per importanza nodi
+      use_degree_centrality: true,          // Connectivity scoring
+      pagerank_damping: 0.85,
+      pagerank_iterations: 50,
+
+      min_relation_score: 0.4,
+      max_connections_per_node: 15,
+      bidirectional_relations: true
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // TEXT PROCESSING: Minimal (NO LLM)
+  // ---------------------------------------------------------------------------
+  text_processing: {
+    enabled: true,
+    chunk_size: 800,                        // Chunk size per dialoghi filosofici
+    chunk_overlap: 200,
+    min_chunk_size: 400,
+    max_chunk_size: 1500,
+    normalize_whitespace: true,
+    remove_artifacts: true,
+
+    enrichment: {
+      enabled: true,
+      auto_detect_format: true,
+      parser_type: "auto",
+
+      // TF-IDF keyword extraction (NO LLM!)
+      extract_keywords: true,
+      max_keywords_per_chunk: 8,
+      use_tfidf: true,                      // Real TF-IDF algorithm
+
+      // NO LLM summarization
+      generate_summaries: false,
+
+      extract_chapter: true,
+      extract_section: true,
+      extract_position: true,
+      calculate_confidence: true
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // SUMMARIZATION: Extractive-Only (Zero-Cost)
+  // ---------------------------------------------------------------------------
+  // Riassunti gerarchici usando SOLO metodi estrattivi (NO LLM)
+  // Mantiene la filosofia GraphRAG-rs: $0 costi, offline, privacy
+  summarization: {
+    enabled: true,                          // Attiva riassunti gerarchici
+    strategy: "extractive_only",            // SOLO estrattivo (NO LLM!)
+
+    // Parametri per chunking gerarchico
+    chunk_size: 1200,                       // Chunk size per testi filosofici
+    max_summary_length: 200,                // Lunghezza massima riassunto
+    levels: 3,                              // 3 livelli di gerarchia
+    overlap_sentences: 2,                   // Overlap per continuità
+
+    // LLM config DISABILITATO (zero-cost approach)
+    llm_config: {
+      enabled: false,                       // NO LLM! Solo metodi statistici
+      model_name: "qwen3:8b-q4_k_m",
+      temperature: 0.3,
+      max_tokens: 180
+    },
+
+    // Metodi estrattivi (TF-IDF, TextRank)
+    extractive_config: {
+      use_tfidf: true,                      // TF-IDF per importanza frasi
+      use_textrank: true,                   // TextRank per ranking
+      sentence_window: 3,                   // Finestra per contesto
+      min_sentence_length: 10,              // Min lunghezza frase
+      max_sentences: 5                      // Max frasi nel riassunto
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // OLLAMA: DISABILITATO (100% Zero-Cost)
+  // ---------------------------------------------------------------------------
+  // Come da DESIGN_CHOICES_ITALIANO.md linea 52-73:
+  // "Zero LLM in TUTTE le fasi" - anche per le query!
+  ollama: {
+    enabled: false,                         // DISABILITATO completamente!
+    host: "http://localhost",
+    port: 11434,
+    chat_model: "qwen3:8b-q4_k_m",
+    embedding_model: "nomic-embed-text",
+    timeout_seconds: 90,
+    max_retries: 3,
+    fallback_to_hash: true                  // Usa sempre hash
+  },
+
+  // ---------------------------------------------------------------------------
+  // ENTITY EXTRACTION: Top-level (NO LLM)
+  // ---------------------------------------------------------------------------
+  entity_extraction: {
+    enabled: true,
+    min_confidence: 0.6,
+    use_gleaning: false,                    // NO LLM gleaning
+    max_gleaning_rounds: 0,
+    semantic_merging: false,                // NO semantic merging (richiede LLM)
+    automatic_linking: true,
+    linking_confidence_threshold: 0.65
+  },
+
+  // ---------------------------------------------------------------------------
+  // QUERY PROCESSING: Pattern-Based (NO LLM)
+  // ---------------------------------------------------------------------------
+  // Come descritto in DESIGN_CHOICES_ITALIANO.md linea 67-72:
+  // Regex estrae concetti, grafo trova correlati, algoritmo calcola score
+  query_processing: {
+    enabled: true,
+    use_advanced_pipeline: false,           // Simple pipeline (NO LLM)
+    use_intent_classification: true,        // Rule-based OK
+    use_concept_extraction: false,          // Pattern-based extraction
+    use_temporal_parsing: false,
+    confidence_threshold: 0.45,
+
+    // Rule-based intent classification (NO LLM)
+    intent_classification: {
+      entity_patterns: [
+        "who is", "who was", "speaker", "person", "character",
+        "socrates", "aristophanes", "diotima", "agathon"
+      ],
+      concept_patterns: [
+        "what is", "what does", "define", "definition", "meaning",
+        "love", "beauty", "wisdom", "virtue", "eros"
+      ],
+      relationship_patterns: [
+        "argument", "view", "opinion", "explains", "according to",
+        "relationship", "connection", "how does"
+      ],
+      search_patterns: [
+        "find", "describe", "explain", "tell me", "show me"
+      ]
+    },
+
+    // Simple prompt templates (NO LLM - just formatting)
+    prompt_templates: {
+      entity: "Query: {query}\n\nRelevant passages:\n{context}",
+      concept: "Query: {query}\n\nRelevant concepts:\n{context}",
+      relationship: "Query: {query}\n\nRelevant arguments:\n{context}"
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // PERFORMANCE: Optimized for Speed & Low Memory
+  // ---------------------------------------------------------------------------
+  performance: {
+    batch_processing: true,
+    batch_size: 32,                         // Large batches (no LLM overhead)
+    worker_threads: 4,
+    memory_limit_mb: 512,                   // Minimal memory (<1GB!)
+    cache_embeddings: true
+  },
+
+  // ---------------------------------------------------------------------------
+  // MONITORING
+  // ---------------------------------------------------------------------------
+  monitoring: {
+    enabled: true,
+    track_entity_consistency: true,
+    track_relationship_accuracy: false,
+    log_insights: false
+  },
+
+  // ---------------------------------------------------------------------------
+  // EXPERIMENTAL: LazyGraphRAG + E2GraphRAG Features
+  // ---------------------------------------------------------------------------
+  experimental: {
+    neural_reranking: false,                // NO neural (richiede LLM)
+    federated_learning: false,
+    real_time_updates: false,
+    distributed_processing: false,
+    lazy_graphrag: true                     // LazyGraphRAG optimizations
+  }
+}
+
+// ==========================================================================
+// SUMMARY: GraphRAG-rs Philosophy (da DESIGN_CHOICES_ITALIANO.md)
+// ==========================================================================
+// ✅ 100% Zero-Cost: $0 indexing, $0 query
+// ✅ Pattern-based entity extraction (regex + capitalization)
+// ✅ Co-occurrence relationships (NO LLM)
+// ✅ Hash-based embeddings (NO neural models)
+// ✅ BM25 + Graph expansion for retrieval
+// ✅ LazyGraphRAG optimizations
+// ✅ NO LLM in NESSUNA fase (nemmeno query!)
+// ✅ Extractive-only summarization (TF-IDF + TextRank, NO LLM)
+//
+// 📊 SUMMARIZATION FEATURES (Zero-Cost):
+//   - Strategy: Extractive-only (NO LLM)
+//   - Levels: 3 (chunk → section → document)
+//   - Methods: TF-IDF + TextRank (statistical)
+//   - Quality: Good summaries, privacy-preserving
+//   - Cost: $0 (no API calls)
+//
+// 💰 COSTS (Symposium 35k words):
+//   - Indexing: $0 (100% algorithmic + extractive summarization)
+//   - Query: $0 (100% algorithmic)
+//   - Summarization: $0 (statistical methods only)
+//   - Totale: $0 ✅
+//
+// ⏱️ PERFORMANCE (come da DESIGN_CHOICES_ITALIANO.md):
+//   - Processing: 5-10 secondi (100x più veloce di LLM)
+//   - Retrieval: 50ms (vs 800ms LLM)
+//   - Query: 50ms totale
+//   - Speedup: 16x vs LLM approach
+//
+// 💾 MEMORY (come da DESIGN_CHOICES_ITALIANO.md):
+//   - Runtime: 50MB (vs 1.2GB Python+SpaCy)
+//   - Binary: 10MB (vs 3.5GB)
+//   - Speedup: 24x meno memoria
+//
+// 🎯 QUALITY:
+//   - Accuracy: ~80% (vs 95% LLM)
+//   - Entity types: 4 (vs 18 SpaCy)
+//   - Trade-off accettabile per $0 costi!
+//
+// ✅ USE CASES IDEALI:
+//   - Budget zero ($0 operativo)
+//   - Privacy critica (sanità, legale, governo)
+//   - Offline deployment
+//   - Edge devices (Raspberry Pi, IoT)
+//   - Browser (WebAssembly)
+//   - Real-time performance (<100ms)
+//
+// ⚖️ TRADE-OFFS (come da DESIGN_CHOICES_ITALIANO.md linea 515-521):
+//   ❌ Sacrifichiamo:
+//      - 15% accuratezza (80% vs 95%)
+//      - Entity types avanzati (4 vs 18)
+//      - Comprensione semantica LLM
+//
+//   ✅ Guadagniamo:
+//      - $0 costo operativo
+//      - 10MB binary (vs 3.5GB)
+//      - 50ms query (vs 800ms)
+//      - Deploy ovunque (Pi, WASM, IoT)
+//      - Privacy totale
+//      - Offline-first
+//
+// 🦀 RUST PERFORMANCE BENEFITS (linea 310-332):
+//   - 56x più veloce di Python+SpaCy
+//   - True parallelism (no GIL)
+//   - Memory safety garantita
+//   - Cross-platform (ARM, WASM, mobile)
+//
+// ==========================================================================

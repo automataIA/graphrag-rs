@@ -1,0 +1,173 @@
+{
+  // GraphRAG Hierarchical LLM-based Summarization Configuration
+  // This template enables advanced LLM-powered summarization with progressive abstraction
+
+  general: {
+    input_document_path = "path/to/your/document.txt",
+    output_dir = "./output/hierarchical_summarization",
+    log_level = "info",
+    max_threads = 4,
+    enable_profiling = true
+  },
+
+  // Text processing configuration
+  pipeline: {
+    text_extraction: {
+      chunk_size = 1000,        // Larger chunks for better LLM context
+      chunk_overlap = 300,       // High overlap for continuity
+      min_chunk_size = 200,
+      clean_control_chars = true,
+      normalize_whitespace = true
+    }
+  },
+
+  // LLM-based hierarchical summarization configuration
+  summarization: {
+    // Core hierarchical settings
+    merge_size = 5,              // Number of nodes to merge per level
+    max_summary_length = 300,     // Default maximum summary length
+    min_node_size = 100,          // Minimum size for valid nodes
+    overlap_sentences = 3,         // Overlap between chunks
+
+    // LLM Configuration - Enable advanced summarization
+    llm_config: {
+      // Enable LLM-based summarization
+      enabled = true,
+
+      // Model configuration
+      model_name = "llama3.1:8b",     // LLM model for summarization
+      temperature = 0.3,              // Lower temperature for coherent summaries
+      max_tokens = 200,              // Maximum tokens per generation
+
+      // Summarization strategy
+      strategy = "progressive",      // Options: "uniform", "adaptive", "progressive"
+
+      // Level-specific configurations
+      level_configs: {
+        // Level 0: Leaf nodes (extractive-focused)
+        "0": {
+          max_length = 200,
+          use_abstractive = false,      // Start with extractive
+          prompt_template = null,       // Use default template
+          temperature = 0.2             // Very low temperature for factual extraction
+        },
+
+        // Level 1: First abstraction (mixed approach)
+        "1": {
+          max_length = 250,
+          use_abstractive = false,      // Still mostly extractive
+          prompt_template = "Extract the key information from this text segment. Keep it factual and coherent under {max_length} characters.\n\nContext: {context}\n\nText:\n{text}\n\nKey information:",
+          temperature = 0.25
+        },
+
+        // Level 2: Mid-level summarization (abstractive begins)
+        "2": {
+          max_length = 280,
+          use_abstractive = true,       // Start using abstractive summarization
+          prompt_template = "Create a coherent summary that synthesizes the key concepts from these related text segments. Focus on main themes and relationships. Keep it approximately {max_length} characters.\n\nContext: {context}\n\nText to summarize:\n{text}\n\nSynthesized summary:",
+          temperature = 0.3
+        },
+
+        // Level 3: High-level abstraction (fully abstractive)
+        "3": {
+          max_length = 300,
+          use_abstractive = true,       // Full abstractive approach
+          prompt_template = "Generate a high-level abstract summary that captures the essential themes, insights, and relationships in this content. Focus on conceptual understanding rather than details. Limit to approximately {max_length} characters.\n\nContext: {context}\n\nContent:\n{text}\n\nAbstract summary:",
+          temperature = 0.35
+        },
+
+        // Level 4+: Very high level (most abstract)
+        "4": {
+          max_length = 350,
+          use_abstractive = true,
+          prompt_template = "Create a comprehensive overview that identifies the core concepts, narrative flow, and key insights of this document section. Emphasize understanding over detail. Target approximately {max_length} characters.\n\nContext: {context}\n\nDocument section:\n{text}\n\nComprehensive overview:",
+          temperature = 0.4
+        }
+      }
+    }
+  },
+
+  // Entity extraction configuration (can work alongside summarization)
+  pipeline: {
+    entity_extraction: {
+      enabled = true,
+      min_confidence = 0.6,
+      use_gleaning = true,
+      max_gleaning_rounds = 3,
+      entity_types = [
+        "PERSON",
+        "CONCEPT",
+        "ORGANIZATION",
+        "LOCATION",
+        "EVENT",
+        "THEME"
+      ]
+    }
+  },
+
+  // Embeddings configuration for semantic search
+  embeddings: {
+    backend = "ollama",
+    model = "nomic-embed-text",
+    dimension = 768,
+    batch_size = 32,
+    cache_size = 10000
+  },
+
+  // Ollama configuration
+  ollama: {
+    enabled = true,
+    host = "http://localhost",
+    port = 11434,
+    chat_model = "llama3.1:8b",
+    embedding_model = "nomic-embed-text",
+    timeout_seconds = 300
+  },
+
+  // Retrieval configuration for querying the hierarchical tree
+  retrieval: {
+    strategy = "hybrid",
+    k = 10,
+    enable_lightrag = true,
+    fusion_weights = {
+      vector = 0.4,
+      bm25 = 0.3,
+      pagerank = 0.3
+    }
+  },
+
+  // Query processing configuration
+  query_processing: {
+    analyzer = "advanced",
+    enable_decomposition = true,
+    max_sub_queries = 5,
+    confidence_threshold = 0.6
+  },
+
+  // Generation configuration
+  generation: {
+    backend = "ollama",
+    model = "llama3.1:8b",
+    temperature = 0.7,
+    max_tokens = 1000,
+    enable_caching = true,
+    cache_ttl_seconds = 3600
+  },
+
+  // Performance tuning
+  performance: {
+    batch_size = 16,              // Smaller batches for LLM processing
+    max_concurrent_requests = 5,   // Limit concurrent LLM calls
+    embedding_cache_size = 10000,
+    enable_gpu = true,
+    gpu_device = 0
+  },
+
+  // Advanced features
+  experimental: {
+    enable_rograg = true,
+    enable_fast_graphrag = true,
+    enable_lightrag = true,
+    enable_llm_summarization = true  // Enable the new LLM summarization
+  }
+}

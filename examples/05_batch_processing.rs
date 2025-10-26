@@ -3,8 +3,7 @@
 //! This example demonstrates how to process multiple documents in batch
 //! and query across all of them.
 
-use graphrag_rs::{GraphRAG, Document};
-use std::collections::HashMap;
+use graphrag_rs::{GraphRAG, Document, DocumentId};
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -109,11 +108,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Configure for efficient batch processing
     let mut graphrag = GraphRAG::builder()
-        .with_chunk_size(600)
-        .with_chunk_overlap(100)
-        .with_parallel_processing(true)  // Process documents in parallel
-        .with_batch_size(50)             // Process chunks in batches
-        .with_caching(true)              // Enable caching for repeated queries
+        .with_text_config(600, 100)
+        .with_parallel_processing(true, Some(4))  // Process documents in parallel with 4 threads
         .auto_detect_llm()
         .build()?;
 
@@ -124,21 +120,22 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("Adding document: {} (category: {})", doc_id, category);
 
         // Create document with metadata
-        let mut metadata = HashMap::new();
-        metadata.insert("category".to_string(), category.to_string());
-        metadata.insert("doc_id".to_string(), doc_id.to_string());
-
-        let document = Document::new(doc_id, content.to_string())
-            .with_metadata(metadata);
+        let document = Document::new(
+            DocumentId::new(doc_id.to_string()),
+            doc_id.to_string(),
+            content.to_string()
+        )
+            .with_metadata("category".to_string(), category.to_string())
+            .with_metadata("doc_id".to_string(), doc_id.to_string());
 
         graphrag.add_document(document)?;
     }
 
     println!("\nAll documents processed. Knowledge graph built.\n");
-    println!("=" .repeat(60));
+    println!("{}", "=".repeat(60));
 
     // Query across all documents
-    let cross_document_queries = vec![
+    let cross_document_queries = [
         "Who founded TechVision Inc and when?",
         "What products does TechVision offer?",
         "How many employees does the company have?",
@@ -156,25 +153,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     for (i, query) in cross_document_queries.iter().enumerate() {
         println!("{}. Q: {}", i + 1, query);
 
-        match graphrag.query_with_sources(query) {
-            Ok(result) => {
-                println!("   A: {}", result.answer);
-                if !result.sources.is_empty() {
-                    println!("   Sources: {:?}", result.sources);
-                }
-                println!("   Confidence: {:.2}%\n", result.confidence * 100.0);
-            }
-            Err(_) => {
-                // Fallback to simple query
-                if let Ok(answer) = graphrag.ask(query) {
-                    println!("   A: {}\n", answer);
-                }
-            }
+        // Use the ask method which auto-initializes
+        if let Ok(answer) = graphrag.ask(query) {
+            println!("   A: {}\n", answer);
+        } else {
+            println!("   A: Unable to generate answer\n");
         }
     }
 
     // Demonstrate category-specific queries
-    println!("=" .repeat(60));
+    println!("{}", "=".repeat(60));
     println!("\nCategory-Specific Analysis:\n");
 
     // Financial analysis
@@ -202,31 +190,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Save the knowledge graph for later use
-    println!("=" .repeat(60));
-    println!("\nSaving knowledge graph for future use...");
+    println!("{}", "=".repeat(60));
+    println!("\nSaving knowledge graph state...");
 
-    if let Ok(()) = graphrag.save("./output/techvision_graph") {
+    // Use the save_pipeline_state method to save the knowledge graph
+    if let Ok(()) = graphrag.save_pipeline_state("./output/techvision_graph") {
         println!("✅ Knowledge graph saved to ./output/techvision_graph");
     }
 
-    // Demonstrate loading and querying saved graph
-    println!("\nLoading saved knowledge graph...");
-
-    let mut loaded_graphrag = GraphRAG::builder()
-        .auto_detect_llm()
-        .build()?;
-
-    if let Ok(()) = loaded_graphrag.load("./output/techvision_graph") {
-        println!("✅ Knowledge graph loaded successfully");
-
-        // Query the loaded graph
-        let test_query = "What is TechVision's main office location?";
-        if let Ok(answer) = loaded_graphrag.ask(test_query) {
-            println!("\nVerification query on loaded graph:");
-            println!("Q: {}", test_query);
-            println!("A: {}", answer);
-        }
-    }
+    println!("\nNote: To reload a saved knowledge graph, you would need to implement");
+    println!("      a custom deserialization method. Currently, the example focuses");
+    println!("      on building and querying graphs in a single session.");
 
     println!("\n✅ Batch processing example completed successfully!");
 

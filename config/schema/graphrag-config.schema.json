@@ -1,0 +1,623 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/yourusername/graphrag-rs/graphrag-config.schema.json",
+  "title": "GraphRAG Configuration",
+  "description": "GraphRAG configuration schema aligned with TOML structure",
+  "type": "object",
+  "required": ["mode", "general"],
+  "properties": {
+    "mode": {
+      "type": "object",
+      "description": "Pipeline approach selection",
+      "required": ["approach"],
+      "properties": {
+        "approach": {
+          "type": "string",
+          "enum": ["semantic", "algorithmic", "hybrid"],
+          "description": "Pipeline approach: semantic (LLM-based), algorithmic (pattern-based), or hybrid (combined)"
+        }
+      }
+    },
+    "general": {
+      "type": "object",
+      "description": "General configuration",
+      "required": ["input_document_path", "output_dir"],
+      "properties": {
+        "input_document_path": {
+          "type": "string",
+          "description": "Path to input document or directory"
+        },
+        "output_dir": {
+          "type": "string",
+          "description": "Output directory path"
+        },
+        "log_level": {
+          "type": "string",
+          "enum": ["trace", "debug", "info", "warn", "error"],
+          "default": "info"
+        },
+        "max_threads": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 128,
+          "default": 4
+        },
+        "enable_profiling": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "pipeline": {
+      "type": "object",
+      "description": "Processing pipeline configuration",
+      "properties": {
+        "workflows": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["extract_text", "extract_entities", "build_graph", "detect_communities"]
+          },
+          "default": ["extract_text", "extract_entities", "build_graph", "detect_communities"]
+        },
+        "parallel_execution": {
+          "type": "boolean",
+          "default": true
+        },
+        "text_extraction": {
+          "type": "object",
+          "properties": {
+            "chunk_size": {
+              "type": "integer",
+              "minimum": 50,
+              "maximum": 4096,
+              "default": 512
+            },
+            "chunk_overlap": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000,
+              "default": 100
+            },
+            "min_chunk_size": {
+              "type": "integer",
+              "minimum": 10,
+              "maximum": 500,
+              "default": 100
+            },
+            "clean_control_chars": {
+              "type": "boolean",
+              "default": true
+            },
+            "normalize_whitespace": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        },
+        "entity_extraction": {
+          "type": "object",
+          "properties": {
+            "model_name": {
+              "type": "string",
+              "description": "LLM model for entity extraction"
+            },
+            "temperature": {
+              "type": "number",
+              "minimum": 0.0,
+              "maximum": 2.0,
+              "default": 0.1
+            },
+            "max_tokens": {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 8000,
+              "default": 1000
+            },
+            "entity_types": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true
+            },
+            "confidence_threshold": {
+              "type": "number",
+              "minimum": 0.0,
+              "maximum": 1.0,
+              "default": 0.65
+            },
+            "filters": {
+              "type": "object",
+              "properties": {
+                "min_entity_length": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 50,
+                  "default": 2
+                },
+                "max_entity_length": {
+                  "type": "integer",
+                  "minimum": 10,
+                  "maximum": 500,
+                  "default": 100
+                },
+                "allowed_patterns": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "excluded_patterns": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "graph_building": {
+          "type": "object",
+          "properties": {
+            "relation_scorer": {
+              "type": "string",
+              "enum": ["cosine_similarity", "jaccard", "euclidean"],
+              "default": "cosine_similarity"
+            },
+            "min_relation_score": {
+              "type": "number",
+              "minimum": 0.0,
+              "maximum": 1.0,
+              "default": 0.4
+            },
+            "max_connections_per_node": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "bidirectional_relations": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        },
+        "community_detection": {
+          "type": "object",
+          "properties": {
+            "algorithm": {
+              "type": "string",
+              "enum": ["leiden", "louvain", "label_propagation"],
+              "default": "leiden"
+            },
+            "resolution": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 2.0,
+              "default": 1.0
+            },
+            "min_community_size": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 3
+            },
+            "max_community_size": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 50
+            }
+          }
+        }
+      }
+    },
+    "text_processing": {
+      "type": "object",
+      "description": "Text processing and chunking",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "chunk_size": {
+          "type": "integer",
+          "minimum": 50,
+          "maximum": 4096,
+          "default": 512
+        },
+        "chunk_overlap": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000,
+          "default": 100
+        },
+        "min_chunk_size": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 500,
+          "default": 100
+        },
+        "max_chunk_size": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 10000,
+          "default": 1024
+        },
+        "normalize_whitespace": {
+          "type": "boolean",
+          "default": true
+        },
+        "remove_artifacts": {
+          "type": "boolean",
+          "default": true
+        },
+        "extract_keywords": {
+          "type": "boolean",
+          "default": true
+        },
+        "keyword_min_score": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": 0.15
+        }
+      }
+    },
+    "entity_extraction": {
+      "type": "object",
+      "description": "Entity extraction configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "min_confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": 0.65
+        },
+        "use_gleaning": {
+          "type": "boolean",
+          "default": true
+        },
+        "max_gleaning_rounds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 3
+        },
+        "gleaning_improvement_threshold": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 0.5,
+          "default": 0.1
+        },
+        "semantic_merging": {
+          "type": "boolean",
+          "default": true
+        },
+        "merge_similarity_threshold": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": 0.85
+        },
+        "automatic_linking": {
+          "type": "boolean",
+          "default": true
+        },
+        "linking_confidence_threshold": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": 0.7
+        },
+        "gleaning": {
+          "type": "object",
+          "properties": {
+            "focus_areas": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "context_window": {
+              "type": "integer",
+              "minimum": 50,
+              "maximum": 1000,
+              "default": 300
+            },
+            "llm_temperature": {
+              "type": "number",
+              "minimum": 0.0,
+              "maximum": 1.0,
+              "default": 0.05
+            }
+          }
+        }
+      }
+    },
+    "graph_construction": {
+      "type": "object",
+      "description": "Graph construction parameters",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "incremental_updates": {
+          "type": "boolean",
+          "default": true
+        },
+        "use_pagerank": {
+          "type": "boolean",
+          "default": true
+        },
+        "pagerank_damping": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": 0.85
+        },
+        "pagerank_iterations": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 200,
+          "default": 50
+        },
+        "pagerank_convergence": {
+          "type": "number",
+          "minimum": 0.00001,
+          "maximum": 0.01,
+          "default": 0.0001
+        },
+        "extract_relationships": {
+          "type": "boolean",
+          "default": true
+        },
+        "relationship_confidence_threshold": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": 0.5
+        }
+      }
+    },
+    "vector_processing": {
+      "type": "object",
+      "description": "Vector embedding and search",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "embedding_model": {
+          "type": "string",
+          "description": "Embedding model name"
+        },
+        "embedding_dimensions": {
+          "type": "integer",
+          "minimum": 128,
+          "maximum": 4096,
+          "default": 768
+        },
+        "use_hnsw_index": {
+          "type": "boolean",
+          "default": true
+        },
+        "hnsw_ef_construction": {
+          "type": "integer",
+          "minimum": 50,
+          "maximum": 1000,
+          "default": 200
+        },
+        "hnsw_m": {
+          "type": "integer",
+          "minimum": 4,
+          "maximum": 64,
+          "default": 16
+        },
+        "similarity_threshold": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": 0.65
+        }
+      }
+    },
+    "query_processing": {
+      "type": "object",
+      "description": "Query understanding and routing",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "use_advanced_pipeline": {
+          "type": "boolean",
+          "default": true
+        },
+        "use_intent_classification": {
+          "type": "boolean",
+          "default": true
+        },
+        "use_concept_extraction": {
+          "type": "boolean",
+          "default": true
+        },
+        "use_temporal_parsing": {
+          "type": "boolean",
+          "default": false
+        },
+        "confidence_threshold": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": 0.5
+        },
+        "intent_classification": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "prompt_templates": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "ollama": {
+      "type": "object",
+      "description": "Ollama LLM service configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "host": {
+          "type": "string",
+          "format": "uri",
+          "default": "http://localhost"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 11434
+        },
+        "chat_model": {
+          "type": "string",
+          "description": "Chat model name",
+          "default": "llama3.1:8b"
+        },
+        "embedding_model": {
+          "type": "string",
+          "description": "Embedding model name",
+          "default": "nomic-embed-text"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 600,
+          "default": 60
+        },
+        "max_retries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10,
+          "default": 3
+        },
+        "fallback_to_hash": {
+          "type": "boolean",
+          "default": false
+        },
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 8000,
+          "default": 1000
+        },
+        "temperature": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 2.0,
+          "default": 0.2
+        },
+        "generation": {
+          "type": "object",
+          "properties": {
+            "temperature": {
+              "type": "number",
+              "minimum": 0.0,
+              "maximum": 2.0,
+              "default": 0.2
+            },
+            "top_p": {
+              "type": "number",
+              "minimum": 0.0,
+              "maximum": 1.0,
+              "default": 0.9
+            },
+            "max_tokens": {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 8000,
+              "default": 1000
+            },
+            "stream": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        }
+      }
+    },
+    "performance": {
+      "type": "object",
+      "description": "Performance and resource management",
+      "properties": {
+        "batch_processing": {
+          "type": "boolean",
+          "default": true
+        },
+        "batch_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 32
+        },
+        "worker_threads": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 128,
+          "default": 4
+        },
+        "memory_limit_mb": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 65536,
+          "default": 4096
+        },
+        "cache_embeddings": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "monitoring": {
+      "type": "object",
+      "description": "Quality tracking and metrics",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "track_entity_consistency": {
+          "type": "boolean",
+          "default": false
+        },
+        "track_relationship_accuracy": {
+          "type": "boolean",
+          "default": false
+        },
+        "log_insights": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": {
+        "type": "boolean"
+      }
+    }
+  }
+}

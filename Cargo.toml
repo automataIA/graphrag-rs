@@ -1,212 +1,149 @@
-[package]
-name = "graphrag-rs"
+[workspace]
+members = [
+    "graphrag-core",
+    "graphrag-wasm",
+    "graphrag-server",
+    "graphrag-cli",
+]
+exclude = ["examples/web-app"]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
+authors = ["GraphRAG-RS Contributors"]
+license = "MIT"
+repository = "https://github.com/yourusername/graphrag-rs"
 
-[features]
-default = ["memory-storage", "basic-retrieval", "ollama", "parallel-processing", "toml-support", "rograg", "async-traits", "test-utils", "lightrag", "neural-embeddings", "corpus-processing"]
+[workspace.dependencies]
+# Core dependencies (shared across crates)
+serde = { version = "1.0", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+serde_json = "1.0"
+bincode = "1.3"
+thiserror = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+async-trait = "0.1"
+futures = "0.3"
 
-# Storage backends
-memory-storage = []
-persistent-storage = ["serde_json"]
+# Web frameworks
+# Axum (for API module and tests)
+axum = { version = "0.7", features = ["macros"] }
+tower = { version = "0.4", features = ["full"] }
+tower-http = { version = "0.5", features = ["fs", "trace", "cors"] }
 
-# LLM providers
-ollama = ["ollama-rs", "tokio", "serde_json", "futures", "parking_lot"]
-openai = ["async-openai"]
+# Actix-web + Apistos for OpenAPI
+actix-web = { version = "4.9", features = ["macros"] }
+actix-cors = "0.7"
+actix-rt = "2.10"
+apistos = { version = "0.6", features = ["swagger-ui"] }
+apistos-schemars = { package = "apistos-schemars", version = "0.8" }
+schemars = { package = "apistos-schemars", version = "0.8" }
 
-# Retrieval methods
-basic-retrieval = []
-graph-retrieval = []
-hybrid-retrieval = ["basic-retrieval", "graph-retrieval"]
-pagerank = ["sprs", "nalgebra", "parking_lot", "lru"]
-# Processing features
-parallel-processing = ["rayon", "num_cpus"]
-function-calling = []
+# WASM
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = "0.3"
+js-sys = "0.3"
 
-# Vector stores
-vector-hnsw = ["instant-distance"]
-vector-faiss = []
+# UI Framework
+leptos = { version = "0.8", features = ["csr"] }
+leptos_meta = { version = "0.8" }
+leptos_router = { version = "0.8" }
 
-# Monitoring and benchmarking
-monitoring = []
-benchmarking = []
+# Vector databases
+qdrant-client = "1.11"
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+
+# GPU acceleration
+burn = { version = "0.18", default-features = false }
+burn-wgpu = { version = "0.18", default-features = false }
+
+# Authentication & Security
+jsonwebtoken = "9.0"
+bcrypt = "0.15"
 
 # Serialization formats
-yaml-support = ["serde_yaml"]
-toml-support = ["toml"]
+toml = "0.8"
+serde_yaml = "0.9"
 
-# Testing features
-test-utils = []
+# Graph algorithms
+petgraph = { version = "0.6", default-features = false, features = ["serde-1"] }
+indexmap = { version = "2.0", features = ["serde"] }
+sprs = "0.11"
+nalgebra = "0.32"
+parking_lot = "0.12"
+lru = "0.12"
 
-# Caching features
-caching = ["moka", "sha2", "serde_json", "thiserror", "tokio"]
+# Text processing
+text_analysis = "0.3"
+regex = "1.0"
 
-# Incremental updates feature
-incremental = ["serde_json", "tokio", "parking_lot", "uuid", "dashmap", "async-trait"]
-
-# ROGRAG (Robustly Optimized GraphRAG) feature
-rograg = ["thiserror", "derive_more", "strum", "itertools", "tap", "async-trait", "serde_json", "futures"]
-
-# Async traits feature for async/await patterns
-async-traits = ["async-trait", "tokio", "futures"]
-
-# LightRAG dual-level retrieval feature
-lightrag = ["serde_json", "thiserror"]
-
-# Neural embeddings feature
-neural-embeddings = ["async-trait", "tokio", "serde_json", "dirs"]
-
-# Multi-document processing and corpus analysis
-corpus-processing = ["uuid", "serde_json", "regex"]
-
-# Redis storage backend for LightRAG
-redis-storage = ["redis", "lightrag"]
-
-[dependencies]
-# === CORE DEPENDENCIES (always required) ===
-petgraph = { version = "0.6", default-features = false }
-indexmap = { version = "2.0", features = ["serde"] }  # Ordered maps for caching
-text_analysis = "0.3"       # Lightweight NER with capitalization heuristics
-ureq = { version = "2.12", features = ["json"] }  # Tokio-free HTTP client
-json = "0.12"               # Core JSON support (used throughout)
-serde = { version = "1.0", features = ["derive"] }  # Core serialization
-chrono = { version = "0.4", features = ["serde"] }  # Date/time handling (always required)
-
-# === FEATURE-GATED DEPENDENCIES ===
-# Vector similarity search
-instant-distance = { version = "0.6", optional = true }
-
-# Parallel processing
-rayon = { version = "1.8", optional = true }
-num_cpus = { version = "1.16", optional = true }
-
-# PageRank and graph algorithms (optional)
-sprs = { version = "0.11", optional = true }                   # Sparse matrix operations for PageRank
-nalgebra = { version = "0.32", optional = true }              # Linear algebra operations
-parking_lot = { version = "0.12", optional = true }           # High-performance RwLock for concurrent access
-lru = { version = "0.12", optional = true }                   # LRU cache for optimization
-regex = { version = "1.0", optional = true }  # Regular expressions for pattern matching
-
-# Serialization
-serde_json = { version = "1.0.145", optional = true }
-serde_yaml = { version = "0.9", optional = true }
-toml = { version = "0.8", optional = true }
-
-# Ollama integration
-ollama-rs = { version = "0.3.2", optional = true }
-tokio = { version = "1.0", features = ["macros", "rt-multi-thread"], optional = true }
-futures = { version = "0.3", optional = true }
-
-# Future OpenAI integration
-async-openai = { version = "0.14", optional = true }
-
-# Testing utilities
-fastrand = { version = "2.0", optional = true }
-
-# Caching dependencies
-moka = { version = "0.12", features = ["future"], optional = true }
-sha2 = { version = "0.10", optional = true }
-
-# Incremental updates dependencies
-uuid = { version = "1.0", features = ["v4", "serde"], optional = true }
-dashmap = { version = "5.5", optional = true }
-async-trait = { version = "0.1", optional = true }
-
-# ROGRAG dependencies
-thiserror = { version = "1.0", optional = true }
-derive_more = { version = "0.99", optional = true }
-strum = { version = "0.25", features = ["derive"], optional = true }
-itertools = { version = "0.12", optional = true }
-tap = { version = "1.0", optional = true }
-
-# Redis client for storage backend
-redis = { version = "0.24", optional = true }
-
-# Directories for model storage
-dirs = { version = "5.0", optional = true }
-
-# Error handling (make thiserror available when caching is enabled)
-# We could also make it a core dependency instead
-
-[dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
-pretty_assertions = "1.4"
-proptest = "1.4"
+# Utilities
+sha2 = "0.10"
+flate2 = "1.0"
+dashmap = "5.5"
+itertools = "0.12"
+strum = { version = "0.25", features = ["derive"] }
+derive_more = "0.99"
+tap = "1.0"
+rayon = "1.8"
+num_cpus = "1.16"
+instant-distance = "0.6"
+moka = { version = "0.12", features = ["future"] }
+dirs = "5.0"
+csv = "1.3"
+rand = "0.8"
 tempfile = "3.8"
 
-[[example]]
-name = "function_calling_demo"
-path = "examples/function_calling_demo.rs"
-required-features = ["function-calling"]
+# CLI tools
+clap = { version = "4.5", features = ["derive", "cargo", "env"] }
+clap_complete = "4.5"
+indicatif = "0.17"
+console = "0.15"
+termcolor = "1.4"
+reedline = "0.37"
 
-[[example]]
-name = "function_calling_simple_test"
-path = "examples/function_calling_simple_test.rs"
-required-features = ["function-calling"]
+# LLM integrations
+ollama-rs = "0.2"
+jsonfixer = "0.1"  # JSON repair for malformed LLM output
 
-[[example]]
-name = "function_calling_tom_sawyer"
-path = "examples/function_calling_tom_sawyer.rs"
-required-features = ["function-calling"]
+# HTTP client
+ureq = { version = "2.12", features = ["json"] }
 
-[[example]]
-name = "simple_inference_test"
-path = "examples/simple_inference_test.rs"
-required-features = ["function-calling"]
+# JSON
+json = "0.12"
 
-[[example]]
-name = "ollama_function_calling_demo"
-path = "examples/ollama_function_calling_demo.rs"
-required-features = ["function-calling", "ollama"]
+# Other
+chrono = { version = "0.4.38", default-features = false, features = ["serde", "clock", "std"] }  # Compatible with arrow
+uuid = { version = "1.0", features = ["v4", "serde"] }
 
-[[example]]
-name = "pagerank_demo"
-path = "examples/pagerank_demo.rs"
-required-features = ["pagerank"]
+# Vector databases (optional, for persistent storage)
+# NOTE: lancedb 0.22.2 uses arrow 56 and half ^2.6 (compatible with burn 0.18)
+lancedb = "0.22.2"
+arrow = "56"
+arrow-array = "56"
+arrow-schema = "56"
 
-[[example]]
-name = "lightrag_demo"
-path = "examples/lightrag_demo.rs"
-required-features = ["lightrag"]
+# ML frameworks (optional, for neural embeddings)
+candle-core = { version = "0.8", default-features = false }
+candle-nn = { version = "0.8", default-features = false }
+candle-transformers = { version = "0.8", default-features = false }
 
-[[example]]
-name = "neural_embeddings_demo"
-path = "examples/neural_embeddings_demo.rs"
-required-features = ["neural-embeddings"]
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"
 
-[[example]]
-name = "corpus_processing_demo"
-path = "examples/corpus_processing_demo.rs"
-required-features = ["corpus-processing"]
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
 
-[[example]]
-name = "complete_integration_demo"
-path = "examples/complete_integration_demo.rs"
-required-features = ["lightrag", "neural-embeddings", "corpus-processing"]
-
-[[bench]]
-name = "graph_construction"
-harness = false
-
-[[bench]]
-name = "vector_search"
-harness = false
-
-[[bench]]
-name = "text_processing"
-harness = false
-
-[[bench]]
-name = "pagerank_retrieval"
-harness = false
-required-features = ["pagerank"]
-
-[[bench]]
-name = "cache_performance"
-harness = false
-required-features = ["caching"]
-
-[[bench]]
-name = "parallel_processing"
-harness = false
-required-features = ["parallel-processing"]
+[workspace.metadata.rust-analyzer]
+rustc_private = true

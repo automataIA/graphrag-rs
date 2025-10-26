@@ -67,6 +67,9 @@ pub mod generation;
 /// Storage backends and persistence
 #[cfg(any(feature = "memory-storage", feature = "persistent-storage", feature = "async"))]
 pub mod storage;
+
+/// Persistence layer for knowledge graphs (workspace management always available)
+pub mod persistence;
 /// Query processing and execution
 pub mod query;
 /// Builder pattern implementations
@@ -323,6 +326,23 @@ impl GraphRAG {
         graph.add_document(document)
     }
 
+    /// Clear all entities and relationships from the knowledge graph
+    ///
+    /// This method preserves documents and text chunks but removes all extracted entities and relationships.
+    /// Useful for rebuilding the graph from scratch without reloading documents.
+    pub fn clear_graph(&mut self) -> Result<()> {
+        let graph = self.knowledge_graph.as_mut()
+            .ok_or_else(|| GraphRAGError::Config {
+                message: "Knowledge graph not initialized".to_string(),
+            })?;
+
+        #[cfg(feature = "tracing")]
+        tracing::info!("Clearing knowledge graph (preserving documents and chunks)");
+
+        graph.clear_entities_and_relationships();
+        Ok(())
+    }
+
     /// Build the knowledge graph from added documents
     ///
     /// This method implements dynamic pipeline selection based on the configured approach:
@@ -333,19 +353,33 @@ impl GraphRAG {
     /// - **Hybrid** (config.approach = "hybrid"): Combines both approaches with weighted fusion.
     ///
     /// The selection is controlled by `config.approach` and mapped from TomlConfig's [mode] section.
-    pub fn build_graph(&mut self) -> Result<()> {
+    #[cfg(feature = "async")]
+    pub async fn build_graph(&mut self) -> Result<()> {
+        use indicatif::{ProgressBar, ProgressStyle};
+
         let graph = self.knowledge_graph.as_mut()
             .ok_or_else(|| GraphRAGError::Config {
                 message: "Knowledge graph not initialized".to_string(),
             })?;
 
         let chunks: Vec<_> = graph.chunks().cloned().collect();
+        let total_chunks = chunks.len();
 
         // PHASE 1: Extract and add all entities
         // Pipeline selection based on config.approach (semantic/algorithmic/hybrid)
         // - Semantic: config.entities.use_gleaning = true (LLM-based with iterative refinement)
         // - Algorithmic: config.entities.use_gleaning = false (pattern-based extraction)
         // - Hybrid: config.entities.use_gleaning = true (uses LLM + pattern fusion)
+
+        // DEBUG: Log current configuration state
+        #[cfg(feature = "tracing")]
+        tracing::info!(
+            "build_graph() - Config state: approach='{}', use_gleaning={}, ollama.enabled={}",
+            self.config.approach,
+            self.config.entities.use_gleaning,
+            self.config.ollama.enabled
+        );
+
         if self.config.entities.use_gleaning && self.config.ollama.enabled {
             // LLM-based extraction with gleaning
             #[cfg(feature = "async")]
@@ -362,32 +396,44 @@ impl GraphRAG {
                 // Create Ollama client
                 let client = OllamaClient::new(self.config.ollama.clone());
 
-                // Create base extractor with custom entity types and min confidence
-                let base_extractor = crate::entity::EntityExtractor::new(
-                    self.config.entities.min_confidence
-                )?;
-
                 // Create gleaning config from our config
                 let gleaning_config = crate::entity::GleaningConfig {
                     max_gleaning_rounds: self.config.entities.max_gleaning_rounds,
                     completion_threshold: 0.8,
                     entity_confidence_threshold: self.config.entities.min_confidence as f64,
                     use_llm_completion_check: true,
+                    entity_types: if self.config.entities.entity_types.is_empty() {
+                        vec![
+                            "PERSON".to_string(),
+                            "ORGANIZATION".to_string(),
+                            "LOCATION".to_string(),
+                        ]
+                    } else {
+                        self.config.entities.entity_types.clone()
+                    },
+                    temperature: 0.1,
+                    max_tokens: 1500,
                 };
 
-                // Create gleaning extractor
-                let extractor = GleaningEntityExtractor::new(base_extractor, gleaning_config)
-                    .with_llm_client(client);
+                // Create gleaning extractor with LLM client
+                let extractor = GleaningEntityExtractor::new(client, gleaning_config);
+
+                // Create progress bar for entity extraction
+                let pb = ProgressBar::new(total_chunks as u64);
+                pb.set_style(
+                    ProgressStyle::default_bar()
+                        .template("   [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} chunks ({eta})")
+                        .expect("Invalid progress bar template")
+                        .progress_chars("=>-")
+                );
+                pb.set_message("Extracting entities with LLM");
 
                 // Extract entities using async gleaning
-                // We need to use a runtime to run async code in sync context
-                let rt = tokio::runtime::Runtime::new()
-                    .map_err(|e| GraphRAGError::Config {
-                        message: format!("Failed to create tokio runtime: {}", e),
-                    })?;
+                for (idx, chunk) in chunks.iter().enumerate() {
+                    pb.set_message(format!("Chunk {}/{} (gleaning with {} rounds)",
+                        idx + 1, total_chunks, self.config.entities.max_gleaning_rounds));
 
-                for chunk in &chunks {
-                    let (entities, relationships) = rt.block_on(extractor.extract_with_gleaning(chunk))?;
+                    let (entities, relationships) = extractor.extract_with_gleaning(chunk).await?;
 
                     // Add extracted entities
                     for entity in entities {
@@ -407,15 +453,13 @@ impl GraphRAG {
                             );
                         }
                     }
+
+                    pb.inc(1);
                 }
+
+                pb.finish_with_message("Entity extraction complete");
             }
 
-            #[cfg(not(feature = "async"))]
-            {
-                return Err(GraphRAGError::Config {
-                    message: "Gleaning extraction requires 'async' feature to be enabled".to_string(),
-                });
-            }
         } else {
             // Pattern-based extraction (regex + capitalization)
             use crate::entity::EntityExtractor;
@@ -425,12 +469,28 @@ impl GraphRAG {
 
             let extractor = EntityExtractor::new(self.config.entities.min_confidence)?;
 
-            for chunk in &chunks {
+            // Create progress bar for pattern-based extraction
+            let pb = ProgressBar::new(total_chunks as u64);
+            pb.set_style(
+                ProgressStyle::default_bar()
+                    .template("   [{elapsed_precise}] [{bar:40.green/blue}] {pos}/{len} chunks ({eta})")
+                    .expect("Invalid progress bar template")
+                    .progress_chars("=>-")
+            );
+            pb.set_message("Extracting entities (pattern-based)");
+
+            for (idx, chunk) in chunks.iter().enumerate() {
+                pb.set_message(format!("Chunk {}/{} (pattern-based)", idx + 1, total_chunks));
+
                 let entities = extractor.extract_from_chunk(chunk)?;
                 for entity in entities {
                     graph.add_entity(entity)?;
                 }
+
+                pb.inc(1);
             }
+
+            pb.finish_with_message("Entity extraction complete");
 
             // PHASE 2: Extract and add relationships between entities (for pattern-based only)
             // Gleaning extractor already extracts relationships in Phase 1
@@ -438,7 +498,18 @@ impl GraphRAG {
             if self.config.graph.extract_relationships {
             let all_entities: Vec<_> = graph.entities().cloned().collect();
 
-            for chunk in &chunks {
+            // Create progress bar for relationship extraction
+            let rel_pb = ProgressBar::new(total_chunks as u64);
+            rel_pb.set_style(
+                ProgressStyle::default_bar()
+                    .template("   [{elapsed_precise}] [{bar:40.yellow/blue}] {pos}/{len} chunks ({eta})")
+                    .expect("Invalid progress bar template")
+                    .progress_chars("=>-")
+            );
+            rel_pb.set_message("Extracting relationships");
+
+            for (idx, chunk) in chunks.iter().enumerate() {
+                rel_pb.set_message(format!("Chunk {}/{} (relationships)", idx + 1, total_chunks));
                 // Get entities that appear in this chunk
                 let chunk_entities: Vec<_> = all_entities
                     .iter()
@@ -447,6 +518,7 @@ impl GraphRAG {
                     .collect();
 
                 if chunk_entities.len() < 2 {
+                    rel_pb.inc(1);
                     continue; // Need at least 2 entities for relationships
                 }
 
@@ -475,14 +547,114 @@ impl GraphRAG {
                         );
                     }
                 }
+
+                rel_pb.inc(1);
             }
+
+            rel_pb.finish_with_message("Relationship extraction complete");
             }  // End of extract_relationships check
         }  // End of pattern-based extraction
 
         Ok(())
     }
 
+    /// Build the knowledge graph from added documents (synchronous fallback)
+    ///
+    /// This is a synchronous version for when the async feature is not enabled.
+    /// Only supports pattern-based entity extraction.
+    #[cfg(not(feature = "async"))]
+    pub fn build_graph(&mut self) -> Result<()> {
+        use crate::entity::EntityExtractor;
+
+        let graph = self.knowledge_graph.as_mut()
+            .ok_or_else(|| GraphRAGError::Config {
+                message: "Knowledge graph not initialized".to_string(),
+            })?;
+
+        let chunks: Vec<_> = graph.chunks().cloned().collect();
+
+        #[cfg(feature = "tracing")]
+        tracing::info!("Using pattern-based entity extraction (sync mode)");
+
+        let extractor = EntityExtractor::new(self.config.entities.min_confidence)?;
+
+        for chunk in &chunks {
+            let entities = extractor.extract_from_chunk(chunk)?;
+            for entity in entities {
+                graph.add_entity(entity)?;
+            }
+        }
+
+        // Extract relationships if enabled
+        if self.config.graph.extract_relationships {
+            let all_entities: Vec<_> = graph.entities().cloned().collect();
+
+            for chunk in &chunks {
+                let chunk_entities: Vec<_> = all_entities
+                    .iter()
+                    .filter(|e| e.mentions.iter().any(|m| m.chunk_id == chunk.id))
+                    .cloned()
+                    .collect();
+
+                if chunk_entities.len() < 2 {
+                    continue;
+                }
+
+                let relationships = extractor.extract_relationships(&chunk_entities, chunk)?;
+
+                for (source_id, target_id, relation_type) in relationships {
+                    let relationship = Relationship {
+                        source: source_id.clone(),
+                        target: target_id.clone(),
+                        relation_type: relation_type.clone(),
+                        confidence: self.config.graph.relationship_confidence_threshold,
+                        context: vec![chunk.id.clone()],
+                    };
+
+                    if let Err(_e) = graph.add_relationship(relationship) {
+                        #[cfg(feature = "tracing")]
+                        tracing::debug!(
+                            "Failed to add relationship: {} -> {} ({}). Error: {}",
+                            source_id,
+                            target_id,
+                            relation_type,
+                            _e
+                        );
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Query the system for relevant information
+    #[cfg(feature = "async")]
+    pub async fn ask(&mut self, query: &str) -> Result<String> {
+        self.ensure_initialized()?;
+
+        if self.has_documents() && !self.has_graph() {
+            self.build_graph().await?;
+        }
+
+        // Get full search results with metadata
+        let search_results = self.query_internal_with_results(query)?;
+
+        // If Ollama is enabled, generate semantic answer using LLM
+        if self.config.ollama.enabled {
+            return self.generate_semantic_answer_from_results(query, &search_results).await;
+        }
+
+        // Fallback: return formatted search results
+        let formatted: Vec<String> = search_results
+            .into_iter()
+            .map(|r| format!("{} (score: {:.2})", r.content, r.score))
+            .collect();
+        Ok(formatted.join("\n"))
+    }
+
+    /// Query the system for relevant information (synchronous version)
+    #[cfg(not(feature = "async"))]
     pub fn ask(&mut self, query: &str) -> Result<String> {
         self.ensure_initialized()?;
 
@@ -494,8 +666,8 @@ impl GraphRAG {
         Ok(results.join("\n"))
     }
 
-    /// Internal query method
-    fn query_internal(&mut self, query: &str) -> Result<Vec<String>> {
+    /// Internal query method (public for CLI access to raw results)
+    pub fn query_internal(&mut self, query: &str) -> Result<Vec<String>> {
         let retrieval = self.retrieval_system.as_mut()
             .ok_or_else(|| GraphRAGError::Config {
                 message: "Retrieval system not initialized".to_string(),
@@ -519,6 +691,161 @@ impl GraphRAG {
             .collect();
 
         Ok(result_strings)
+    }
+
+    /// Internal query method that returns full SearchResult objects
+    fn query_internal_with_results(&mut self, query: &str) -> Result<Vec<retrieval::SearchResult>> {
+        let retrieval = self.retrieval_system.as_mut()
+            .ok_or_else(|| GraphRAGError::Config {
+                message: "Retrieval system not initialized".to_string(),
+            })?;
+
+        let graph = self.knowledge_graph.as_mut()
+            .ok_or_else(|| GraphRAGError::Config {
+                message: "Knowledge graph not initialized".to_string(),
+            })?;
+
+        // Add embeddings to graph if not already present
+        retrieval.add_embeddings_to_graph(graph)?;
+
+        // Use hybrid query for real semantic search
+        retrieval.hybrid_query(query, graph)
+    }
+
+
+    /// Generate semantic answer from SearchResult objects
+    #[cfg(feature = "async")]
+    async fn generate_semantic_answer_from_results(&self, query: &str, search_results: &[retrieval::SearchResult]) -> Result<String> {
+        use crate::ollama::OllamaClient;
+
+        let graph = self.knowledge_graph.as_ref()
+            .ok_or_else(|| GraphRAGError::Config {
+                message: "Knowledge graph not initialized".to_string(),
+            })?;
+
+        // Build context from search results by fetching actual chunk content
+        let mut context_parts = Vec::new();
+
+        for result in search_results.iter().take(5) {
+            // For entity results, fetch the chunks where the entity appears
+            if result.result_type == retrieval::ResultType::Entity && !result.source_chunks.is_empty() {
+                // Get the first few chunks where this entity is mentioned
+                for chunk_id_str in result.source_chunks.iter().take(2) {
+                    let chunk_id = ChunkId::new(chunk_id_str.clone());
+                    if let Some(chunk) = graph.chunks().find(|c| c.id == chunk_id) {
+                        let chunk_excerpt = if chunk.content.len() > 400 {
+                            format!("{}...", &chunk.content[..400])
+                        } else {
+                            chunk.content.clone()
+                        };
+
+                        context_parts.push(format!(
+                            "[Entity: {} | Relevance: {:.2}]\n{}",
+                            result.content.split(" (score:").next().unwrap_or(&result.content),
+                            result.score,
+                            chunk_excerpt
+                        ));
+                    }
+                }
+            }
+            // For chunk results, use the content directly
+            else if result.result_type == retrieval::ResultType::Chunk {
+                let chunk_excerpt = if result.content.len() > 400 {
+                    format!("{}...", &result.content[..400])
+                } else {
+                    result.content.clone()
+                };
+
+                context_parts.push(format!(
+                    "[Chunk | Relevance: {:.2}]\n{}",
+                    result.score,
+                    chunk_excerpt
+                ));
+            }
+            // For other result types, use content as-is
+            else {
+                context_parts.push(format!(
+                    "[{:?} | Relevance: {:.2}]\n{}",
+                    result.result_type,
+                    result.score,
+                    result.content
+                ));
+            }
+        }
+
+        let context = context_parts.join("\n\n---\n\n");
+
+        if context.trim().is_empty() {
+            return Ok("No relevant information found in the knowledge graph.".to_string());
+        }
+
+        // Create Ollama client
+        let client = OllamaClient::new(self.config.ollama.clone());
+
+        // Build prompt for semantic answer generation with RAG best practices (2025)
+        let prompt = format!(
+            "You are a knowledgeable assistant specialized in answering questions based on a knowledge graph.\n\n\
+            IMPORTANT INSTRUCTIONS:\n\
+            - Answer ONLY using information from the provided context below\n\
+            - Provide direct, conversational, and natural responses\n\
+            - Do NOT show your reasoning process or use <think> tags\n\
+            - If the context lacks sufficient information, clearly state: \"I don't have enough information to answer this question.\"\n\
+            - Keep answers concise but complete (2-4 sentences)\n\
+            - Use a natural, helpful tone as if speaking to a person\n\n\
+            CONTEXT:\n\
+            {}\n\n\
+            QUESTION: {}\n\n\
+            ANSWER (direct response only, no reasoning):",
+            context, query
+        );
+
+        // Generate answer using LLM
+        match client.generate(&prompt).await {
+            Ok(answer) => {
+                // Post-processing: Remove <think> tags if present (Qwen3)
+                let cleaned_answer = Self::remove_thinking_tags(&answer);
+                Ok(cleaned_answer.trim().to_string())
+            },
+            Err(e) => {
+                #[cfg(feature = "tracing")]
+                tracing::warn!("LLM generation failed: {}. Falling back to search results.", e);
+
+                // Fallback: return formatted search results
+                Ok(format!("Relevant information from knowledge graph:\n\n{}", context))
+            }
+        }
+    }
+
+    /// Remove thinking tags from LLM output (for Qwen3 and similar models)
+    ///
+    /// Qwen3 often outputs <think>...</think> tags showing internal reasoning.
+    /// This function removes all such tags and their content.
+    #[cfg(feature = "async")]
+    fn remove_thinking_tags(text: &str) -> String {
+        // Remove all <think>...</think> blocks (including nested ones)
+        // Use a simple approach: repeatedly remove until no more found
+        let mut result = text.to_string();
+
+        loop {
+            // Find opening tag
+            if let Some(start) = result.find("<think>") {
+                // Find corresponding closing tag
+                if let Some(end) = result[start..].find("</think>") {
+                    // Remove the entire block
+                    let end_pos = start + end + "</think>".len();
+                    result.replace_range(start..end_pos, "");
+                } else {
+                    // No closing tag found, just remove opening tag
+                    result.replace_range(start..start + "<think>".len(), "");
+                    break;
+                }
+            } else {
+                // No more opening tags
+                break;
+            }
+        }
+
+        result.trim().to_string()
     }
 
     /// Check if system is initialized
@@ -580,7 +907,27 @@ impl GraphRAG {
     }
 
     /// Query using PageRank-based retrieval (when pagerank feature is enabled)
-    #[cfg(feature = "pagerank")]
+    #[cfg(all(feature = "pagerank", feature = "async"))]
+    pub async fn ask_with_pagerank(&mut self, query: &str) -> Result<Vec<retrieval::pagerank_retrieval::ScoredResult>> {
+        use crate::retrieval::pagerank_retrieval::PageRankRetrievalSystem;
+
+        self.ensure_initialized()?;
+
+        if self.has_documents() && !self.has_graph() {
+            self.build_graph().await?;
+        }
+
+        let graph = self.knowledge_graph.as_ref()
+            .ok_or_else(|| GraphRAGError::Config {
+                message: "Knowledge graph not initialized".to_string(),
+            })?;
+
+        let pagerank_system = PageRankRetrievalSystem::new(10);
+        pagerank_system.search_with_pagerank(query, graph, Some(5))
+    }
+
+    /// Query using PageRank-based retrieval (when pagerank feature is enabled, sync version)
+    #[cfg(all(feature = "pagerank", not(feature = "async")))]
     pub fn ask_with_pagerank(&mut self, query: &str) -> Result<Vec<retrieval::pagerank_retrieval::ScoredResult>> {
         use crate::retrieval::pagerank_retrieval::PageRankRetrievalSystem;
 
@@ -602,6 +949,121 @@ impl GraphRAG {
     /// Get a mutable reference to the knowledge graph
     pub fn knowledge_graph_mut(&mut self) -> Option<&mut KnowledgeGraph> {
         self.knowledge_graph.as_mut()
+    }
+
+    // ================================
+    // CONVENIENCE CONSTRUCTORS
+    // ================================
+
+    /// Create GraphRAG from a JSON5 config file
+    ///
+    /// This is a convenience method that loads a JSON5 config file and creates a GraphRAG instance.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// # #[cfg(feature = "json5-support")]
+    /// # async fn example() -> graphrag_core::Result<()> {
+    /// use graphrag_core::GraphRAG;
+    ///
+    /// let graphrag = GraphRAG::from_json5_file("config/templates/symposium_zero_cost.graphrag.json5")?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[cfg(feature = "json5-support")]
+    pub fn from_json5_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
+        use crate::config::json5_loader::load_json5_config;
+        use crate::config::setconfig::SetConfig;
+
+        let set_config = load_json5_config::<SetConfig, _>(path)?;
+        let config = set_config.to_graphrag_config();
+        Self::new(config)
+    }
+
+    /// Create GraphRAG from a config file (auto-detect format: TOML, JSON5, YAML, JSON)
+    ///
+    /// This method automatically detects the config file format based on the file extension
+    /// and loads it appropriately.
+    ///
+    /// Supported formats:
+    /// - `.toml` - TOML format
+    /// - `.json5` - JSON5 format (requires `json5-support` feature)
+    /// - `.yaml`, `.yml` - YAML format
+    /// - `.json` - JSON format
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// # async fn example() -> graphrag_core::Result<()> {
+    /// use graphrag_core::GraphRAG;
+    ///
+    /// // Auto-detect format from extension
+    /// let graphrag = GraphRAG::from_config_file("config/templates/symposium_zero_cost.graphrag.json5")?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn from_config_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
+        use crate::config::setconfig::SetConfig;
+
+        let set_config = SetConfig::from_file(path)?;
+        let config = set_config.to_graphrag_config();
+        Self::new(config)
+    }
+
+    /// Complete workflow: load config + process document + build graph
+    ///
+    /// This is the most convenient method for getting started with GraphRAG. It:
+    /// 1. Loads the config file (auto-detecting the format)
+    /// 2. Initializes the GraphRAG system
+    /// 3. Loads and processes the document
+    /// 4. Builds the knowledge graph
+    ///
+    /// After this method completes, the GraphRAG instance is ready to answer queries.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// # #[cfg(feature = "async")]
+    /// # async fn example() -> graphrag_core::Result<()> {
+    /// use graphrag_core::GraphRAG;
+    ///
+    /// // Complete workflow in one call
+    /// let mut graphrag = GraphRAG::from_config_and_document(
+    ///     "config/templates/symposium_zero_cost.graphrag.json5",
+    ///     "docs-example/Symposium.txt"
+    /// ).await?;
+    ///
+    /// // Ready to query
+    /// let answer = graphrag.ask("What is Socrates' view on love?").await?;
+    /// println!("Answer: {}", answer);
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[cfg(feature = "async")]
+    pub async fn from_config_and_document<P1, P2>(
+        config_path: P1,
+        document_path: P2
+    ) -> Result<Self>
+    where
+        P1: AsRef<std::path::Path>,
+        P2: AsRef<std::path::Path>,
+    {
+        // Load config
+        let mut graphrag = Self::from_config_file(config_path)?;
+
+        // Initialize
+        graphrag.initialize()?;
+
+        // Load document
+        let content = std::fs::read_to_string(document_path)
+            .map_err(GraphRAGError::Io)?;
+
+        graphrag.add_document_from_text(&content)?;
+
+        // Build graph
+        graphrag.build_graph().await?;
+
+        Ok(graphrag)
     }
 
     /// Ensure system is initialized

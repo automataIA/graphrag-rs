@@ -1,0 +1,318 @@
+{
+  // GraphRAG Zero-Cost Approaches Configuration
+  // Choose your cost-optimized strategy: LazyGraphRAG, E2GraphRAG, or Pure Algorithmic
+
+  general: {
+    input_document_path = "examples/sample_document.txt",
+    output_dir = "./output/zero_cost_demo",
+    log_level = "info",
+    max_threads = 4
+  },
+
+  // ================================================================
+  // APPROACH 1: LazyGraphRAG-Style (Microsoft Research)
+  // Cost: $0.10 indexing, $0.0014 per query
+  // Uses: LLM for query expansion and relevance scoring
+  // ================================================================
+
+  lazy_graphrag: {
+    // Enable LazyGraphRAG approach
+    enabled = false,  // Set to true to use this approach
+
+    // Configuration for concept extraction (replaces expensive LLM extraction)
+    concept_extraction: {
+      // Pattern-based noun phrase extraction (replaces LLM)
+      min_concept_length = 3,
+      max_concept_words = 5,
+      use_noun_phrases = true,
+      use_capitalization = true,
+      use_title_case = true,
+
+      // TF-IDF scoring for concept ranking
+      use_tf_idf_scoring = true,
+      min_term_frequency = 2,
+      max_concepts_per_chunk = 10,
+
+      // Concept filtering
+      min_concept_score = 0.1,
+      exclude_stopwords = true,
+      custom_stopwords = ["the", "and", "or", "but", "in", "on", "at", "to", "for"]
+    },
+
+    // Co-occurrence graph construction (replaces LLM relationship extraction)
+    co_occurrence: {
+      window_size = 50,        // Words to consider around each concept
+      min_co_occurrence = 2,   // Minimum times concepts must appear together
+      jaccard_threshold = 0.2,  // Minimum similarity for edge creation
+      max_edges_per_node = 25
+    },
+
+    // Bidirectional index for fast lookup
+    indexing: {
+      use_bidirectional_index = true,
+      enable_hnsw_index = false,  // Expensive in RAM, cheap without LLM
+      cache_size = 10000
+    },
+
+    // Query expansion (uses LLM - only cost remaining)
+    query_expansion: {
+      enabled = true,  // Only part that uses LLM
+      max_expansions = 3,
+      expansion_model = "llama3.1:8b",
+      expansion_temperature = 0.1,  // Low temperature for consistency
+      max_tokens_per_expansion = 50
+    },
+
+    // Relevance scoring (uses LLM - only cost remaining)
+    relevance_scoring: {
+      enabled = true,  // Only part that uses LLM
+      scoring_model = "llama3.1:8b",
+      batch_size = 10,  // Score multiple chunks at once
+      temperature = 0.2,
+      max_tokens_per_score = 30
+    }
+  },
+
+  // ================================================================
+  // APPROACH 2: E2GraphRAG-Style (Pattern-Based)
+  // Cost: $0.05 indexing, $0.001 per query
+  // Uses: Pattern-based entity extraction, no heavy dependencies
+  // ================================================================
+
+  e2_graphrag: {
+    // Enable E2GraphRAG approach
+    enabled = false,  // Set to true to use this approach
+
+    // Lightweight NER configuration (replaces SpaCy)
+    ner_extraction: {
+      // Pattern-based entity types
+      entity_types: [
+        "PERSON",      // John Doe, Jane Smith
+        "ORGANIZATION", // Microsoft, Google
+        "LOCATION",    // New York, San Francisco
+        "CONCEPT",     // Machine Learning, AI
+        "EVENT",       // Conference, Meeting
+        "PRODUCT",     // iPhone, Tesla Model S
+        "DATE",         // January 2024, Q1 2024
+        "MONEY"        // $100, €50
+      ],
+
+      // Pattern rules for extraction
+      use_capitalized_patterns = true,
+      use_title_case_patterns = true,
+      use_quoted_patterns = true,
+      use_abbreviations = true,
+
+      // Context-based disambiguation
+      use_contextual_disambiguation = true,
+      min_context_words = 3,
+
+      // Confidence scoring
+      min_confidence = 0.7,
+      use_positional_boost = true,
+      use_frequency_boost = true
+    },
+
+    // Keyword extraction with multiple algorithms
+    keyword_extraction: {
+      algorithms: ["tf_idf", "rake", "yake", "text_rank"],
+      max_keywords_per_chunk = 15,
+      min_keyword_length = 3,
+      combine_algorithms = true
+    },
+
+    // Lightweight graph construction
+    graph_construction: {
+      relationship_types = [
+        "co_occurs_with",     // Entities appearing together
+        "mentioned_near",     // Entities mentioned within window
+        "has_attribute",      // Properties of entities
+        "belongs_to",         // Hierarchical relationships
+        "related_to"          // Semantic relationships
+      ],
+
+      // Scoring relationships
+      min_relationship_score = 0.3,
+      max_relationships_per_entity = 10,
+      use_mutual_information = true
+    },
+
+    // Fast indexing without LLM
+    indexing: {
+      batch_size = 50,
+      enable_parallel_processing = true,
+      cache_concept_vectors = false,  // No embeddings needed
+      use_hash_embeddings = true      // Simple hash-based
+    }
+  },
+
+  // ================================================================
+  // APPROACH 3: Pure Algorithmic (GraphRAG-rs Original)
+  // Cost: $0 indexing, $0 query
+  // Uses: Only algorithms, no LLM at all
+  // ================================================================
+
+  pure_algorithmic: {
+    // Enable pure algorithmic approach (default)
+    enabled = true,  // This is the default behavior
+
+    // Regex-based concept extraction
+    pattern_extraction: {
+      // Capitalized word patterns
+      capitalized_patterns: [
+        r"[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+",  // Multi-word capitalized terms
+        r"[A-Z][a-z]+",                     // Single capitalized words
+        r"[A-Z]{2,}"                       // All-caps abbreviations
+      ],
+
+      // Technical term patterns
+      technical_patterns: [
+        r"[a-z]+-[a-z]+",                     // Hyphenated terms
+        r"[a-z]+_[a-z]+",                     // Snake_case terms
+        r"[a-z]+AI",                          // AI-related terms
+        r"ML\s+[[A-Z][a-z]+",                 // ML techniques
+      ],
+
+      // Context patterns
+      context_patterns: [
+        r"\b(the|this|that|these|those)\s+([A-Z][a-z\s]+)",
+        r"\b(is|are|was|were)\s+(\w+)",
+        r"\b(can|will|would|should|could)\s+(\w+)"
+      ]
+    },
+
+    // TF-IDF based keyword extraction
+    keyword_extraction: {
+      algorithm = "tf_idf",
+      max_keywords = 20,
+      min_word_length = 4,
+      use_positional_boost = true,
+      use_frequency_filter = true,
+      min_term_frequency = 2,
+      max_term_frequency_ratio = 0.8
+    },
+
+    // Graph-based relationship discovery
+    relationship_discovery: {
+      window_size = 30,
+      min_co_occurrence = 2,
+      use_mutual_information = true,
+      relationship_types = [
+        "co_occurs_with",
+        "appears_near",
+        "has_context"
+      ],
+      scoring_method = "jaccard_similarity",
+      min_similarity_score = 0.1
+    },
+
+    // Fast search and ranking
+    search_ranking: {
+      vector_search: {
+        enabled = false,  // No embeddings needed
+      },
+      keyword_search: {
+        enabled = true,
+        algorithm = "bm25",
+        k1 = 1.2,
+        b = 0.75
+      },
+      graph_traversal: {
+        enabled = true,
+        algorithm = "pagerank",
+        damping_factor = 0.85,
+        max_iterations = 20,
+        personalized = true
+      },
+      hybrid_fusion: {
+        enabled = true,
+        weights: {
+          keywords = 0.4,
+          graph = 0.4,
+          bm25 = 0.2
+        }
+      }
+    }
+  },
+
+  // ================================================================
+  // HYBRID CONFIGURATIONS
+  // Mix different approaches for optimal balance
+  // ================================================================
+
+  hybrid_strategies: {
+    // Lazy + Algorithmic: Use pattern-based indexing, LLM for queries only
+    lazy_algorithmic: {
+      indexing_approach = "e2_graphrag",    // or "pure_algorithmic"
+      query_approach = "lazy_graphrag",       // or "pure_algorithmic"
+      cost_optimization = "indexing",       // Optimize for indexing cost
+    },
+
+    // Progressive: Start with algorithmic, add LLM gradually
+    progressive: {
+      level_0: "pure_algorithmic",   // Leaf nodes: no LLM
+      level_1: "pure_algorithmic",   // First abstraction: no LLM
+      level_2: "e2_graphrag",       // Mid-level: patterns
+      level_3: "lazy_graphrag",      // High-level: LLM assistance
+      level_4_plus: "lazy_graphrag"   // Top levels: full LLM
+    },
+
+    // Budget-aware: Configure based on available budget
+    budget_aware: {
+      daily_budget_usd: 1.0,     // $1/day budget
+      queries_per_day: 1000,
+      max_llm_cost_per_query: 0.002,
+      strategy: "lazy_graphrag",
+      fallback_to_algorithmic = true
+    }
+  },
+
+  // ================================================================
+  // SHARED CONFIGURATION
+  // Applied to all approaches
+  // ================================================================
+
+  text_processing: {
+    chunk_size = 800,
+    chunk_overlap = 200,
+    min_chunk_size = 50,
+    clean_text = true,
+    normalize_whitespace = true,
+    remove_special_chars = false
+  },
+
+  // Performance optimization
+  performance: {
+    enable_parallel_processing = true,
+    max_concurrent_chunks = 50,
+    batch_size = 32,
+    cache_size = 10000,
+    enable_gpu = false,  // Most zero-cost approaches don't need GPU
+    enable_incremental_updates = true
+  },
+
+  // Memory optimization
+  memory: {
+    max_memory_usage_mb = 512,    // Conservative for edge devices
+    enable_streaming = true,        // Process large files without loading all
+    cache_hit_rate_target = 0.8,
+    enable_memory_pooling = true
+  },
+
+  // Output configuration
+  output: {
+    save_graph_structure = true,
+    save_statistics = true,
+    save_performance_metrics = true,
+    export_formats = ["json", "csv", "dot"]
+  },
+
+  // Monitoring and logging
+  monitoring: {
+    enable_performance_tracking = true,
+    log_memory_usage = true,
+    log_processing_times = true,
+    save_metrics = true,
+    metrics_file = "performance_metrics.json"
+  }
+}

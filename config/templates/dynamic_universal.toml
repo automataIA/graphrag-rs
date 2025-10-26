@@ -7,6 +7,17 @@
 # ⚡ Breakthrough Features: PageRank, Caching, Incremental, ROGRAG, Async processing
 # =============================================================================
 
+# -----------------------------------------------------------------------------
+# MODE: Pipeline Approach Selection
+# -----------------------------------------------------------------------------
+[mode]
+# HYBRID pipeline recommended for universal/dynamic processing:
+# - Balanced quality and performance for any document type
+# - Semantic (60%) for nuanced understanding + Algorithmic (40%) for coverage
+# - Adaptive weighting based on content characteristics
+# - Best choice when document type is unknown or highly variable
+approach = "hybrid"
+
 [general]
 # General configuration - modify paths for your document
 input_document_path = "path/to/your/document.txt"

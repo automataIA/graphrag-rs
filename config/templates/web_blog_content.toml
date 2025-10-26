@@ -8,6 +8,17 @@
 # Based on 2024 research: balanced creativity and precision for diverse web content
 # =============================================================================
 
+# -----------------------------------------------------------------------------
+# MODE: Pipeline Approach Selection
+# -----------------------------------------------------------------------------
+[mode]
+# HYBRID pipeline recommended for web/blog content:
+# - Semantic (60%) for understanding topics, trends, and creative content
+# - Algorithmic (40%) for fast hashtag/keyword extraction and simple patterns
+# - Best balance for diverse web content: quality insights + fast processing
+# - Handles both structured metadata AND unstructured narratives
+approach = "hybrid"
+
 [general]
 # General configuration
 input_document_path = "path/to/your/blog_content.md"

@@ -1,14 +1,133 @@
 {
+  // Point rust-analyzer to the workspace root
+  "rust-analyzer.linkedProjects": [
+    "${workspaceFolder}/Cargo.toml"
+  ],
   "rust-analyzer.diagnostics.enable": true,
   "rust-analyzer.diagnostics.experimental.enable": true,
   "rust-analyzer.diagnostics.styleLints.enable": true,
-  "rust-analyzer.check.command": "clippy",
-  "rust-analyzer.check.allTargets": true,
-  "rust-analyzer.cargo.allFeatures": true,
-  "rust-analyzer.check.ignore": [],
-  "rust-analyzer.diagnostics.disabled": [],
-  "rust-analyzer.check.overrideCommand": [
-    "cargo", "clippy", "--all-targets", "--all-features",
-    "--message-format=json", "--", "-W", "clippy::all"
-  ]
+  "rust-analyzer.check.command": "check",
+  "rust-analyzer.check.allTargets": false,
+  // Let rust-analyzer use the appropriate target for each crate
+  // "rust-analyzer.check.targets": ["wasm32-unknown-unknown"],
+  "rust-analyzer.cargo.features": [],
+  "rust-analyzer.cargo.noDefaultFeatures": false,
+  "rust-analyzer.cargo.target": null,
+  "rust-analyzer.cargo.allFeatures": false,
+  "rust-analyzer.cargo.buildScripts.enable": false,
+  "rust-analyzer.cargo.buildScripts.overrideCommand": null,
+  "rust-analyzer.cargo.buildScripts.useRustcWrapper": false,
+  "rust-analyzer.procMacro.enable": true,
+  // Ignore registry crates that have no_std issues (GPU libraries) or platform-specific crates
+  // These are not used in WASM builds but appear in workspace dependencies via candle-core
+  "rust-analyzer.check.ignore": [
+    "cubecl-runtime",
+    "cubecl-core",
+    "burn",
+    "burn-wgpu",
+    "core-graphics-types",  // Apple framework dependency via metal
+    "core-graphics",        // Apple Core Graphics framework
+    "core-foundation-sys",  // Core Foundation system bindings
+    "metal",                 // macOS GPU framework
+    "candle-metal-kernels",  // Candle's Metal backend
+    "mio",                   // Platform-specific async I/O (has native-only sys::event modules)
+    "core-foundation",       // macOS framework with unix-specific imports
+    "crossterm",            // Terminal manipulation with platform-specific sys modules
+    "cudarc",               // CUDA runtime with libloading dependencies
+    "libloading",           // Dynamic library loading (not available in WASM)
+    "objc_exception"         // Objective-C exception handling (macOS only)
+  ],
+  // Disable diagnostics for registry crates (external dependencies)
+  "rust-analyzer.diagnostics.remapPrefix": {
+    "/home/dio/.cargo/registry": "/dev/null"
+  },
+  // Use a separate target directory for rust-analyzer to avoid conflicts
+  "rust-analyzer.cargo.targetDir": true,
+  // Use simple cargo check for better compatibility
+  "rust-analyzer.check.overrideCommand": null,
+  // Disable automatic import cleanup that removes "redundant" renames
+  // This is needed because clippy.toml enforces import renames
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "never"
+  },
+  "rust-analyzer.imports.granularity.enforce": false,
+  "rust-analyzer.imports.merge.glob": false,
+  "[rust]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "rust-lang.rust-analyzer"
+  },
+  // =============================================================================
+  // JSON5 Configuration for GraphRAG
+  // =============================================================================
+  // JSON5 files are treated as JSONC (JSON with Comments) in VSCode
+  // This enables:
+  // - Comment support (// and /* */)
+  // - Trailing commas
+  // - Autocomplete via JSON Schema
+  // - Real-time validation
+  //
+  // ✅ JSON5 Support Enabled
+  // Files with .json5 extension now use proper JSON5 language mode
+  // This supports unquoted keys, trailing commas, and comments
+  // Extension "mrmlnc.vscode-json5" provides full JSON5 syntax support
+  // =============================================================================
+
+  // JSON Schema configuration for GraphRAG config files
+  "json.schemas": [
+    {
+      "fileMatch": [
+        "*.graphrag.json",
+        "*.graphrag.json5",
+        "**/config/**/*.json5",
+        "**/config/**/*.graphrag.json5"
+      ],
+      "url": "./config/schema/graphrag-config.schema.json"
+    }
+  ],
+
+  // Associate .json5 files with JSON5 language mode for proper syntax support
+  "files.associations": {
+    "*.graphrag.json5": "json5",
+    "*.json5": "json5"
+  },
+
+  // Enable validation and suggestions for JSON/JSONC files
+  "json.validate.enable": true,
+  "json.format.enable": true,
+
+  // Enable schema download for enhanced validation
+  "json.schemaDownload.enable": true,
+
+  // JSONC (JSON with Comments) - for regular .jsonc files
+  "[jsonc]": {
+    "editor.defaultFormatter": "vscode.json-language-features",
+    "editor.formatOnSave": true,
+    "editor.quickSuggestions": {
+      "strings": true
+    },
+    "editor.suggest.insertMode": "replace",
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true
+  },
+
+  // JSON configuration
+  "[json]": {
+    "editor.defaultFormatter": "vscode.json-language-features",
+    "editor.formatOnSave": true,
+    "editor.quickSuggestions": {
+      "strings": true
+    },
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true
+  },
+
+  // JSON5 configuration - proper support for unquoted keys
+  "[json5]": {
+    "editor.formatOnSave": false,
+    "editor.quickSuggestions": {
+      "strings": true
+    },
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true
+  }
 }

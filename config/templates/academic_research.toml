@@ -7,6 +7,17 @@
 # 🎯 FULLY DYNAMIC: Works with any academic domain without hardcoded assumptions
 # =============================================================================
 
+# -----------------------------------------------------------------------------
+# MODE: Pipeline Approach Selection
+# -----------------------------------------------------------------------------
+[mode]
+# SEMANTIC pipeline recommended for academic research:
+# - High-quality concept extraction (theories, methodologies, findings)
+# - LLM-based entity recognition for complex academic terminology
+# - Deep semantic understanding of research relationships
+# - Superior performance on abstract concepts and citations
+approach = "semantic"
+
 [general]
 # General configuration
 input_document_path = "path/to/your/research_paper.pdf"

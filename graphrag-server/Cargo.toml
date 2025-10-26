@@ -1,0 +1,69 @@
+[package]
+name = "graphrag-server"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "REST API server for GraphRAG"
+keywords = ["graphrag", "server", "api", "rest"]
+categories = ["web-programming::http-server"]
+
+[[bin]]
+name = "graphrag-server"
+path = "src/main.rs"
+
+[features]
+# Temporarily disabled auth feature (requires migration from Axum to Actix-web)
+default = ["qdrant"] # , "auth"]
+qdrant = ["qdrant-client"]
+lancedb = ["dep:lancedb", "arrow-array", "arrow-schema"]
+auth = ["jsonwebtoken", "bcrypt"]
+ollama = ["ollama-rs"]
+
+[dependencies]
+graphrag-core = { path = "../graphrag-core", features = ["caching", "lightrag", "pagerank", "memory-storage"] }
+
+# Optional: Ollama embeddings (requires main graphrag crate)
+ollama-rs = { version = "0.2", optional = true }
+
+# Web framework - Actix-web + Apistos for OpenAPI documentation
+actix-web = { workspace = true }
+actix-cors = { workspace = true }
+actix-rt = { workspace = true }
+apistos = { workspace = true }
+apistos-gen = { version = "0.6", features = [] }
+schemars = { workspace = true }
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+bincode = { workspace = true }
+
+# Storage backends (optional)
+qdrant-client = { workspace = true, optional = true }
+lancedb = { workspace = true, optional = true }
+arrow-array = { version = "56", optional = true }
+arrow-schema = { version = "56", optional = true }
+
+# Authentication (optional)
+jsonwebtoken = { workspace = true, optional = true }
+bcrypt = { workspace = true, optional = true }
+thiserror = { workspace = true }
+futures = { workspace = true }
+
+# Observability
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Async and concurrency
+async-trait = { workspace = true }
+parking_lot = { workspace = true }
+
+# Caching and distributed systems
+redis = { workspace = true }
+
+# Other
+uuid = { workspace = true }
+chrono = { workspace = true }

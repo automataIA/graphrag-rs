@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GraphRAG-RS Web Demo</title>
+
+    <!-- Tailwind CSS + daisyUI -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.7.2/dist/full.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Voy Vector Search v0.6+ (75KB k-d tree) -->
+    <script type="module">
+        import { Voy } from "https://cdn.jsdelivr.net/npm/voy-search@0.6.3/dist/voy.js";
+        window.Voy = Voy;
+        console.log("✅ Voy v0.6+ loaded (modern API)");
+    </script>
+
+    <!-- ONNX Runtime Web for GPU Embeddings (200KB from CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/ort.min.js"></script>
+
+    <!-- WebLLM for GPU-accelerated LLM (optional) -->
+    <script type="module">
+        import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+        window.webllm = webllm;
+        console.log("✅ WebLLM loaded (WebGPU support enabled)");
+    </script>
+
+    <!-- Custom styles -->
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
+        .loading-screen {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .loading-text {
+            color: white;
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+    </style>
+
+    <!-- Trunk will inject the WASM bundle here -->
+    <link data-trunk rel="rust" data-bin="graphrag-web-app" data-wasm-opt="z" data-weak-refs />
+</head>
+<body>
+    <!-- Loading screen (shown while WASM initializes) -->
+    <div id="loading" class="loading-screen">
+        <div class="text-center">
+            <div class="loading loading-spinner loading-lg text-white mb-4"></div>
+            <div class="loading-text">Loading GraphRAG-RS...</div>
+            <div class="text-white/70 text-sm mt-2">Initializing WASM module</div>
+        </div>
+    </div>
+
+    <!-- App root (Leptos will mount here) -->
+    <div id="app"></div>
+
+    <!-- Hide loading screen once WASM is loaded -->
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            // Wait for WASM to initialize
+            setTimeout(() => {
+                const loading = document.getElementById('loading');
+                if (loading) {
+                    loading.style.display = 'none';
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

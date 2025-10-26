@@ -8,6 +8,17 @@
 # Based on 2024 research: precision-focused parameters for technical accuracy
 # =============================================================================
 
+# -----------------------------------------------------------------------------
+# MODE: Pipeline Approach Selection
+# -----------------------------------------------------------------------------
+[mode]
+# HYBRID pipeline recommended for technical documentation:
+# - Semantic (60%) for understanding complex technical concepts and relationships
+# - Algorithmic (40%) for fast pattern matching of APIs, functions, and code
+# - Best balance: LLM understanding + regex efficiency for technical terms
+# - Handles structured code examples AND unstructured explanations
+approach = "hybrid"
+
 [general]
 # General configuration
 input_document_path = "path/to/your/technical_doc.md"

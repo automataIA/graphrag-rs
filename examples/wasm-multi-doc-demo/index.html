@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GraphRAG Multi-Document Demo - WASM + ONNX</title>
+    <link rel="stylesheet" href="styles.css">
+
+    <!-- ONNX Runtime Web -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/ort.min.js"></script>
+
+    <!-- Voy Vector Search -->
+    <script src="https://cdn.jsdelivr.net/npm/voy-search@0.6.2/dist/voy.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>🚀 GraphRAG Multi-Document Demo</h1>
+            <p class="subtitle">WASM + ONNX Embeddings + Incremental Knowledge Graph</p>
+            <div id="status-bar" class="status-bar">
+                <span id="status-text">Initializing...</span>
+                <div id="progress-container" class="progress-container hidden">
+                    <div id="progress-bar" class="progress-bar"></div>
+                    <span id="progress-text" class="progress-text">0%</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main>
+            <!-- Document Loading Section -->
+            <section class="card">
+                <h2>📖 Document Loading</h2>
+
+                <div class="document-controls">
+                    <div class="doc-button-group">
+                        <button id="load-symposium" class="btn btn-primary" disabled>
+                            <span class="btn-icon">📜</span>
+                            Load Symposium
+                        </button>
+                        <span class="doc-status" id="symposium-status">Not loaded</span>
+                    </div>
+
+                    <div class="doc-button-group">
+                        <button id="add-tom-sawyer" class="btn btn-secondary" disabled>
+                            <span class="btn-icon">📚</span>
+                            Add Tom Sawyer
+                        </button>
+                        <span class="doc-status" id="tom-sawyer-status">Not loaded</span>
+                    </div>
+
+                    <div class="doc-button-group">
+                        <button id="clear-all" class="btn btn-danger" disabled>
+                            <span class="btn-icon">🗑️</span>
+                            Clear All
+                        </button>
+                        <span class="doc-status" id="clear-status"></span>
+                    </div>
+                </div>
+
+                <div class="info-box">
+                    <p><strong>ℹ️ How it works:</strong></p>
+                    <ol>
+                        <li>Click "Load Symposium" to create initial knowledge graph</li>
+                        <li>Click "Add Tom Sawyer" to incrementally merge second document</li>
+                        <li>Query across both documents with semantic search</li>
+                    </ol>
+                </div>
+            </section>
+
+            <!-- Statistics Section -->
+            <section class="card">
+                <h2>📊 Graph Statistics</h2>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Documents</div>
+                        <div class="stat-value" id="stat-documents">0</div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-label">Chunks</div>
+                        <div class="stat-value" id="stat-chunks">0</div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-label">Embeddings</div>
+                        <div class="stat-value" id="stat-embeddings">0</div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-label">Memory (MB)</div>
+                        <div class="stat-value" id="stat-memory">0</div>
+                    </div>
+                </div>
+
+                <div id="merge-stats" class="merge-stats hidden">
+                    <h3>📈 Last Merge Statistics</h3>
+                    <div class="merge-stats-content">
+                        <div class="merge-stat">
+                            <span class="merge-label">New chunks:</span>
+                            <span class="merge-value" id="merge-new-chunks">0</span>
+                        </div>
+                        <div class="merge-stat">
+                            <span class="merge-label">Duplicates resolved:</span>
+                            <span class="merge-value" id="merge-duplicates">0</span>
+                        </div>
+                        <div class="merge-stat">
+                            <span class="merge-label">Merge time:</span>
+                            <span class="merge-value" id="merge-time">0ms</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Query Section -->
+            <section class="card">
+                <h2>🔍 Semantic Query</h2>
+
+                <div class="query-controls">
+                    <input
+                        type="text"
+                        id="query-input"
+                        class="query-input"
+                        placeholder="Ask a question about the documents..."
+                        disabled
+                    >
+                    <button id="query-btn" class="btn btn-primary" disabled>
+                        Search
+                    </button>
+                </div>
+
+                <div class="query-examples">
+                    <p><strong>Example queries:</strong></p>
+                    <div class="example-queries">
+                        <button class="example-query" data-query="What is Socrates' view on love?">
+                            What is Socrates' view on love?
+                        </button>
+                        <button class="example-query" data-query="Compare Socrates and Tom Sawyer's approaches to life">
+                            Compare Socrates and Tom Sawyer
+                        </button>
+                        <button class="example-query" data-query="What wisdom can we learn from both texts?">
+                            Wisdom from both texts
+                        </button>
+                    </div>
+                </div>
+
+                <div id="query-results" class="query-results hidden">
+                    <h3>Results:</h3>
+                    <div id="results-container"></div>
+                </div>
+            </section>
+
+            <!-- Advanced Section -->
+            <section class="card collapsed">
+                <h2 onclick="toggleSection(this)">
+                    ⚙️ Advanced Options
+                    <span class="toggle-icon">▼</span>
+                </h2>
+
+                <div class="section-content">
+                    <div class="advanced-options">
+                        <div class="option-group">
+                            <label for="top-k">Results per query:</label>
+                            <input type="number" id="top-k" value="5" min="1" max="20">
+                        </div>
+
+                        <div class="option-group">
+                            <label for="use-indexeddb">
+                                <input type="checkbox" id="use-indexeddb" checked>
+                                Persist to IndexedDB
+                            </label>
+                        </div>
+
+                        <div class="option-group">
+                            <label for="use-webgpu">
+                                <input type="checkbox" id="use-webgpu" checked>
+                                Use WebGPU (if available)
+                            </label>
+                        </div>
+
+                        <div class="option-group">
+                            <button id="export-graph" class="btn btn-secondary" disabled>
+                                📥 Export Graph (JSON)
+                            </button>
+                        </div>
+
+                        <div class="option-group">
+                            <button id="load-from-cache" class="btn btn-secondary" disabled>
+                                💾 Load from IndexedDB
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- System Info -->
+            <section class="card collapsed">
+                <h2 onclick="toggleSection(this)">
+                    🖥️ System Information
+                    <span class="toggle-icon">▼</span>
+                </h2>
+
+                <div class="section-content">
+                    <div id="system-info" class="system-info">
+                        <div class="info-row">
+                            <span class="info-label">WASM Support:</span>
+                            <span class="info-value" id="info-wasm">Checking...</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">WebGPU Support:</span>
+                            <span class="info-value" id="info-webgpu">Checking...</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">ONNX Runtime:</span>
+                            <span class="info-value" id="info-onnx">Checking...</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Voy Search:</span>
+                            <span class="info-value" id="info-voy">Checking...</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">IndexedDB:</span>
+                            <span class="info-value" id="info-indexeddb">Checking...</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer>
+            <p>
+                Built with <a href="https://github.com/rustwasm/wasm-bindgen" target="_blank">wasm-bindgen</a>,
+                <a href="https://onnxruntime.ai/" target="_blank">ONNX Runtime Web</a>, and
+                <a href="https://github.com/tantaraio/voy" target="_blank">Voy</a>
+            </p>
+        </footer>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <p id="loading-message">Loading...</p>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script type="module" src="app.js"></script>
+</body>
+</html>

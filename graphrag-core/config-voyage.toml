@@ -1,0 +1,6 @@
+[embeddings]
+provider = "voyage"
+model = "voyage-3-large"
+api_key = "pa-..."
+batch_size = 128
+dimensions = 1024

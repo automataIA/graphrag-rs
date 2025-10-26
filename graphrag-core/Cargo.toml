@@ -1,0 +1,239 @@
+[package]
+name = "graphrag-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Core portable library for GraphRAG - works on native and WASM"
+keywords = ["graphrag", "knowledge-graph", "rag", "llm", "ai"]
+categories = ["algorithms", "science", "text-processing"]
+
+[features]
+default = ["memory-storage", "basic-retrieval", "parallel-processing", "async", "ureq"]
+
+# Async support (enabled by default, disabled for WASM)
+async = ["tokio", "futures", "tracing"]
+
+# HTTP client (enabled by default, disabled for WASM)
+ureq = ["dep:ureq"]
+
+# Storage backends
+memory-storage = []
+persistent-storage = ["arrow", "parquet"]  # Apache Parquet persistence
+# lance-storage = ["lancedb"]  # LanceDB vector storage (disabled due to version conflict)
+
+# Retrieval methods
+basic-retrieval = []
+graph-retrieval = []
+hybrid-retrieval = ["basic-retrieval", "graph-retrieval"]
+pagerank = ["sprs", "nalgebra", "parking_lot", "lru"]
+
+# Processing features
+parallel-processing = ["rayon", "num_cpus"]
+function-calling = []
+
+# Vector stores
+vector-hnsw = ["instant-distance"]
+
+# Monitoring and benchmarking
+monitoring = []
+benchmarking = []
+
+# Serialization formats
+yaml-support = ["serde_yaml"]
+toml-support = []  # TOML is always available as core dependency
+serde_json = []    # serde_json is always available as core dependency
+json5-support = ["json5", "jsonschema"]  # JSON5 + schema validation
+
+# Caching features
+caching = ["moka", "tracing"]
+
+# Incremental updates feature
+incremental = ["parking_lot", "dashmap"]
+
+# ROGRAG (Robustly Optimized GraphRAG) feature
+rograg = ["derive_more", "strum", "itertools", "tap"]
+
+# API module (requires axum web framework)
+api = ["axum", "tower", "tower-http", "async"]
+
+# Tracing and logging
+tracing = ["dep:tracing", "tracing-subscriber"]
+
+# Async traits feature (core dependencies, always enabled)
+async-traits = []
+
+# LightRAG dual-level retrieval feature
+lightrag = []
+
+# LazyGraphRAG - no prior summarization, concept-based retrieval
+lazygraphrag = ["text-splitter", "lightrag"]
+
+# E2GraphRAG - efficient entity extraction with SpaCy-like approach
+e2graphrag = ["lightrag"]
+
+# TOBUGraph - semantic + relationship nodes memory graph
+tobugraph = []
+
+# Redis-based distributed caching
+redis_storage = ["redis", "async", "bincode"]
+
+# Leiden community detection feature
+leiden = []
+
+# Cross-encoder reranking feature
+cross-encoder = []
+
+# Neural embeddings feature
+neural-embeddings = ["dirs", "candle-core", "candle-nn", "candle-transformers"]
+
+# Hugging Face Hub integration for downloading models
+huggingface-hub = ["hf-hub", "dirs"]
+
+# Multi-document processing and corpus analysis
+corpus-processing = ["tracing", "async"]  # Requires tracing for logging and async for operations
+
+# LLM integrations
+ollama = ["ollama-rs", "async"]        # Ollama LLM support (requires async)
+
+# Platform-specific features
+wasm = ["wasm-bindgen", "web-sys", "js-sys", "serde-wasm-bindgen", "getrandom"] # Browser WASM compatibility
+cuda = ["neural-embeddings", "candle-core/cuda"] # NVIDIA GPU acceleration
+metal = ["neural-embeddings", "candle-core/metal"] # Apple Silicon GPU (only on macOS)
+# webgpu = [] # WebGPU acceleration (WASM) - DISABLED due to Metal/objc build issues
+
+[dependencies]
+# === CORE DEPENDENCIES (always required) ===
+petgraph = { workspace = true }
+indexmap = { workspace = true }
+text_analysis = "0.3"
+regex = { workspace = true }
+ureq = { workspace = true, optional = true }  # HTTP client (not needed for WASM)
+json = { workspace = true }
+serde = { workspace = true }
+chrono = { workspace = true }
+log = "0.4"
+
+# Text processing enhancements
+text-splitter = { version = "0.18", optional = true, default-features = false }  # Semantic text chunking
+
+# === FEATURE-GATED DEPENDENCIES ===
+# Vector similarity search
+instant-distance = { workspace = true, optional = true }
+# Note: Voy is an npm package (voy-search), accessed via JS bindings in graphrag-wasm
+
+# Parallel processing
+rayon = { workspace = true, optional = true }
+num_cpus = { workspace = true, optional = true }
+
+# PageRank and graph algorithms
+sprs = { workspace = true, optional = true }
+nalgebra = { workspace = true, optional = true }
+parking_lot = { workspace = true, optional = true }
+lru = { workspace = true, optional = true }
+
+# Serialization (core functionality)
+serde_json = { workspace = true }
+serde_yaml = { workspace = true, optional = true }
+toml = { workspace = true }  # Core config parsing
+json5 = { version = "0.4", optional = true }  # JSON5 parsing (JSON with comments)
+jsonschema = { version = "0.18", optional = true, default-features = false }  # JSON Schema validation
+csv = { version = "1.3" }  # CSV parsing for data import
+
+# Persistence storage (optional)
+arrow = { version = "52", optional = true, default-features = false, features = ["ipc"] }  # Apache Arrow
+parquet = { version = "52", optional = true, default-features = false, features = ["arrow", "snap"] }  # Parquet format
+# lancedb = { version = "0.15", optional = true }  # LanceDB vector storage (disabled due to version conflict)
+
+# Random number generation
+# For WASM: rand internally uses getrandom, and we need the js feature enabled
+rand = { version = "0.8", features = ["getrandom"] }  # For graph embeddings random walks
+
+# Async (optional for non-WASM targets)
+# Note: We override workspace to avoid pulling tokio for WASM (it doesn't work there)
+tokio = { version = "1.0", features = ["full"], optional = true }
+futures = { workspace = true, optional = true }
+async-trait = { workspace = true }  # Required for embedding traits (even without async runtime)
+
+# Web frameworks (optional for API module)
+axum = { workspace = true, optional = true }
+tower = { workspace = true, optional = true }
+tower-http = { workspace = true, optional = true }
+
+# Tracing (optional)
+tracing = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, optional = true }
+
+# LLM integrations
+ollama-rs = { workspace = true, optional = true }
+jsonfixer = { workspace = true }  # JSON repair for LLM output (always available for entity extraction)
+
+# Caching dependencies
+moka = { workspace = true, optional = true }
+redis = { workspace = true, optional = true }
+bincode = { workspace = true, optional = true }
+sha2 = { workspace = true }
+flate2 = { workspace = true }
+indicatif = "0.17"  # Progress bars for long-running operations
+
+# Incremental updates dependencies
+uuid = { workspace = true, features = ["js"] }
+dashmap = { workspace = true, optional = true }
+
+# Error handling (core functionality)
+thiserror = { workspace = true }
+# WASM random support - enabled by wasm feature
+getrandom = { version = "0.2", features = ["js"], optional = true }
+derive_more = { workspace = true, optional = true }
+strum = { workspace = true, optional = true }
+itertools = { workspace = true, optional = true }
+tap = { workspace = true, optional = true }
+
+# Embeddings
+candle-core = { workspace = true, optional = true }
+candle-nn = { workspace = true, optional = true }
+candle-transformers = { workspace = true, optional = true }
+
+# GPU acceleration (optional)
+# TEMPORARILY DISABLED: burn and burn-wgpu cause Metal/objc build issues on Linux
+# To re-enable: burn = { workspace = true, optional = true }
+# To re-enable: burn-wgpu = { workspace = true, optional = true }
+
+# Directories for model storage
+dirs = { version = "5.0", optional = true }
+
+# Hugging Face Hub client
+hf-hub = { version = "0.3", optional = true, default-features = false, features = ["tokio", "online"] }
+
+# WASM-specific dependencies
+serde-wasm-bindgen = { version = "0.6", optional = true }
+wasm-bindgen = { workspace = true, optional = true }
+web-sys = { workspace = true, optional = true }
+js-sys = { workspace = true, optional = true }
+
+# Force getrandom 0.2 to use js feature for WASM targets
+# This overrides the dependency resolution for transitive dependencies (rand, ureq)
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
+
+# Platform-specific GPU acceleration
+# Exclude Metal-based dependencies on Linux to avoid objc build errors
+[target.'cfg(not(any(target_os = "macos", target_arch = "wasm32")))'.dependencies]
+# Only enable non-Metal GPU backends on non-macOS platforms
+# burn = { workspace = true, optional = true }  # Disabled due to Metal dependency
+
+# On macOS, we can use Metal acceleration
+[target.'cfg(target_os = "macos")'.dependencies]
+# burn = { workspace = true, optional = true }  # Available for Metal backend
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+pretty_assertions = "1.4"
+proptest = "1.4"
+tempfile = "3.8"
+
+[lib]
+crate-type = ["rlib", "cdylib"]  # rlib for Rust, cdylib for WASM/FFI
+
+# Benchmarks will be added later after migrating benches/ directory

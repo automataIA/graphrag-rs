@@ -3,12 +3,18 @@
 //! These tests verify that different components work together correctly,
 //! following the modular architecture principles.
 
+#![cfg(feature = "test-utils")]
+
 use graphrag_rs::{
     core::traits::*,
     core::{ChunkId, Document, DocumentId, Entity, EntityId, TextChunk},
-    test_utils::*,
-    MemoryStorage, RegistryBuilder, ServiceRegistry,
+    RegistryBuilder, ServiceRegistry,
 };
+
+use graphrag_rs::test_utils::*;
+
+#[cfg(feature = "memory-storage")]
+use graphrag_rs::MemoryStorage;
 
 #[test]
 fn test_service_registry_integration() {

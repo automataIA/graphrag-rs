@@ -1,0 +1,117 @@
+[package]
+name = "graphrag-wasm"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "WASM bindings for GraphRAG - enables browser-side knowledge graphs"
+keywords = ["graphrag", "wasm", "webassembly", "browser"]
+categories = ["wasm", "web-programming"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+# Binary for Trunk builds
+[[bin]]
+name = "graphrag-wasm"
+path = "src/main.rs"
+required-features = ["hydrate"]
+
+[features]
+default = ["voy"]
+voy = [] # Voy vector search for WASM
+# webgpu = [] # GPU acceleration via WebGPU - DISABLED due to Metal/objc build issues
+hydrate = ["leptos/hydrate"]
+ssr = ["leptos/ssr"]
+
+[dependencies]
+# GraphRAG core library with WASM support (no async, no parallel-processing, no ollama)
+# Note: pagerank feature requires rayon which doesn't work in WASM
+# Added: leiden for hierarchical community detection
+graphrag-core = { path = "../graphrag-core", features = ["wasm", "memory-storage", "basic-retrieval", "leiden"], default-features = false }
+
+# Leptos framework (merged from graphrag-leptos)
+leptos = { workspace = true }
+leptos-lucide-rs = "0.1" # Icon library
+
+# WASM bindings
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+web-sys = { workspace = true, features = [
+    "console",
+    "Window",
+    "Performance",
+    "Navigator",
+    "Document",
+    "Storage",
+    # UI elements (from graphrag-leptos)
+    "HtmlInputElement",
+    "HtmlTextAreaElement",
+    # File API
+    "File",
+    "FileList",
+    "FileReader",
+    "Blob",
+    # IndexedDB API
+    "IdbFactory",
+    "IdbDatabase",
+    "IdbObjectStore",
+    "IdbRequest",
+    "IdbTransaction",
+    "IdbTransactionMode",
+    "IdbOpenDbRequest",
+    "IdbVersionChangeEvent",
+    "IdbCursorWithValue",
+    # Cache API
+    "Cache",
+    "CacheStorage",
+    "Request",
+    "RequestInit",
+    "Response",
+    "ResponseInit",
+    "Headers",
+] }
+js-sys = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde-wasm-bindgen = "0.6"
+
+# Vector search (WASM-compatible) - Phase 2
+# voy = { workspace = true }
+
+# Embeddings (WASM-compatible without features)
+# Note: Disabled for WASM to avoid getrandom 0.3 conflicts
+# We use ONNX Runtime Web for embeddings instead
+# candle-core = { workspace = true }
+# candle-nn = { workspace = true }
+
+# Tokenizers for embeddings (HuggingFace with WASM support)
+tokenizers = { version = "0.20", default-features = false, features = ["unstable_wasm"] }
+
+# Utilities
+console_error_panic_hook = "0.1"
+wasm-logger = "0.2"
+gloo-timers = { version = "0.3", features = ["futures"] }
+gloo-net = "0.6" # HTTP fetching for vocab.txt
+
+# Graph algorithms (for building graph from entities/relationships)
+petgraph = { workspace = true }
+
+# WASM-specific dependencies (only for wasm32 target)
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# GPU acceleration (optional, WASM-only) - DISABLED due to Metal/objc build issues
+# burn = { workspace = true, optional = true }
+# burn-wgpu = { workspace = true, optional = true }
+# Fix getrandom for WASM (override transitive deps)
+# Note: 0.3+ uses 'wasm_js' feature instead of 'js'
+getrandom = { version = "0.3", features = ["wasm_js"], default-features = false }
+# Override uuid to use js feature for WASM (fixes getrandom 0.3 issue from leptos)
+uuid = { workspace = true, features = ["js", "v4"] }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+# Profiles are defined in workspace root
