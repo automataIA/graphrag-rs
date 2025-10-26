@@ -1,0 +1,155 @@
+{
+  // ==========================================================================
+  // GraphRAG Configuration - SEMANTIC PIPELINE
+  // ==========================================================================
+  // Converted from: semantic_pipeline.toml
+  // VSCode: This file has autocomplete! Press Ctrl+Space for suggestions.
+  // ==========================================================================
+
+  "$schema": "../schema/graphrag-config.schema.json",
+  "mode": {
+    "approach": "semantic"
+  },
+  "general": {
+    "input_document_path": "data/input.txt",
+    "output_dir": "./output/semantic",
+    "log_level": "info",
+    "max_threads": 4,
+    "enable_profiling": true
+  },
+  "semantic": {
+    "embeddings": {
+      "backend": "huggingface",
+      "model_name": "sentence-transformers/all-MiniLM-L6-v2",
+      "embedding_dimensions": 384,
+      "normalize_embeddings": true
+    },
+    "entity_extraction": {
+      "use_gleaning": true,
+      "max_gleaning_rounds": 3,
+      "llm_model": "llama3.1:8b",
+      "llm_temperature": 0.1,
+      "llm_max_tokens": 1500,
+      "confidence_threshold": 0.65,
+      "min_entity_length": 2,
+      "max_entity_length": 100,
+      "entity_types": [
+        "PERSON",
+        "ORGANIZATION",
+        "LOCATION",
+        "CONCEPT",
+        "EVENT",
+        "PRODUCT",
+        "TECHNOLOGY"
+      ],
+      "use_semantic_merging": true,
+      "merge_similarity_threshold": 0.85
+    },
+    "retrieval": {
+      "strategy": "vector_similarity",
+      "top_k": 10,
+      "use_hnsw_index": true,
+      "hnsw_ef_construction": 200,
+      "hnsw_m": 16,
+      "hnsw_ef_search": 50,
+      "min_similarity_score": 0.6,
+      "use_mmr": true,
+      "mmr_lambda": 0.7
+    },
+    "graph": {
+      "extract_relationships": true,
+      "relationship_confidence_threshold": 0.5,
+      "use_pagerank": true,
+      "pagerank_damping": 0.85,
+      "pagerank_iterations": 50,
+      "pagerank_convergence": 0.0001,
+      "min_relation_score": 0.4,
+      "max_connections_per_node": 20,
+      "bidirectional_relations": true
+    }
+  },
+  "text_processing": {
+    "enabled": true,
+    "chunk_size": 512,
+    "chunk_overlap": 128,
+    "min_chunk_size": 100,
+    "max_chunk_size": 1024,
+    "normalize_whitespace": true,
+    "remove_artifacts": true,
+    "enrichment": {
+      "enabled": true,
+      "auto_detect_format": true,
+      "parser_type": "auto",
+      "extract_keywords": true,
+      "max_keywords_per_chunk": 5,
+      "use_tfidf": true,
+      "generate_summaries": true,
+      "min_chunk_length_for_summary": 150,
+      "max_summary_length": 150,
+      "extract_chapter": true,
+      "extract_section": true,
+      "extract_position": true,
+      "calculate_confidence": true
+    }
+  },
+  "ollama": {
+    "enabled": true,
+    "host": "http://localhost",
+    "port": 11434,
+    "chat_model": "llama3.1:8b",
+    "embedding_model": "nomic-embed-text",
+    "timeout_seconds": 60,
+    "max_retries": 3,
+    "fallback_to_hash": false,
+    "generation": {
+      "temperature": 0.2,
+      "top_p": 0.9,
+      "max_tokens": 1000,
+      "stream": false
+    }
+  },
+  "query_processing": {
+    "enabled": true,
+    "use_advanced_pipeline": true,
+    "use_intent_classification": true,
+    "use_concept_extraction": true,
+    "confidence_threshold": 0.5,
+    "intent_classification": {
+      "entity_patterns": [
+        "who is",
+        "what is",
+        "person",
+        "organization"
+      ],
+      "concept_patterns": [
+        "concept",
+        "idea",
+        "definition",
+        "meaning"
+      ],
+      "relationship_patterns": [
+        "relationship",
+        "connection",
+        "related to"
+      ]
+    },
+    "prompt_templates": {
+      "entity": "Based on the following context, provide information about: {query}\n\nContext:\n{context}\n\nAnswer:",
+      "concept": "Based on the following context, explain the concept: {query}\n\nContext:\n{context}\n\nExplanation:",
+      "relationship": "Based on the following context, describe the relationships for: {query}\n\nContext:\n{context}\n\nRelationships:"
+    }
+  },
+  "performance": {
+    "batch_processing": true,
+    "batch_size": 32,
+    "worker_threads": 4,
+    "memory_limit_mb": 4096,
+    "cache_embeddings": true
+  },
+  "monitoring": {
+    "enabled": true,
+    "track_entity_consistency": true,
+    "track_relationship_accuracy": true,
+    "log_insights": true
+  }
+}

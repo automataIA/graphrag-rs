@@ -1,0 +1,78 @@
+[package]
+name = "graphrag-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Modern Terminal User Interface (TUI) for GraphRAG operations"
+keywords = ["graphrag", "tui", "cli", "ratatui", "knowledge-graph"]
+categories = ["command-line-utilities", "text-processing"]
+
+[[bin]]
+name = "graphrag-cli"
+path = "src/main.rs"
+
+[dependencies]
+# Core GraphRAG library (direct integration, no HTTP server)
+graphrag-core = { path = "../graphrag-core", features = [
+    "async",
+    "pagerank",
+    "lightrag",
+    "leiden",
+    "caching",
+    "parallel-processing",
+    "ollama",
+    "rograg",
+    "cross-encoder",
+    "incremental",
+    "json5-support",
+    "vector-hnsw"
+] }
+
+# TUI Framework
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+
+# Async runtime
+tokio = { version = "1.32", features = ["full"] }
+tokio-util = "0.7"
+futures = "0.3"
+
+# Text input widget
+tui-textarea = "0.7"
+
+# CLI argument parsing
+clap = { version = "4.5", features = ["derive", "cargo"] }
+
+# Error handling
+color-eyre = "0.6"
+thiserror = "1.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+json5 = { version = "0.4", optional = true }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Date/time
+chrono = "0.4"
+
+# UUID generation
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+# Directories
+dirs = "5.0"
+
+[dev-dependencies]
+pretty_assertions = "1.4"
+tempfile = "3.8"
+
+[features]
+default = ["json5-support"]
+json5-support = ["graphrag-core/json5-support", "json5"]
+yaml-support = []

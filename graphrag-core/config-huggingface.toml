@@ -1,0 +1,6 @@
+[embeddings]
+provider = "huggingface"
+model = "sentence-transformers/all-MiniLM-L6-v2"
+cache_dir = "~/.cache/huggingface"
+batch_size = 32
+dimensions = 384

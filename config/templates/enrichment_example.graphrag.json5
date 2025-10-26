@@ -1,0 +1,64 @@
+{
+  // ==========================================================================
+  // GraphRAG Configuration - ENRICHMENT EXAMPLE
+  // ==========================================================================
+  // Converted from: enrichment_example.toml
+  // VSCode: This file has autocomplete! Press Ctrl+Space for suggestions.
+  // ==========================================================================
+
+  "$schema": "../schema/graphrag-config.schema.json",
+  "mode": {
+    "approach": "algorithmic"
+  },
+  "general": {
+    "input_document_path": "input/document.md",
+    "output_dir": "./output/enriched",
+    "log_level": "info",
+    "max_threads": 4
+  },
+  "pipeline": {
+    "workflows": [
+      "extract_text",
+      "extract_entities",
+      "build_graph"
+    ],
+    "parallel_execution": true
+  },
+  "text_processing": {
+    "enabled": true,
+    "chunk_size": 500,
+    "chunk_overlap": 100,
+    "min_chunk_size": 100,
+    "max_chunk_size": 2000,
+    "normalize_whitespace": true,
+    "remove_artifacts": true,
+    "enrichment": {
+      "enabled": true,
+      "auto_detect_format": true,
+      "parser_type": "auto",
+      "extract_keywords": true,
+      "max_keywords_per_chunk": 5,
+      "use_tfidf": true,
+      "generate_summaries": true,
+      "min_chunk_length_for_summary": 150,
+      "max_summary_length": 200,
+      "extract_chapter": true,
+      "extract_section": true,
+      "extract_position": true,
+      "calculate_confidence": true,
+      "detect_headings": true,
+      "detect_numbering": true,
+      "detect_underlines": true,
+      "detect_all_caps": true,
+      "detect_roman_numerals": true
+    }
+  },
+  "ollama": {
+    "enabled": true,
+    "host": "http://localhost",
+    "port": 11434,
+    "chat_model": "llama3.1:8b",
+    "embedding_model": "nomic-embed-text",
+    "timeout_seconds": 60
+  }
+}

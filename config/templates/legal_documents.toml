@@ -8,6 +8,18 @@
 # Based on 2024 research: high precision parameters for legal accuracy and compliance
 # =============================================================================
 
+# -----------------------------------------------------------------------------
+# MODE: Pipeline Approach Selection
+# -----------------------------------------------------------------------------
+[mode]
+# SEMANTIC pipeline recommended for legal documents:
+# - Maximum precision for legal clauses, obligations, and rights
+# - LLM-based extraction with very high confidence thresholds (0.85)
+# - Deep understanding of legal relationships and dependencies
+# - Superior performance on complex legal terminology and citations
+# CRITICAL: Legal documents demand highest accuracy - semantic approach essential
+approach = "semantic"
+
 [general]
 # General configuration
 input_document_path = "path/to/your/legal_document.pdf"

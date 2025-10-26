@@ -1,0 +1,11 @@
+[target.wasm32-unknown-unknown]
+rustflags = [
+    "--cfg", "getrandom_backend=\"wasm_js\"",
+    # Allow framework links for dependencies we don't actually use in WASM
+    # (candle-core's metal deps are not included in our WASM build)
+    "-Awarnings",
+]
+
+# Configure rust-analyzer to check only for wasm32 target in this crate
+[build]
+target = "wasm32-unknown-unknown"

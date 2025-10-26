@@ -1,0 +1,8 @@
+{
+  "name": "graphrag-wasm",
+  "version": "1.0.0",
+  "devDependencies": {
+    "tailwindcss": "^3.4.0",
+    "daisyui": "^5.0.0"
+  }
+}

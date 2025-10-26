@@ -1,0 +1,36 @@
+[build]
+target = "index.html"
+dist = "dist"
+public_url = "/"
+
+[watch]
+ignore = [
+    "dist",
+    "target",
+    ".git",
+]
+
+[serve]
+address = "127.0.0.1"
+port = 8080
+open = true
+
+[[hooks]]
+stage = "pre_build"
+command = "sh"
+command_arguments = ["-c", "echo 'Building GraphRAG Leptos Demo...'"]
+
+[[hooks]]
+stage = "post_build"
+command = "sh"
+command_arguments = ["-c", "echo 'Build complete! Deploy dist/ directory.'"]
+
+# Copy models directory if it exists
+[[copy-dir]]
+source = "../../models"
+target = "models"
+
+# Copy public assets if they exist
+[[copy-dir]]
+source = "public"
+target = "."

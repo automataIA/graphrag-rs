@@ -1,0 +1,154 @@
+{
+  // ==========================================================================
+  // GraphRAG Configuration - DYNAMIC UNIVERSAL
+  // ==========================================================================
+  // Converted from: dynamic_universal.toml
+  // VSCode: This file has autocomplete! Press Ctrl+Space for suggestions.
+  // ==========================================================================
+
+  "$schema": "../schema/graphrag-config.schema.json",
+  "mode": {
+    "approach": "hybrid"
+  },
+  "general": {
+    "input_document_path": "path/to/your/document.txt",
+    "output_dir": "./output/universal_analysis",
+    "log_level": "info",
+    "max_threads": 4,
+    "enable_profiling": true
+  },
+  "pipeline": {
+    "workflows": [
+      "extract_text",
+      "extract_entities",
+      "build_graph",
+      "detect_communities"
+    ],
+    "parallel_execution": true,
+    "text_extraction": {
+      "chunk_size": 800,
+      "chunk_overlap": 200,
+      "min_chunk_size": 150,
+      "clean_control_chars": true,
+      "normalize_whitespace": true,
+      "cleaning": {
+        "remove_urls": true,
+        "remove_emails": true,
+        "normalize_whitespace": true,
+        "remove_special_chars": false
+      }
+    },
+    "entity_extraction": {
+      "model_name": "llama3.1:8b",
+      "temperature": 0.2,
+      "max_tokens": 1200,
+      "entity_types": [
+        "PERSON",
+        "LOCATION",
+        "ORGANIZATION",
+        "OBJECT",
+        "EVENT",
+        "CONCEPT",
+        "TIME",
+        "DOCUMENT"
+      ],
+      "confidence_threshold": 0.7,
+      "filters": {
+        "min_entity_length": 2,
+        "max_entity_length": 50,
+        "enable_fuzzy_matching": true
+      }
+    },
+    "graph_building": {
+      "relation_scorer": "cosine_similarity",
+      "min_relation_score": 0.5,
+      "max_connections_per_node": 15,
+      "bidirectional_relations": true
+    },
+    "community_detection": {
+      "algorithm": "leiden",
+      "resolution": 0.8,
+      "min_community_size": 2,
+      "max_community_size": 20
+    }
+  },
+  "storage": {
+    "database_type": "memory",
+    "enable_persistence": true
+  },
+  "models": {
+    "primary_llm": "llama3.1:8b",
+    "embedding_model": "nomic-embed-text",
+    "max_context_length": 4096,
+    "llm_params": {
+      "temperature": 0.2,
+      "top_p": 0.9,
+      "frequency_penalty": 0.0,
+      "presence_penalty": 0.0
+    }
+  },
+  "performance": {
+    "batch_processing": true,
+    "batch_size": 32,
+    "worker_threads": 4,
+    "memory_limit_mb": 512
+  },
+  "ollama": {
+    "enabled": true,
+    "host": "http://localhost",
+    "port": 11434,
+    "chat_model": "llama3.1:8b",
+    "embedding_model": "nomic-embed-text",
+    "timeout_seconds": 60,
+    "max_retries": 3,
+    "fallback_to_hash": false,
+    "max_tokens": 800,
+    "temperature": 0.2
+  },
+  "breakthrough_features": {
+    "pagerank_retrieval": true,
+    "llm_response_caching": true,
+    "incremental_updates": true,
+    "rograg_decomposition": true,
+    "full_async_processing": true
+  },
+  "pagerank": {
+    "enabled": true,
+    "damping_factor": 0.85,
+    "max_iterations": 100,
+    "convergence_threshold": 1e-06,
+    "cache_results": true
+  },
+  "caching": {
+    "enabled": true,
+    "cache_size": 10000,
+    "ttl_seconds": 3600,
+    "eviction_policy": "lru",
+    "intelligent_keys": true
+  },
+  "incremental": {
+    "enabled": true,
+    "conflict_resolution": "merge",
+    "change_tracking": true,
+    "batch_updates": true
+  },
+  "rograg": {
+    "enabled": true,
+    "max_decomposition_depth": 3,
+    "fuzzy_fallback": true,
+    "quality_validation": true
+  },
+  "async_processing": {
+    "enabled": true,
+    "max_concurrent_tasks": 50,
+    "task_timeout_seconds": 300,
+    "queue_size": 1000
+  },
+  "dynamic_guarantees": {
+    "no_hardcoded_entities": true,
+    "no_hardcoded_patterns": true,
+    "no_hardcoded_responses": true,
+    "fully_algorithmic": true,
+    "domain_agnostic": true
+  }
+}

@@ -1,0 +1,74 @@
+{
+  // Simple LLM-based Hierarchical Summarization Configuration
+  // Perfect starting point for experimenting with LLM-powered summarization
+
+  general: {
+    input_document_path = "examples/sample_document.txt",
+    output_dir = "./output/llm_summarization",
+    log_level = "info"
+  },
+
+  pipeline: {
+    text_extraction: {
+      chunk_size = 800,
+      chunk_overlap = 200
+    }
+  },
+
+  // Basic LLM summarization configuration
+  summarization: {
+    merge_size = 4,              // Merge 4 chunks at a time
+    max_summary_length = 250,    // Reasonable summary length
+    min_node_size = 50,
+
+    // Simple LLM configuration
+    llm_config: {
+      enabled = true,              // Enable LLM summarization
+      model_name = "llama3.1:8b",
+      temperature = 0.3,          // Coherent but not too rigid
+      max_tokens = 180,
+      strategy = "progressive",   // Start extractive, become abstractive
+
+      // Progressive level configuration
+      level_configs: {
+        "0": {
+          max_length = 180,
+          use_abstractive = false,  // Extractive for leaf nodes
+          temperature = 0.2
+        },
+        "1": {
+          max_length = 200,
+          use_abstractive = false,  // Still extractive
+          temperature = 0.25
+        },
+        "2": {
+          max_length = 220,
+          use_abstractive = true,   // Start abstractive
+          temperature = 0.3
+        },
+        "3": {
+          max_length = 250,
+          use_abstractive = true,   // Fully abstractive
+          temperature = 0.35
+        }
+      }
+    }
+  },
+
+  embeddings: {
+    backend = "ollama",
+    model = "nomic-embed-text"
+  },
+
+  ollama: {
+    enabled = true,
+    chat_model = "llama3.1:8b",
+    embedding_model = "nomic-embed-text"
+  },
+
+  generation: {
+    backend = "ollama",
+    model = "llama3.1:8b",
+    temperature = 0.7
+  }
+}

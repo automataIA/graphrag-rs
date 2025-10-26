@@ -1,0 +1,270 @@
+# =============================================================================
+# SEMANTIC PIPELINE CONFIGURATION
+# Neural/LLM-based approach for high-quality entity extraction and retrieval
+# =============================================================================
+#
+# This template demonstrates a PURE SEMANTIC pipeline using:
+# - Neural embeddings (HuggingFace, OpenAI, Ollama)
+# - LLM-based entity extraction with gleaning (iterative refinement)
+# - Vector similarity search (cosine similarity, HNSW indexing)
+# - Semantic graph construction with PageRank
+#
+# Best for: High-quality analysis, nuanced understanding, complex relationships
+# Requires: Ollama (or OpenAI API) for LLM inference
+# Resource usage: High (GPU recommended for neural embeddings)
+#
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# MODE: Pipeline Approach Selection
+# -----------------------------------------------------------------------------
+[mode]
+# Choose pipeline approach: "semantic", "algorithmic", or "hybrid"
+approach = "semantic"
+
+# -----------------------------------------------------------------------------
+# GENERAL: Basic Configuration
+# -----------------------------------------------------------------------------
+[general]
+input_document_path = "data/input.txt"
+output_dir = "./output/semantic"
+log_level = "info"
+max_threads = 4
+enable_profiling = true
+
+# -----------------------------------------------------------------------------
+# SEMANTIC PIPELINE: Neural/LLM-based Configuration
+# -----------------------------------------------------------------------------
+[semantic]
+
+# --- SEMANTIC EMBEDDINGS: Neural Vector Representations ---
+[semantic.embeddings]
+# Backend options: "huggingface", "openai", "voyage", "cohere", "jina", "ollama"
+backend = "huggingface"
+
+# HuggingFace models (high-quality, open-source)
+model_name = "sentence-transformers/all-MiniLM-L6-v2"  # Fast, balanced
+# Alternative models:
+# - "sentence-transformers/all-mpnet-base-v2"  # Higher quality, slower
+# - "BAAI/bge-small-en-v1.5"                   # Good for English
+# - "intfloat/multilingual-e5-large"           # Multilingual support
+
+embedding_dimensions = 384  # Match model output dimensions
+normalize_embeddings = true  # Normalize for cosine similarity
+
+# Ollama embeddings (if using local Ollama)
+# backend = "ollama"
+# model_name = "nomic-embed-text"
+# embedding_dimensions = 768
+
+# OpenAI embeddings (if using OpenAI API)
+# backend = "openai"
+# model_name = "text-embedding-3-small"
+# embedding_dimensions = 1536
+# api_key = "your-api-key-here"  # Or set OPENAI_API_KEY env var
+
+# --- SEMANTIC ENTITY EXTRACTION: LLM-based with Gleaning ---
+[semantic.entity_extraction]
+# Use LLM-based extraction for high-quality entity recognition
+use_gleaning = true
+max_gleaning_rounds = 3  # Iterative refinement passes
+
+# LLM configuration for entity extraction
+llm_model = "llama3.1:8b"  # Ollama model for extraction
+llm_temperature = 0.1      # Low for consistent extraction
+llm_max_tokens = 1500      # Higher for detailed entity descriptions
+
+# Confidence and filtering
+confidence_threshold = 0.65  # Minimum confidence for entity acceptance
+min_entity_length = 2
+max_entity_length = 100
+
+# Entity types to extract (customize for your domain)
+entity_types = [
+    "PERSON",
+    "ORGANIZATION",
+    "LOCATION",
+    "CONCEPT",
+    "EVENT",
+    "PRODUCT",
+    "TECHNOLOGY"
+]
+
+# Semantic merging (merge similar entities using embeddings)
+use_semantic_merging = true
+merge_similarity_threshold = 0.85  # Cosine similarity threshold
+
+# --- SEMANTIC RETRIEVAL: Vector Search ---
+[semantic.retrieval]
+# Vector search strategy
+strategy = "vector_similarity"  # Pure vector search
+top_k = 10                      # Number of results to retrieve
+
+# HNSW index parameters (for fast vector search)
+use_hnsw_index = true
+hnsw_ef_construction = 200  # Construction quality (higher = better, slower)
+hnsw_m = 16                 # Connections per node (higher = better recall)
+hnsw_ef_search = 50         # Search quality (higher = better accuracy)
+
+# Similarity thresholds
+min_similarity_score = 0.6   # Minimum cosine similarity
+use_mmr = true               # Maximal Marginal Relevance (diversity)
+mmr_lambda = 0.7             # Balance relevance vs diversity (0.0-1.0)
+
+# --- SEMANTIC GRAPH: Graph Construction ---
+[semantic.graph]
+# Semantic relationship extraction
+extract_relationships = true
+relationship_confidence_threshold = 0.5
+
+# Graph scoring and ranking
+use_pagerank = true
+pagerank_damping = 0.85
+pagerank_iterations = 50
+pagerank_convergence = 0.0001
+
+# Graph connectivity
+min_relation_score = 0.4
+max_connections_per_node = 20
+bidirectional_relations = true
+
+# -----------------------------------------------------------------------------
+# TEXT PROCESSING: Chunking and Enrichment
+# -----------------------------------------------------------------------------
+[text_processing]
+enabled = true
+chunk_size = 512
+chunk_overlap = 128
+min_chunk_size = 100
+max_chunk_size = 1024
+normalize_whitespace = true
+remove_artifacts = true
+
+# Text enrichment (structure detection, keywords, summaries)
+[text_processing.enrichment]
+enabled = true
+auto_detect_format = true
+parser_type = "auto"  # "auto", "markdown", "html", "plaintext"
+
+# Keyword extraction (TF-IDF)
+extract_keywords = true
+max_keywords_per_chunk = 5
+use_tfidf = true
+
+# Summarization (extractive)
+generate_summaries = true
+min_chunk_length_for_summary = 150
+max_summary_length = 150
+
+# Metadata extraction
+extract_chapter = true
+extract_section = true
+extract_position = true
+calculate_confidence = true
+
+# -----------------------------------------------------------------------------
+# OLLAMA: LLM Service Configuration
+# -----------------------------------------------------------------------------
+[ollama]
+enabled = true
+host = "http://localhost"
+port = 11434
+chat_model = "llama3.1:8b"
+embedding_model = "nomic-embed-text"
+timeout_seconds = 60
+max_retries = 3
+fallback_to_hash = false
+
+[ollama.generation]
+temperature = 0.2         # Low for consistent analysis
+top_p = 0.9
+max_tokens = 1000
+stream = false
+
+# -----------------------------------------------------------------------------
+# QUERY PROCESSING: Advanced Query Understanding
+# -----------------------------------------------------------------------------
+[query_processing]
+enabled = true
+use_advanced_pipeline = true
+use_intent_classification = true
+use_concept_extraction = true
+confidence_threshold = 0.5
+
+[query_processing.intent_classification]
+# Intent patterns (customize for your domain)
+entity_patterns = ["who is", "what is", "person", "organization"]
+concept_patterns = ["concept", "idea", "definition", "meaning"]
+relationship_patterns = ["relationship", "connection", "related to"]
+
+[query_processing.prompt_templates]
+# Prompt templates for answer generation
+entity = """Based on the following context, provide information about: {query}
+
+Context:
+{context}
+
+Answer:"""
+
+concept = """Based on the following context, explain the concept: {query}
+
+Context:
+{context}
+
+Explanation:"""
+
+relationship = """Based on the following context, describe the relationships for: {query}
+
+Context:
+{context}
+
+Relationships:"""
+
+# -----------------------------------------------------------------------------
+# PERFORMANCE: Resource Management
+# -----------------------------------------------------------------------------
+[performance]
+batch_processing = true
+batch_size = 32
+worker_threads = 4
+memory_limit_mb = 4096
+cache_embeddings = true
+
+# -----------------------------------------------------------------------------
+# MONITORING: Quality Tracking
+# -----------------------------------------------------------------------------
+[monitoring]
+enabled = true
+track_entity_consistency = true
+track_relationship_accuracy = true
+log_insights = true
+
+# =============================================================================
+# SEMANTIC PIPELINE SUMMARY:
+#
+# ✅ STRENGTHS:
+# - High-quality entity extraction with LLM-based gleaning
+# - Nuanced semantic understanding through neural embeddings
+# - Captures complex relationships and implicit connections
+# - Excellent for conceptual analysis and abstract reasoning
+# - Handles synonyms, paraphrasing, and semantic similarity
+#
+# ⚠️  CONSIDERATIONS:
+# - Requires GPU for optimal neural embedding performance
+# - Higher computational cost and latency
+# - Needs Ollama or OpenAI API for LLM inference
+# - May require fine-tuning for domain-specific terminology
+#
+# 🎯 BEST USE CASES:
+# - Research papers and academic literature
+# - Legal documents requiring nuanced interpretation
+# - Technical documentation with complex concepts
+# - Narrative fiction with character relationships
+# - Domain-specific knowledge bases
+#
+# 🚀 QUICK START:
+# 1. Install Ollama: https://ollama.ai/
+# 2. Pull models: ollama pull llama3.1:8b && ollama pull nomic-embed-text
+# 3. Run pipeline: cargo run --example your_example -- semantic_pipeline.toml
+#
+# =============================================================================

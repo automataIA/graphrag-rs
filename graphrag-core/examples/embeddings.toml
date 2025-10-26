@@ -1,0 +1,136 @@
+# GraphRAG Embeddings Configuration
+# This file demonstrates how to configure embedding providers via TOML
+
+# ============================================================================
+# EXAMPLE 1: Hugging Face Hub (Free, Offline, Default)
+# ============================================================================
+[embeddings]
+provider = "huggingface"
+model = "sentence-transformers/all-MiniLM-L6-v2"
+# API key not needed for HuggingFace
+cache_dir = "~/.cache/huggingface"  # Optional: custom cache directory
+batch_size = 32
+
+# ============================================================================
+# EXAMPLE 2: OpenAI (Production, High Quality)
+# ============================================================================
+# [embeddings]
+# provider = "openai"
+# model = "text-embedding-3-small"  # or "text-embedding-3-large"
+# api_key = "sk-..."  # Or set OPENAI_API_KEY environment variable
+# batch_size = 100
+
+# ============================================================================
+# EXAMPLE 3: Voyage AI (Recommended by Anthropic)
+# ============================================================================
+# [embeddings]
+# provider = "voyage"  # or "voyageai" or "voyage-ai"
+# model = "voyage-3-large"  # General purpose
+# # model = "voyage-code-3"     # For code search
+# # model = "voyage-finance-2"  # For finance documents
+# # model = "voyage-law-2"      # For legal documents
+# api_key = "pa-..."  # Or set VOYAGE_API_KEY environment variable
+# batch_size = 128
+
+# ============================================================================
+# EXAMPLE 4: Cohere (Multilingual Support)
+# ============================================================================
+# [embeddings]
+# provider = "cohere"
+# model = "embed-english-v3.0"       # English only
+# # model = "embed-multilingual-v3.0"  # 100+ languages
+# # model = "embed-english-light-v3.0" # Faster, smaller
+# api_key = "..."  # Or set COHERE_API_KEY environment variable
+# batch_size = 96
+
+# ============================================================================
+# EXAMPLE 5: Jina AI (Cost Optimized - $0.02/1M tokens)
+# ============================================================================
+# [embeddings]
+# provider = "jina"  # or "jinaai" or "jina-ai"
+# model = "jina-embeddings-v3"
+# # model = "jina-embeddings-v4"  # Multimodal (text + images)
+# # model = "jina-clip-v2"        # Text-to-image
+# api_key = "jina_..."  # Or set JINA_API_KEY environment variable
+# batch_size = 200
+
+# ============================================================================
+# EXAMPLE 6: Mistral AI (RAG Optimized)
+# ============================================================================
+# [embeddings]
+# provider = "mistral"  # or "mistralai" or "mistral-ai"
+# model = "mistral-embed"
+# # model = "codestral-embed"  # For code
+# api_key = "..."  # Or set MISTRAL_API_KEY environment variable
+# batch_size = 50
+
+# ============================================================================
+# EXAMPLE 7: Together AI (Cheapest - $0.008/1M tokens)
+# ============================================================================
+# [embeddings]
+# provider = "together"  # or "togetherai" or "together-ai"
+# model = "BAAI/bge-large-en-v1.5"
+# # model = "BAAI/bge-base-en-v1.5"
+# # model = "WhereIsAI/UAE-Large-V1"
+# api_key = "..."  # Or set TOGETHER_API_KEY environment variable
+# batch_size = 128
+
+# ============================================================================
+# MODEL RECOMMENDATIONS
+# ============================================================================
+#
+# USE CASE                  | PROVIDER        | MODEL                            | COST
+# --------------------------|-----------------|----------------------------------|------------
+# General Purpose (Free)    | HuggingFace     | all-MiniLM-L6-v2                | Free
+# High Quality (Free)       | HuggingFace     | BAAI/bge-large-en-v1.5          | Free
+# Production Quality        | Voyage AI       | voyage-3-large                  | Medium
+# Code Search              | Voyage AI       | voyage-code-3                   | Medium
+# Finance/Legal            | Voyage AI       | voyage-finance-2 / voyage-law-2 | Medium
+# Multilingual             | Cohere          | embed-multilingual-v3.0         | Low
+# Cost Optimized           | Together AI     | BAAI/bge-large-en-v1.5          | Very Low
+# RAG Optimized            | Mistral         | mistral-embed                   | Low
+# Offline/Privacy          | HuggingFace     | any model                       | Free
+#
+# ============================================================================
+# BATCH SIZE GUIDELINES
+# ============================================================================
+#
+# - HuggingFace (local):  16-64  (depends on your hardware)
+# - OpenAI:               100-2048 (API has generous limits)
+# - Voyage AI:            128     (recommended)
+# - Cohere:               96      (max per request)
+# - Jina AI:              200+    (very generous)
+# - Mistral:              50-100
+# - Together AI:          128+    (generous limits)
+#
+# ============================================================================
+# ENVIRONMENT VARIABLES (Alternative to api_key field)
+# ============================================================================
+#
+# Instead of putting API keys in this file, you can set environment variables:
+#
+#   export OPENAI_API_KEY="sk-..."
+#   export VOYAGE_API_KEY="pa-..."
+#   export COHERE_API_KEY="..."
+#   export JINA_API_KEY="jina_..."
+#   export MISTRAL_API_KEY="..."
+#   export TOGETHER_API_KEY="..."
+#
+# The config will automatically use environment variables if api_key is not set.
+#
+# ============================================================================
+# USAGE IN CODE
+# ============================================================================
+#
+# use graphrag_core::embeddings::config::EmbeddingProviderConfig;
+#
+# // Load from file
+# let config = EmbeddingProviderConfig::from_toml_file("embeddings.toml")?;
+# let embedding_config = config.to_embedding_config()?;
+#
+# // Create provider
+# let provider = HttpEmbeddingProvider::from_config(&embedding_config)?;
+#
+# // Generate embeddings
+# let embedding = provider.embed("Your text here").await?;
+#

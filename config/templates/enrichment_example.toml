@@ -1,0 +1,144 @@
+# =============================================================================
+# Document Enrichment Configuration Template
+# =============================================================================
+# This template demonstrates the new document structure recognition and
+# semantic enrichment features in graphrag-core.
+#
+# FEATURES:
+# - Automatic detection of document structure (chapters, sections, headings)
+# - Real TF-IDF keyword extraction per chunk
+# - Extractive summarization based on sentence ranking
+# - Support for Markdown, HTML, and Plain Text formats
+# - Hierarchical metadata (chapter → section → subsection)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# MODE: Pipeline Approach Selection
+# -----------------------------------------------------------------------------
+[mode]
+# ALGORITHMIC pipeline recommended for enrichment demonstration:
+# - Focus on algorithmic enrichment features (TF-IDF, structure detection)
+# - Fast processing with pattern-based entity extraction
+# - Demonstrates that enrichment works WITHOUT heavy LLM dependency
+# - Can be switched to "semantic" or "hybrid" for LLM-enhanced extraction
+approach = "algorithmic"
+
+[general]
+input_document_path = "input/document.md"
+output_dir = "./output/enriched"
+log_level = "info"
+max_threads = 4
+
+[pipeline]
+workflows = ["extract_text", "extract_entities", "build_graph"]
+parallel_execution = true
+
+# =============================================================================
+# TEXT PROCESSING WITH ENRICHMENT
+# =============================================================================
+
+[text_processing]
+# Basic chunking settings
+enabled = true
+chunk_size = 500              # Chunk size in characters
+chunk_overlap = 100           # Overlap between chunks
+min_chunk_size = 100
+max_chunk_size = 2000
+
+# Text cleaning
+normalize_whitespace = true
+remove_artifacts = true
+
+[text_processing.enrichment]
+# ✨ DOCUMENT ENRICHMENT - NEW FEATURE
+# Automatically detects document structure and enriches chunks with metadata
+
+enabled = true                # Enable/disable enrichment entirely
+
+# Format detection
+auto_detect_format = true     # Auto-detect based on file extension and content
+parser_type = "auto"          # Options: "auto", "markdown", "html", "plaintext"
+                              # "auto" = detect from filename (.md/.html/.txt)
+
+# Keyword extraction (Real TF-IDF algorithm)
+extract_keywords = true       # Extract keywords using TF-IDF
+max_keywords_per_chunk = 5    # Top N keywords per chunk
+use_tfidf = true              # Use TF-IDF (vs simple frequency)
+
+# Summarization (Extractive sentence ranking)
+generate_summaries = true     # Generate summaries for chunks
+min_chunk_length_for_summary = 150  # Only summarize chunks >= this length
+max_summary_length = 200      # Maximum summary length in characters
+
+# Structural metadata
+extract_chapter = true        # Extract chapter names
+extract_section = true        # Extract section/subsection names
+extract_position = true       # Calculate position in document (0.0-1.0)
+calculate_confidence = true   # Calculate metadata confidence score
+
+# Structure detection (heuristics for plain text)
+detect_headings = true        # Detect heading hierarchy
+detect_numbering = true       # Detect numbered sections (1.1, 1.2.3, etc.)
+detect_underlines = true      # Detect underlined headings (===, ---)
+detect_all_caps = true        # Detect ALL CAPS headings
+detect_roman_numerals = true  # Detect Roman numerals (I, II, III, IV, etc.)
+
+# =============================================================================
+# OLLAMA CONFIGURATION
+# =============================================================================
+
+[ollama]
+enabled = true
+host = "http://localhost"
+port = 11434
+chat_model = "llama3.1:8b"
+embedding_model = "nomic-embed-text"
+timeout_seconds = 60
+
+# =============================================================================
+# EXAMPLES OF ENRICHED OUTPUT
+# =============================================================================
+#
+# After processing, each chunk will have:
+#
+# ChunkMetadata {
+#     chapter: Some("Chapter 1: Introduction"),
+#     section: Some("Section 1.1: Background"),
+#     subsection: Some("Subsection 1.1.1: History"),
+#     keywords: ["machine", "learning", "artificial", "intelligence", "neural"],
+#     summary: Some("Machine learning is a subset of AI..."),
+#     structural_level: Some(3),              # h3 or ### level
+#     position_in_document: Some(0.15),       # 15% through document
+#     heading_path: ["Chapter 1", "Section 1.1", "Subsection 1.1.1"],
+#     confidence: Some(0.85),                 # 85% metadata completeness
+#     ...
+# }
+#
+# This enriched metadata enables:
+# - Better retrieval (search by chapter/section)
+# - Contextual understanding (know where in document)
+# - Semantic search (TF-IDF keywords)
+# - Quick overview (extractive summaries)
+# - Hierarchy navigation (parent-child relationships)
+# =============================================================================
+
+# =============================================================================
+# PARSER-SPECIFIC NOTES
+# =============================================================================
+#
+# MARKDOWN (.md):
+#   - Detects: #, ##, ###, ####, #####, ######
+#   - Validates proper markdown syntax (space after #)
+#   - Builds hierarchical structure automatically
+#
+# HTML (.html, .htm):
+#   - Detects: <h1>, <h2>, <h3>, <h4>, <h5>, <h6>
+#   - Extracts text content (removes nested tags)
+#   - Supports DOCTYPE detection
+#
+# PLAIN TEXT (.txt):
+#   - Heuristics: ALL CAPS, underlines (=== or ---), numbered (1.1, 1.2)
+#   - Roman numerals: I, II, III, IV, V, etc.
+#   - Alphabetic: A., B., C., etc.
+#   - Less accurate than structured formats
+# =============================================================================

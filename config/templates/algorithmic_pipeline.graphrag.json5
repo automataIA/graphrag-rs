@@ -1,0 +1,182 @@
+{
+  // ==========================================================================
+  // GraphRAG Configuration - ALGORITHMIC PIPELINE
+  // ==========================================================================
+  // Converted from: algorithmic_pipeline.toml
+  // VSCode: This file has autocomplete! Press Ctrl+Space for suggestions.
+  // ==========================================================================
+
+  "$schema": "../schema/graphrag-config.schema.json",
+  "mode": {
+    "approach": "algorithmic"
+  },
+  "general": {
+    "input_document_path": "data/input.txt",
+    "output_dir": "./output/algorithmic",
+    "log_level": "info",
+    "max_threads": 4,
+    "enable_profiling": true
+  },
+  "algorithmic": {
+    "embeddings": {
+      "backend": "hash",
+      "hash_size": 1024,
+      "use_tfidf_weighting": true,
+      "min_ngram": 1,
+      "max_ngram": 2,
+      "lowercase": true,
+      "remove_stopwords": true
+    },
+    "entity_extraction": {
+      "use_gleaning": false,
+      "use_patterns": true,
+      "extract_capitalized": true,
+      "extract_acronyms": true,
+      "extract_numbers": true,
+      "extract_emails": false,
+      "extract_urls": false,
+      "confidence_threshold": 0.5,
+      "min_entity_length": 2,
+      "max_entity_length": 50,
+      "entity_patterns": [
+        {
+          "type": "ORGANIZATION",
+          "pattern": "(?:[A-Z][a-z]+\\s+)*(?:Inc|Corp|Ltd|LLC|Company|Group)"
+        },
+        {
+          "type": "LOCATION",
+          "pattern": "(?:[A-Z][a-z]+\\s+)*(?:City|State|County|Country|River|Mountain)"
+        },
+        {
+          "type": "PRODUCT",
+          "pattern": "[A-Z][a-zA-Z0-9]+(?:\\s+[A-Z0-9][a-zA-Z0-9]*)*\\s+(?:v?\\d+\\.\\d+|\\d{4})"
+        },
+        {
+          "type": "DATE",
+          "pattern": "\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4}|(?:January|February|March|April|May|June|July|August|September|October|November|December)\\s+\\d{1,2},?\\s+\\d{4}"
+        },
+        {
+          "type": "MONEY",
+          "pattern": "\\$\\d+(?:,\\d{3})*(?:\\.\\d{2})?|\\d+(?:,\\d{3})*(?:\\.\\d{2})?\\s*(?:USD|EUR|GBP)"
+        }
+      ],
+      "exclude_stopwords": true,
+      "custom_stopwords": [
+        "the",
+        "and",
+        "but",
+        "for",
+        "with",
+        "from",
+        "this",
+        "that"
+      ]
+    },
+    "retrieval": {
+      "strategy": "bm25",
+      "top_k": 10,
+      "bm25_k1": 1.5,
+      "bm25_b": 0.75,
+      "bm25_epsilon": 0.25,
+      "min_keyword_score": 0.1,
+      "use_query_expansion": false
+    },
+    "graph": {
+      "extract_relationships": true,
+      "relationship_confidence_threshold": 0.4,
+      "use_cooccurrence": true,
+      "cooccurrence_window": 50,
+      "min_cooccurrence_count": 2,
+      "use_pagerank": false,
+      "use_degree_centrality": true,
+      "min_relation_score": 0.3,
+      "max_connections_per_node": 15,
+      "bidirectional_relations": true
+    }
+  },
+  "text_processing": {
+    "enabled": true,
+    "chunk_size": 512,
+    "chunk_overlap": 64,
+    "min_chunk_size": 100,
+    "max_chunk_size": 1024,
+    "normalize_whitespace": true,
+    "remove_artifacts": true,
+    "enrichment": {
+      "enabled": true,
+      "auto_detect_format": true,
+      "parser_type": "auto",
+      "extract_keywords": true,
+      "max_keywords_per_chunk": 5,
+      "use_tfidf": true,
+      "generate_summaries": true,
+      "min_chunk_length_for_summary": 150,
+      "max_summary_length": 100,
+      "extract_chapter": true,
+      "extract_section": true,
+      "extract_position": true,
+      "calculate_confidence": true
+    }
+  },
+  "ollama": {
+    "enabled": false,
+    "host": "http://localhost",
+    "port": 11434,
+    "timeout_seconds": 30,
+    "max_retries": 1,
+    "fallback_to_hash": true
+  },
+  "query_processing": {
+    "enabled": true,
+    "use_advanced_pipeline": false,
+    "use_intent_classification": true,
+    "use_concept_extraction": false,
+    "confidence_threshold": 0.4,
+    "intent_classification": {
+      "entity_patterns": [
+        "who is",
+        "what is",
+        "person",
+        "organization",
+        "company"
+      ],
+      "concept_patterns": [
+        "concept",
+        "idea",
+        "definition",
+        "meaning",
+        "explain"
+      ],
+      "relationship_patterns": [
+        "relationship",
+        "connection",
+        "related to",
+        "associated with"
+      ],
+      "search_patterns": [
+        "find",
+        "search",
+        "look for",
+        "locate"
+      ]
+    },
+    "prompt_templates": {
+      "entity": "Query: {query}\n\nRelevant information:\n{context}",
+      "concept": "Query: {query}\n\nRelevant information:\n{context}",
+      "relationship": "Query: {query}\n\nRelevant relationships:\n{context}"
+    }
+  },
+  "performance": {
+    "batch_processing": true,
+    "batch_size": 64,
+    "worker_threads": 4,
+    "memory_limit_mb": 2048,
+    "cache_embeddings": true
+  },
+  "monitoring": {
+    "enabled": true,
+    "track_entity_consistency": true,
+    "track_relationship_accuracy": false,
+    "log_insights": false
+  }
+}

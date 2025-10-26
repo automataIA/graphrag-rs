@@ -1,2 +1,201 @@
-/target
+# ============================================
+# Rust Build Artifacts
+# ============================================
+target
+debug
+release
+Cargo.lock  # Uncomment if this is a library
+
+# ============================================
+# GraphRAG Output and Cache
+# ============================================
+/output
+/cache
+*.lance
+*.lancedb
+*.qdrant
+storage_data/
+graph_data/
+docs/
+documents/
+docs-example/
+
+# ============================================
+# Screenshots and Media
+# ============================================
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.ico
+*.svg  # Uncomment if needed
+
+# ============================================
+# Backup and Temporary Files
+# ============================================
+*.backup
+*.bak
+*.old
+*.tmp
+*.temp
+*~
+*.orig
+*.rej
+*.swp
+*.swo
+
+# ============================================
+# Logs and Debugging
+# ============================================
+*.log
+logs/
+*.prof
+*.out
+*.trace
+
+# ============================================
+# Temporary Directories
+# ============================================
 /info
+/web
+/template-*
+/tmp
+/temp
+
+# ============================================
+# OS Specific
+# ============================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+.Trash-*
+
+# ============================================
+# Editor and IDE
+# ============================================
+# VSCode
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+*.code-workspace
+
+# IntelliJ IDEA / CLion / RustRover
+.idea/
+*.iml
+*.ipr
+*.iws
+.idea_modules/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+
+# Emacs
+\#*\#
+.#*
+*~
+*.elc
+
+# JetBrains
+.fleet/
+
+# ============================================
+# Environment and Configuration
+# ============================================
+.env
+.env.local
+.env.*.local
+*.secret
+secrets/
+*.key
+*.pem
+*.crt
+*.p12
+credentials.json
+
+# ============================================
+# Dependencies and Node (for WASM projects)
+# ============================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+.pnpm-debug.log*
+
+# ============================================
+# WASM Build Artifacts
+# ============================================
+/dist
+/pkg
+wasm-pack.log
+graphrag-wasm/pkg/
+
+# ============================================
+# Documentation Generation
+# ============================================
+/doc
+/docs-build
+book/
+
+# ============================================
+# Test and Coverage
+# ============================================
+*.profraw
+*.profdata
+coverage/
+tarpaulin-report.html
+cobertura.xml
+lcov.info
+
+# ============================================
+# Database Files
+# ============================================
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# ============================================
+# Benchmarking and Profiling
+# ============================================
+criterion/
+flamegraph.svg
+perf.data
+perf.data.old
+
+# ============================================
+# Project Specific
+# ============================================
+# Config examples are kept, but instance configs are ignored
+*_local.toml
+*_private.toml
+my_*.toml
+config_*.json
+!config/templates/**
+
+# Large test files (keep originals in docs-example)
+# *.txt  # Uncomment if needed

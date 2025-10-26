@@ -1,0 +1,81 @@
+# Clippy configuration for GraphRAG-RS
+
+# Set MSRV (Minimum Supported Rust Version)
+msrv = "1.70.0"
+
+# Lint configuration
+cognitive-complexity-threshold = 30
+too-many-arguments-threshold = 7
+type-complexity-threshold = 250
+single-char-binding-names-threshold = 4
+too-many-lines-threshold = 400
+array-size-threshold = 512
+vec-box-size-threshold = 4096
+enum-variant-size-threshold = 200
+future-size-threshold = 16384
+unnecessary-box-size = 128
+
+# Allow certain patterns
+allow-expect-in-tests = true
+allow-unwrap-in-tests = true
+allow-print-in-tests = true
+allow-dbg-in-tests = true
+
+# Documentation
+missing-docs-in-crate-items = true
+
+# Disallowed names
+disallowed-names = [
+    "foo",
+    "bar",
+    "baz",
+    "quux",
+    "temp",
+    "tmp",
+    "thing",
+    "stuff",
+    "data",
+]
+
+# Note: allowed-dependencies is not a valid Clippy config option
+# Use cargo-deny or similar tools for dependency validation
+
+# Note: enforced-import-renames removed because it conflicts with rustfmt/rust-analyzer
+# which automatically removes "redundant" renames like `HashMap as HashMap`
+# This caused save-format loops that frustrated developers
+
+# Error message improvement
+verbose-bit-mask-threshold = 1
+warn-on-all-wildcard-imports = true
+
+# Performance lints
+avoid-breaking-exported-api = false
+upper-case-acronyms-aggressive = false
+
+# Style preferences
+doc-valid-idents = [
+    "GraphRAG",
+    "LightRAG",
+    "FastGraphRAG",
+    "OpenAI",
+    "GPT",
+    "BERT",
+    "NLP",
+    "LLM",
+    "API",
+    "CLI",
+    "JSON",
+    "YAML",
+    "TOML",
+    "CSV",
+    "HTML",
+    "HTTP",
+    "HTTPS",
+    "REST",
+    "GraphML",
+    "PageRank",
+    "HNSW",
+    "KV",
+    "URL",
+    "URI",
+]

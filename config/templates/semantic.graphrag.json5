@@ -1,0 +1,209 @@
+{
+  // GraphRAG Semantic Pipeline Configuration
+  // High-quality neural/LLM-based approach
+  // VSCode: This file has autocomplete! Type to see suggestions.
+
+  "$schema": "../schema/graphrag-config.schema.json",
+
+  // =========================================================================
+  // MODE: Pipeline Approach Selection
+  // =========================================================================
+  mode: {
+    approach: "semantic"  // Options: "semantic", "algorithmic", "hybrid"
+  },
+
+  // =========================================================================
+  // GENERAL: Basic Configuration
+  // =========================================================================
+  general: {
+    input_document_path: "data/input.txt",
+    output_dir: "./output/semantic",
+    log_level: "info",  // trace, debug, info, warn, error
+    max_threads: 4,
+    enable_profiling: true
+  },
+
+  // =========================================================================
+  // SEMANTIC PIPELINE: Neural/LLM-based Configuration
+  // =========================================================================
+  semantic: {
+    // --- Embeddings: Neural Vector Representations ---
+    embeddings: {
+      backend: "huggingface",  // Options: huggingface, openai, voyage, ollama
+      model_name: "sentence-transformers/all-MiniLM-L6-v2",
+      embedding_dimensions: 384,  // Must match model output
+      normalize_embeddings: true,
+      // api_key: "your-key" // Or set via OPENAI_API_KEY env var
+    },
+
+    // --- Entity Extraction: LLM-based with Gleaning ---
+    entity_extraction: {
+      use_gleaning: true,
+      max_gleaning_rounds: 3,  // 1-10, higher = better quality
+
+      llm_model: "llama3.1:8b",
+      llm_temperature: 0.1,  // 0.0-2.0, lower = more consistent
+      llm_max_tokens: 1500,
+
+      confidence_threshold: 0.65,  // 0.0-1.0
+      min_entity_length: 2,
+      max_entity_length: 100,
+
+      entity_types: [
+        "PERSON",
+        "ORGANIZATION",
+        "LOCATION",
+        "CONCEPT",
+        "EVENT",
+        "PRODUCT",
+        "TECHNOLOGY"
+      ],
+
+      use_semantic_merging: true,
+      merge_similarity_threshold: 0.85  // 0.0-1.0
+    },
+
+    // --- Retrieval: Vector Search ---
+    retrieval: {
+      strategy: "vector_similarity",
+      top_k: 10,
+
+      // HNSW Index for fast approximate search
+      use_hnsw_index: true,
+      hnsw_ef_construction: 200,  // 50-1000, higher = better recall
+      hnsw_m: 16,                 // 4-64, higher = better recall
+      hnsw_ef_search: 50,         // 10-500, higher = better accuracy
+
+      min_similarity_score: 0.6,  // 0.0-1.0
+
+      // Maximal Marginal Relevance for diversity
+      use_mmr: true,
+      mmr_lambda: 0.7  // 0.0-1.0, balance relevance vs diversity
+    },
+
+    // --- Graph: Semantic Graph Construction ---
+    graph: {
+      extract_relationships: true,
+      relationship_confidence_threshold: 0.5,  // 0.0-1.0
+
+      use_pagerank: true,
+      pagerank_damping: 0.85,
+      pagerank_iterations: 50,
+      pagerank_convergence: 0.0001,
+
+      min_relation_score: 0.4,       // 0.0-1.0
+      max_connections_per_node: 20,  // 1-100
+      bidirectional_relations: true
+    }
+  },
+
+  // =========================================================================
+  // TEXT PROCESSING: Chunking and Enrichment (Common)
+  // =========================================================================
+  text_processing: {
+    enabled: true,
+    chunk_size: 512,
+    chunk_overlap: 128,
+    min_chunk_size: 100,
+    max_chunk_size: 1024,
+    normalize_whitespace: true,
+    remove_artifacts: true,
+
+    enrichment: {
+      enabled: true,
+      auto_detect_format: true,
+      parser_type: "auto",  // Options: auto, markdown, html, plaintext
+
+      // TF-IDF keyword extraction
+      extract_keywords: true,
+      max_keywords_per_chunk: 5,
+      use_tfidf: true,
+
+      // Extractive summarization
+      generate_summaries: true,
+      min_chunk_length_for_summary: 150,
+      max_summary_length: 150,
+
+      // Structural metadata
+      extract_chapter: true,
+      extract_section: true,
+      extract_position: true,
+      calculate_confidence: true
+    }
+  },
+
+  // =========================================================================
+  // OLLAMA: LLM Service (REQUIRED for semantic)
+  // =========================================================================
+  ollama: {
+    enabled: true,  // ✅ Must be true for semantic pipeline
+    host: "http://localhost",
+    port: 11434,
+    chat_model: "llama3.1:8b",
+    embedding_model: "nomic-embed-text",
+    timeout_seconds: 60,
+    max_retries: 3,
+    fallback_to_hash: false,
+
+    generation: {
+      temperature: 0.2,  // 0.0-2.0
+      top_p: 0.9,        // 0.0-1.0
+      max_tokens: 1000,
+      stream: false
+    }
+  },
+
+  // =========================================================================
+  // QUERY PROCESSING: Advanced Query Understanding
+  // =========================================================================
+  query_processing: {
+    enabled: true,
+    use_advanced_pipeline: true,
+    use_intent_classification: true,
+    use_concept_extraction: true,
+    confidence_threshold: 0.5,
+
+    intent_classification: {
+      entity_patterns: ["who is", "what is", "person", "organization"],
+      concept_patterns: ["concept", "idea", "definition", "meaning"],
+      relationship_patterns: ["relationship", "connection", "related to"]
+    },
+
+    prompt_templates: {
+      entity: "Based on the following context, provide information about: {query}\n\nContext:\n{context}\n\nAnswer:",
+      concept: "Based on the following context, explain the concept: {query}\n\nContext:\n{context}\n\nExplanation:",
+      relationship: "Based on the following context, describe relationships for: {query}\n\nContext:\n{context}\n\nRelationships:"
+    }
+  },
+
+  // =========================================================================
+  // PERFORMANCE: Resource Management
+  // =========================================================================
+  performance: {
+    batch_processing: true,
+    batch_size: 32,
+    worker_threads: 4,
+    memory_limit_mb: 4096,
+    cache_embeddings: true
+  },
+
+  // =========================================================================
+  // MONITORING: Quality Tracking
+  // =========================================================================
+  monitoring: {
+    enabled: true,
+    track_entity_consistency: true,
+    track_relationship_accuracy: true,
+    log_insights: true
+  },
+
+  // =========================================================================
+  // AUTO-SAVE: Workspace Persistence (CLI only)
+  // =========================================================================
+  auto_save: {
+    enabled: false,              // Enable automatic workspace saving
+    interval_seconds: 300,       // Auto-save interval (5 minutes)
+    workspace_name: "autosave",  // Workspace name for auto-saves (null = use "autosave")
+    max_versions: 5              // Maximum versions to keep (0 = unlimited)
+  }
+}

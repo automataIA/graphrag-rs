@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GraphRAG Leptos Demo - ONNX Embeddings</title>
+
+    <!-- DaisyUI + TailwindCSS -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.5.0/dist/full.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- ONNX Runtime Web (REQUIRED for embeddings) -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/ort.min.js"></script>
+
+    <style>
+        /* Custom loading animation */
+        .loading-pulse {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 0.5;
+            }
+            50% {
+                opacity: 1;
+            }
+        }
+
+        /* Graph canvas styling */
+        .graph-canvas {
+            background: linear-gradient(90deg, #1a1a2e 1px, transparent 1px),
+                        linear-gradient(#1a1a2e 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading screen shown until WASM loads -->
+    <div id="loading-screen" class="min-h-screen flex items-center justify-center bg-base-200">
+        <div class="text-center">
+            <div class="loading loading-spinner loading-lg text-primary mb-4"></div>
+            <h2 class="text-2xl font-bold mb-2">Loading GraphRAG Demo...</h2>
+            <p class="text-sm opacity-60">Initializing WASM + ONNX Runtime Web</p>
+        </div>
+    </div>
+
+    <!-- Main app container -->
+    <div id="app" style="display: none;"></div>
+
+    <!-- Information panel (shown after load) -->
+    <div id="info-panel" style="display: none;" class="fixed bottom-4 right-4 card bg-base-100 shadow-xl max-w-sm">
+        <div class="card-body">
+            <h3 class="card-title text-sm">System Info</h3>
+            <div class="text-xs space-y-1">
+                <p><strong>ONNX Runtime:</strong> <span id="onnx-status">Checking...</span></p>
+                <p><strong>WebGPU:</strong> <span id="webgpu-status">Checking...</span></p>
+                <p><strong>Model:</strong> all-MiniLM-L6-v2 (384-dim)</p>
+            </div>
+            <button onclick="document.getElementById('info-panel').style.display='none'" class="btn btn-sm btn-ghost btn-circle absolute right-2 top-2">✕</button>
+        </div>
+    </div>
+
+    <script>
+        // Check system capabilities
+        async function checkCapabilities() {
+            // Check ONNX Runtime
+            const onnxAvailable = typeof ort !== 'undefined';
+            document.getElementById('onnx-status').textContent = onnxAvailable ? '✅ Available' : '❌ Not found';
+            document.getElementById('onnx-status').classList.add(onnxAvailable ? 'text-success' : 'text-error');
+
+            // Check WebGPU
+            let webgpuAvailable = false;
+            if ('gpu' in navigator) {
+                try {
+                    const adapter = await navigator.gpu.requestAdapter();
+                    webgpuAvailable = adapter !== null;
+                } catch (e) {
+                    console.warn('WebGPU check failed:', e);
+                }
+            }
+            document.getElementById('webgpu-status').textContent = webgpuAvailable ? '✅ Available' : '⚠️ CPU only';
+            document.getElementById('webgpu-status').classList.add(webgpuAvailable ? 'text-success' : 'text-warning');
+
+            // Log to console
+            console.log('System Capabilities:');
+            console.log('  ONNX Runtime:', onnxAvailable);
+            console.log('  WebGPU:', webgpuAvailable);
+
+            if (!onnxAvailable) {
+                console.error('⚠️ ONNX Runtime Web not found! Embeddings will not work.');
+                console.error('   Add: <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>');
+            }
+        }
+
+        // Initialize when WASM loads
+        window.addEventListener('DOMContentLoaded', async () => {
+            await checkCapabilities();
+
+            // Hide loading screen when WASM initializes
+            setTimeout(() => {
+                document.getElementById('loading-screen').style.display = 'none';
+                document.getElementById('app').style.display = 'block';
+                document.getElementById('info-panel').style.display = 'block';
+            }, 1000);
+        });
+
+        // Performance monitoring
+        if (window.performance && window.performance.mark) {
+            window.performance.mark('app-start');
+        }
+    </script>
+
+    <!-- Trunk will inject the WASM module here -->
+</body>
+</html>

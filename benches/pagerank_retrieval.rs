@@ -180,7 +180,8 @@ fn bench_batch_queries(c: &mut Criterion) {
 
     retrieval_system.initialize_vector_index(&graph).unwrap();
 
-    let queries = ["Entity 100",
+    let queries = [
+        "Entity 100",
         "Entity 200",
         "Entity 300",
         "Entity 400",
@@ -189,7 +190,8 @@ fn bench_batch_queries(c: &mut Criterion) {
         "ORGANIZATION",
         "LOCATION",
         "related entities",
-        "test query"];
+        "test query",
+    ];
 
     let batch_sizes = vec![1, 5, 10, 20];
 
