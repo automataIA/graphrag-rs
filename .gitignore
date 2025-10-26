@@ -24,8 +24,6 @@ docs-example/
 # Screenshots and Media
 # ============================================
 *.png
-*.jpg
-*.jpeg
 *.gif
 *.bmp
 *.ico

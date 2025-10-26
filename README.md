@@ -1,5 +1,7 @@
 # GraphRAG-rs
 
+![GraphRAG Network Visualization](examples/readme.jpg)
+
 A high-performance, modular Rust implementation of GraphRAG (Graph-based Retrieval Augmented Generation) with **three deployment architectures**: Server-Only, WASM-Only (100% client-side), and Hybrid. Build knowledge graphs from documents and query them with natural language, with GPU acceleration support via WebGPU.
 
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
