@@ -199,3 +199,4 @@ config_*.json
 
 # Large test files (keep originals in docs-example)
 # *.txt  # Uncomment if needed
+graphrag-wasm/dist/models/minilm-l6.onnx
