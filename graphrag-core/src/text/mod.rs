@@ -16,6 +16,8 @@ pub mod layout_parser;
 pub mod parsers;
 /// Chunk enrichment pipeline
 pub mod chunk_enricher;
+/// Trait-based chunking strategies
+pub mod chunking_strategies;
 
 pub use semantic_chunking::{
     SemanticChunk, SemanticChunker, SemanticChunkerConfig, BreakpointStrategy,
@@ -29,9 +31,15 @@ pub use keyword_extraction::TfIdfKeywordExtractor;
 pub use extractive_summarizer::ExtractiveSummarizer;
 pub use layout_parser::{LayoutParser, LayoutParserFactory};
 pub use chunk_enricher::{ChunkEnricher, EnrichmentStatistics};
+pub use chunking_strategies::{
+    HierarchicalChunkingStrategy, SemanticChunkingStrategy,
+};
+
+#[cfg(feature = "code-chunking")]
+pub use chunking_strategies::RustCodeChunkingStrategy;
 
 use crate::{
-    core::{ChunkId, Document, TextChunk},
+    core::{ChunkId, Document, TextChunk, ChunkingStrategy},
     Result,
 };
 #[cfg(feature = "parallel-processing")]
@@ -205,6 +213,32 @@ impl TextProcessor {
     pub fn chunk_hierarchical_and_enrich(&self, document: &Document) -> Result<Vec<TextChunk>> {
         let mut enricher = Self::create_default_enricher(document);
         self.chunk_text_hierarchical_with_enrichment(document, &mut enricher)
+    }
+
+    /// Chunk text using any strategy that implements ChunkingStrategy trait
+    ///
+    /// This method provides a flexible way to use different chunking approaches
+    /// while maintaining the same interface.
+    ///
+    /// # Arguments
+    /// * `document` - The document to chunk
+    /// * `strategy` - Any type implementing ChunkingStrategy
+    ///
+    /// # Returns
+    /// A vector of TextChunk objects
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use graphrag_core::text::{TextProcessor, HierarchicalChunkingStrategy};
+    ///
+    /// let processor = TextProcessor::new(1000, 100)?;
+    /// let strategy = HierarchicalChunkingStrategy::new(500, 50, document.id.clone());
+    /// let chunks = processor.chunk_with_strategy(&document, &strategy)?;
+    /// ```
+    pub fn chunk_with_strategy(&self, document: &Document, strategy: &dyn ChunkingStrategy) -> Result<Vec<TextChunk>> {
+        let chunks = strategy.chunk(&document.content);
+        Ok(chunks)
     }
 
     /// Find a safe character boundary at or before the given position

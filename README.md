@@ -374,6 +374,51 @@ See [graphrag-core/EMBEDDINGS_CONFIG.md](graphrag-core/EMBEDDINGS_CONFIG.md) for
 - **Feature Flags**: Compile only what you need (WASM, CUDA, Metal, WebGPU)
 - **Trait-Based**: 12+ core abstractions for maximum flexibility
 
+### 🔧 Trait-Based Chunking Architecture
+- **ChunkingStrategy Trait**: Minimal interface for extensible chunking (1 method: `fn chunk(&self, text: &str) -> Vec<TextChunk>`)
+- **HierarchicalChunkingStrategy**: LangChain-style with boundary preservation (respects paragraphs/sentences)
+- **Tree-sitter AST Chunking**: cAST approach preserving syntactic boundaries for code
+- **Performance Optimized**: Zero-cost abstraction with real implementations
+- **Example**: Symposium analysis with 269 chunks preserving philosophical structure
+
+#### cAST (Context-Aware Splitting) Implementation
+Based on CMU research, our tree-sitter implementation provides:
+- **Syntactic Boundary Preservation**: Complete functions, methods, structs
+- **Rust Support**: AST parsing for proper code chunking
+- **Configurable Granularity**: Function-level with minimum size controls
+- **Feature-Gated**: Available with `--features code-chunking`
+
+#### Usage Example
+```rust
+use graphrag_core::{
+    core::{DocumentId, Document, ChunkingStrategy},
+    text::{TextProcessor, HierarchicalChunkingStrategy},
+};
+
+// Trait-based chunking with hierarchical strategy
+let processor = TextProcessor::new(1000, 100)?;
+let strategy = HierarchicalChunkingStrategy::new(1000, 100, document.id);
+let chunks = processor.chunk_with_strategy(&document, &strategy)?;
+
+// Tree-sitter code chunking (with code-chunking feature)
+#[cfg(feature = "code-chunking")]
+{
+    let code_strategy = RustCodeChunkingStrategy::new(50, document_id);
+    let code_chunks = code_strategy.chunk(rust_code);
+}
+```
+
+#### Run the Complete Example
+```bash
+# Basic example (hierarchical chunking)
+cargo run --example symposium_trait_based_chunking --package graphrag-core
+
+# With tree-sitter code chunking
+cargo run --example symposium_trait_based_chunking --package graphrag-core --features code-chunking
+```
+
+**See**: [graphrag-core/examples/symposium_trait_based_chunking.rs](graphrag-core/examples/symposium_trait_based_chunking.rs) and [README_symposium_trait_based_chunking.md](graphrag-core/examples/README_symposium_trait_based_chunking.md) for complete documentation.
+
 ### 🎯 Storage Options
 
 #### Native Production
@@ -597,6 +642,9 @@ function-calling = []                        # Function calling support
 cuda = ["neural-embeddings", "candle-core/cuda"]    # NVIDIA GPU
 metal = ["neural-embeddings", "candle-core/metal"]  # Apple Silicon GPU
 webgpu = ["burn/wgpu"]                              # WebGPU (WASM)
+
+# Chunking strategies
+code-chunking = ["tree-sitter", "tree-sitter-rust"]  # Tree-sitter AST-based chunking
 
 # API & CLI
 web-api = []                                 # REST API server

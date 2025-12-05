@@ -28,6 +28,37 @@ pub use registry::{RegistryBuilder, ServiceConfig, ServiceContext, ServiceRegist
 #[cfg(feature = "async")]
 pub use traits::*;
 
+/// Core trait for text chunking strategies
+///
+/// This trait provides a simple interface for different chunking approaches.
+/// Implementations can range from simple text splitters to sophisticated
+/// AST-based code chunking strategies.
+///
+/// # Examples
+///
+/// ```rust
+/// use graphrag_core::{ChunkingStrategy, TextChunk};
+///
+/// struct SimpleChunker;
+///
+/// impl ChunkingStrategy for SimpleChunker {
+///     fn chunk(&self, text: &str) -> Vec<TextChunk> {
+///         // Simple implementation
+///         vec![]
+///     }
+/// }
+/// ```
+pub trait ChunkingStrategy: Send + Sync {
+    /// Chunk text into pieces following the strategy's logic
+    ///
+    /// # Arguments
+    /// * `text` - The input text to chunk
+    ///
+    /// # Returns
+    /// A vector of TextChunk objects representing the chunks
+    fn chunk(&self, text: &str) -> Vec<TextChunk>;
+}
+
 use indexmap::IndexMap;
 use petgraph::{graph::NodeIndex, Graph};
 use std::collections::HashMap;
