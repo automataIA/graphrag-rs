@@ -110,7 +110,12 @@ impl EmbeddingService {
                     info!("✓ Ollama connection established");
 
                     // Check if embedding model exists
-                    let model_exists = models.iter().any(|m| m.name == config.ollama_model);
+                    // Model names from Ollama include tags (e.g., "nomic-embed-text:latest")
+                    // so we check if the model name starts with the config model name
+                    let model_exists = models.iter().any(|m| {
+                        m.name == config.ollama_model
+                            || m.name.starts_with(&format!("{}:", config.ollama_model))
+                    });
 
                     if model_exists {
                         info!("✓ Embedding model '{}' is available", config.ollama_model);
