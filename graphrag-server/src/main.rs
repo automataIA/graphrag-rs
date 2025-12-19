@@ -885,8 +885,11 @@ async fn main() -> std::io::Result<()> {
                     // Documents endpoints
                     .service(
                         scope("/documents")
-                            .service(resource("").route(get().to(list_documents)))
-                            .service(resource("").route(post().to(add_document)))
+                            .service(
+                                resource("")
+                                    .route(get().to(list_documents))
+                                    .route(post().to(add_document))
+                            )
                             .service(resource("/{id}").route(delete().to(delete_document)))
                     )
                     // Query endpoints
