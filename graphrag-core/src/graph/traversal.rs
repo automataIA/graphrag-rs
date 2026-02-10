@@ -60,15 +60,16 @@ pub struct GraphTraversal {
     config: TraversalConfig,
 }
 
+impl Default for GraphTraversal {
+    fn default() -> Self {
+        Self::new(TraversalConfig::default())
+    }
+}
+
 impl GraphTraversal {
     /// Create a new graph traversal system
     pub fn new(config: TraversalConfig) -> Self {
         Self { config }
-    }
-
-    /// Create with default configuration
-    pub fn default() -> Self {
-        Self::new(TraversalConfig::default())
     }
 
     /// Breadth-First Search (BFS) from a source entity
@@ -180,6 +181,7 @@ impl GraphTraversal {
     }
 
     /// Recursive DFS helper
+    #[allow(clippy::too_many_arguments)]
     fn dfs_recursive(
         &self,
         graph: &KnowledgeGraph,
@@ -427,6 +429,7 @@ impl GraphTraversal {
     }
 
     /// Recursive helper for find_all_paths
+    #[allow(clippy::too_many_arguments)]
     fn find_paths_recursive(
         &self,
         graph: &KnowledgeGraph,
@@ -569,7 +572,7 @@ impl GraphTraversal {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{Entity, EntityMention, Relationship};
+    use crate::core::Entity;
 
     fn create_test_graph() -> KnowledgeGraph {
         let mut graph = KnowledgeGraph::new();

@@ -682,11 +682,87 @@ impl LogicFormExecutor {
     /// Execute "has" queries (What does X have?)
     fn execute_has_query(
         &self,
-        _logic_form: &LogicFormQuery,
-        _graph: &KnowledgeGraph,
+        logic_form: &LogicFormQuery,
+        graph: &KnowledgeGraph,
     ) -> Result<Vec<VariableBinding>> {
-        // TODO: Implement property extraction
-        Ok(vec![])
+        let mut bindings = Vec::new();
+
+        // Extract entity and property from arguments
+        if logic_form.arguments.len() >= 2 {
+            let entity_arg = &logic_form.arguments[0];
+            let property_arg = &logic_form.arguments[1];
+
+            let entity_name = &entity_arg.value;
+            let property_name = &property_arg.value.to_lowercase();
+
+            // Find matching entity
+            if let Some(entity) = self.find_entity_by_name(graph, entity_name) {
+                // Extract property value based on property name
+                let property_value = match property_name.as_str() {
+                    "name" => Some(entity.name.clone()),
+                    "type" | "entity_type" => Some(entity.entity_type.clone()),
+                    "confidence" => Some(format!("{:.2}", entity.confidence)),
+                    "mentions" | "mention_count" => Some(entity.mentions.len().to_string()),
+                    "embedding" => {
+                        if entity.embedding.is_some() {
+                            Some("has embedding".to_string())
+                        } else {
+                            Some("no embedding".to_string())
+                        }
+                    }
+                    _ => None,
+                };
+
+                if let Some(value) = property_value {
+                    bindings.push(VariableBinding {
+                        variable: property_arg.variable.clone().unwrap_or("P".to_string()),
+                        value,
+                        entity_id: Some(entity.id.to_string()),
+                        confidence: 0.9, // High confidence for direct property access
+                    });
+                }
+            }
+        } else if logic_form.arguments.len() == 1 {
+            // If only entity is provided, return all properties
+            let entity_arg = &logic_form.arguments[0];
+            let entity_name = &entity_arg.value;
+
+            if let Some(entity) = self.find_entity_by_name(graph, entity_name) {
+                // Return name
+                bindings.push(VariableBinding {
+                    variable: "name".to_string(),
+                    value: entity.name.clone(),
+                    entity_id: Some(entity.id.to_string()),
+                    confidence: 1.0,
+                });
+
+                // Return type
+                bindings.push(VariableBinding {
+                    variable: "type".to_string(),
+                    value: entity.entity_type.clone(),
+                    entity_id: Some(entity.id.to_string()),
+                    confidence: 1.0,
+                });
+
+                // Return confidence
+                bindings.push(VariableBinding {
+                    variable: "confidence".to_string(),
+                    value: format!("{:.2}", entity.confidence),
+                    entity_id: Some(entity.id.to_string()),
+                    confidence: 1.0,
+                });
+
+                // Return mention count
+                bindings.push(VariableBinding {
+                    variable: "mentions".to_string(),
+                    value: entity.mentions.len().to_string(),
+                    entity_id: Some(entity.id.to_string()),
+                    confidence: 1.0,
+                });
+            }
+        }
+
+        Ok(bindings)
     }
 
     /// Execute "compare" queries (Compare X and Y)
@@ -863,6 +939,19 @@ impl LogicFormRetriever {
         let confidence = self.calculate_overall_confidence(&bindings);
         let sources = self.extract_sources(&bindings);
 
+        // Count relationships examined based on query type
+        let relationships_examined = match logic_form.predicate {
+            // These predicates examine relationships
+            Predicate::Related | Predicate::Caused | Predicate::Compare => {
+                graph.relationships().count()
+            }
+            // These predicates don't examine relationships
+            Predicate::Is | Predicate::Has | Predicate::Happened | Predicate::Exists
+            | Predicate::Similar | Predicate::Located => 0,
+            // For Count and aggregate queries, examine all if needed
+            _ => 0,
+        };
+
         Ok(LogicFormResult {
             query: query.to_string(),
             logic_form,
@@ -874,7 +963,7 @@ impl LogicFormRetriever {
                 parsing_time_ms: parsing_time,
                 execution_time_ms: execution_time,
                 entities_examined: graph.entities().count(),
-                relationships_examined: 0, // TODO: Track this
+                relationships_examined,
                 bindings_found: bindings.len(),
             },
         })
