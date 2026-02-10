@@ -220,9 +220,11 @@ impl StringSimilarityLinker {
         let mut matrix = vec![vec![0; len2 + 1]; len1 + 1];
 
         // Initialize first row and column
+        #[allow(clippy::needless_range_loop)]
         for i in 0..=len1 {
             matrix[i][0] = i;
         }
+        #[allow(clippy::needless_range_loop)]
         for j in 0..=len2 {
             matrix[0][j] = j;
         }
@@ -471,7 +473,7 @@ impl StringSimilarityLinker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{ChunkId, DocumentId, EntityMention};
+    use crate::core::{ChunkId, EntityMention};
 
     #[test]
     fn test_levenshtein_distance() {
