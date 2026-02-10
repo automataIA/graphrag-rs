@@ -416,7 +416,7 @@ pub struct IndexStatistics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{ChunkId, DocumentId, EntityId, EntityMention, TextChunk};
+    use crate::core::{ChunkId, EntityId, EntityMention};
 
     #[test]
     fn test_basic_operations() {
