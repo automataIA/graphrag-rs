@@ -158,12 +158,12 @@ pub mod rograg;
 
 /// Prelude module containing the most commonly used types
 pub mod prelude {
-    // pub use crate::GraphRAG;
-    // pub use crate::builder::{GraphRAGBuilder, ConfigPreset, LLMProvider};
+    pub use crate::builder::GraphRAGBuilder;
     pub use crate::config::Config;
     pub use crate::core::{
         Document, DocumentId, Entity, EntityId, GraphRAGError, KnowledgeGraph, Result,
     };
+    pub use crate::GraphRAG;
 }
 
 // Re-export core types
@@ -279,11 +279,23 @@ impl GraphRAG {
         Self::new(config)
     }
 
-    // TODO: Implement builder when GraphRAGBuilder module exists
-    // /// Create a builder for configuring GraphRAG
-    // pub fn builder() -> GraphRAGBuilder {
-    //     GraphRAGBuilder::new()
-    // }
+    /// Create a builder for configuring GraphRAG
+    ///
+    /// # Example
+    /// ```no_run
+    /// use graphrag_core::GraphRAG;
+    ///
+    /// # fn example() -> graphrag_core::Result<()> {
+    /// let graphrag = GraphRAG::builder()
+    ///     .with_output_dir("./workspace")
+    ///     .with_chunk_size(512)
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn builder() -> crate::builder::GraphRAGBuilder {
+        crate::builder::GraphRAGBuilder::new()
+    }
 
     /// Initialize the GraphRAG system
     pub fn initialize(&mut self) -> Result<()> {
@@ -1268,12 +1280,13 @@ mod tests {
         assert!(graphrag.is_ok());
     }
 
-    // TODO: Enable when GraphRAGBuilder is fully implemented
-    // #[test]
-    // fn test_builder_pattern() {
-    //     let graphrag = GraphRAG::builder()
-    //         .with_preset(ConfigPreset::Basic)
-    //         .build();
-    //     assert!(graphrag.is_ok());
-    // }
+    #[test]
+    fn test_builder_pattern() {
+        let graphrag = GraphRAG::builder()
+            .with_output_dir("./test_output")
+            .with_chunk_size(512)
+            .with_top_k(10)
+            .build();
+        assert!(graphrag.is_ok());
+    }
 }
