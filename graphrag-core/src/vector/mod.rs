@@ -23,13 +23,9 @@ pub mod lancedb;
 /// Qdrant vector store implementation
 pub mod qdrant;
 
-// Voy vector store module (WASM-optimized)
-// TODO: Re-enable when voy crate is properly configured
-// #[cfg(feature = "wasm")]
-// pub mod voy_store;
-
-// #[cfg(feature = "wasm")]
-// pub use voy_store::{VoyStore, VoyStoreStatistics};
+// Note: Voy vector store (WASM-optimized, 75KB) has been moved to graphrag-wasm crate
+// where it belongs alongside other WASM-specific features.
+// See: graphrag-wasm/src/vector/voy_store.rs
 
 /// Wrapper for Vec<f32> to implement Point trait for vector operations
 #[derive(Debug, Clone, PartialEq)]

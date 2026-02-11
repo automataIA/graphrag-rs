@@ -148,9 +148,9 @@ pub mod incremental;
 /// ROGRAG (Robustly Optimized GraphRAG) implementation
 pub mod rograg;
 
-// TODO: Implement remaining utility modules
-// pub mod automatic_entity_linking;
-// pub mod phase_saver;
+// Future utility modules (optional, not currently needed):
+// pub mod automatic_entity_linking;  // Advanced entity linking
+// pub mod phase_saver;               // Phase state persistence
 
 // ================================
 // PUBLIC API EXPORTS
