@@ -3,7 +3,7 @@ members = [
     "graphrag-core",
     "graphrag-wasm",
     "graphrag-server",
-    "graphrag-cli",
+    "graphrag-cli", "graphrag_py",
 ]
 exclude = ["examples/web-app"]
 resolver = "2"
@@ -120,11 +120,11 @@ chrono = { version = "0.4.38", default-features = false, features = ["serde", "c
 uuid = { version = "1.0", features = ["v4", "serde"] }
 
 # Vector databases (optional, for persistent storage)
-# NOTE: lancedb 0.22.2 uses arrow 56 and half ^2.6 (compatible with burn 0.18)
-lancedb = "0.22.2"
-arrow = "56"
-arrow-array = "56"
-arrow-schema = "56"
+# NOTE: lancedb 0.26.2 should be compatible with arrow 56
+lancedb = "0.26.2"
+arrow = "57"
+arrow-array = "57"
+arrow-schema = "57"
 
 # ML frameworks (optional, for neural embeddings)
 candle-core = { version = "0.8", default-features = false }

@@ -461,25 +461,118 @@ impl GraphSAGE {
 
                 sum
             }
-            _ => {
-                // For now, default to mean for other aggregators
-                // TODO: Implement MaxPool, LSTM, Attention
-                let mut sum = vec![0.0; self.config.dimension];
+            Aggregator::MaxPool => {
+                // Element-wise maximum across all neighbor features
+                let mut max_feat = vec![f32::NEG_INFINITY; self.config.dimension];
+
                 for neighbor in neighbors {
                     if let Some(feat) = features.get(*neighbor) {
                         for i in 0..self.config.dimension {
-                            sum[i] += feat[i];
+                            max_feat[i] = max_feat[i].max(feat[i]);
                         }
                     }
                 }
 
-                for val in &mut sum {
-                    *val /= neighbors.len() as f32;
+                // If no valid features found, return zeros
+                if max_feat.iter().all(|&v| v == f32::NEG_INFINITY) {
+                    vec![0.0; self.config.dimension]
+                } else {
+                    max_feat
                 }
-
-                sum
+            }
+            Aggregator::Attention => {
+                // Attention-weighted aggregation
+                self.aggregate_attention(features, neighbors)
+            }
+            Aggregator::Lstm => {
+                // LSTM-based aggregation (order-dependent)
+                self.aggregate_lstm(features, neighbors)
             }
         }
+    }
+
+    /// Aggregate neighbors using attention mechanism
+    fn aggregate_attention(
+        &self,
+        features: &HashMap<String, Vec<f32>>,
+        neighbors: &[&String],
+    ) -> Vec<f32> {
+        if neighbors.is_empty() {
+            return vec![0.0; self.config.dimension];
+        }
+
+        // Collect neighbor features
+        let neighbor_feats: Vec<&Vec<f32>> = neighbors
+            .iter()
+            .filter_map(|n| features.get(*n))
+            .collect();
+
+        if neighbor_feats.is_empty() {
+            return vec![0.0; self.config.dimension];
+        }
+
+        // Compute attention scores (simplified: dot product similarity)
+        let mut attention_scores = Vec::with_capacity(neighbor_feats.len());
+        let mut score_sum = 0.0;
+
+        for feat in &neighbor_feats {
+            // Simplified attention: sum of features as query
+            let score: f32 = feat.iter().sum();
+            let exp_score = score.exp();
+            attention_scores.push(exp_score);
+            score_sum += exp_score;
+        }
+
+        // Normalize attention scores (softmax)
+        if score_sum > 0.0 {
+            for score in &mut attention_scores {
+                *score /= score_sum;
+            }
+        }
+
+        // Weighted sum based on attention
+        let mut result = vec![0.0; self.config.dimension];
+        for (feat, &weight) in neighbor_feats.iter().zip(attention_scores.iter()) {
+            for i in 0..self.config.dimension {
+                result[i] += feat[i] * weight;
+            }
+        }
+
+        result
+    }
+
+    /// Aggregate neighbors using LSTM (order-dependent)
+    fn aggregate_lstm(
+        &self,
+        features: &HashMap<String, Vec<f32>>,
+        neighbors: &[&String],
+    ) -> Vec<f32> {
+        if neighbors.is_empty() {
+            return vec![0.0; self.config.dimension];
+        }
+
+        // Simplified LSTM aggregation without full LSTM cell
+        // Uses a running weighted average with decay
+        let mut hidden_state = vec![0.0; self.config.dimension];
+        let decay: f32 = 0.9; // Decay factor for previous states
+
+        for (idx, neighbor) in neighbors.iter().enumerate() {
+            if let Some(feat) = features.get(*neighbor) {
+                // Simple recurrent combination with decay
+                let weight = decay.powi(idx as i32);
+                for i in 0..self.config.dimension {
+                    hidden_state[i] = hidden_state[i] * decay + feat[i] * weight;
+                }
+            }
+        }
+
+        // Normalize by sequence length
+        let seq_len = neighbors.len() as f32;
+        for val in &mut hidden_state {
+            *val /= seq_len;
+        }
+
+        hidden_state
     }
 
     /// Combine node features with aggregated neighbor features

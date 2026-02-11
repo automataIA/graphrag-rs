@@ -166,7 +166,7 @@ pub enum ChangeData {
     /// Document data
     Document(Document),
     /// Text chunk data
-    Chunk(TextChunk),
+    Chunk(Box<TextChunk>),
     /// Embedding data with entity ID and vector
     Embedding {
         /// Entity ID for the embedding

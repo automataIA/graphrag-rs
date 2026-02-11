@@ -243,8 +243,8 @@ impl QueryOptimizer {
 
                 // For multi-way joins, collect all join operands
                 let mut operands = Vec::new();
-                self.collect_join_operands(&left_opt, &mut operands);
-                self.collect_join_operands(&right_opt, &mut operands);
+                Self::collect_join_operands(&left_opt, &mut operands);
+                Self::collect_join_operands(&right_opt, &mut operands);
 
                 if operands.len() > 2 {
                     // Multi-way join: find optimal order using greedy algorithm
@@ -296,11 +296,11 @@ impl QueryOptimizer {
     }
 
     /// Collect all join operands for multi-way join optimization
-    fn collect_join_operands(&self, op: &QueryOp, operands: &mut Vec<QueryOp>) {
+    fn collect_join_operands(op: &QueryOp, operands: &mut Vec<QueryOp>) {
         match op {
             QueryOp::Join { left, right, .. } => {
-                self.collect_join_operands(left, operands);
-                self.collect_join_operands(right, operands);
+                Self::collect_join_operands(left, operands);
+                Self::collect_join_operands(right, operands);
             }
             _ => {
                 operands.push(op.clone());

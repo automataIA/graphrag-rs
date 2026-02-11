@@ -149,6 +149,7 @@ pub struct ZeroCostApproachConfig {
 /// Configuration for LazyGraphRAG, an efficient approach for large-scale knowledge graphs.
 /// This configuration enables lazy loading and processing of graph components.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Default)]
 pub struct LazyGraphRAGConfig {
     /// Whether LazyGraphRAG is enabled
     pub enabled: bool,
@@ -253,6 +254,7 @@ pub struct LazyRelevanceScoringConfig {
 /// End-to-End GraphRAG configuration for comprehensive knowledge graph construction.
 /// This configuration enables fine-grained control over the entire pipeline from text to knowledge graph.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Default)]
 pub struct E2GraphRAGConfig {
     /// Whether the E2E GraphRAG pipeline is enabled
     pub enabled: bool,
@@ -502,6 +504,7 @@ pub struct SearchRankingConfig {
 /// Enables semantic search using embeddings and similarity scoring
 /// for finding conceptually related content.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Default)]
 pub struct VectorSearchConfig {
     /// Whether vector similarity search is enabled
     pub enabled: bool,
@@ -649,20 +652,17 @@ impl Default for ZeroCostApproachConfig {
 }
 
 // Default implementations for sub-configs (simplified for now)
-impl Default for LazyGraphRAGConfig { fn default() -> Self { Self { enabled: false, concept_extraction: Default::default(), co_occurrence: Default::default(), indexing: Default::default(), query_expansion: Default::default(), relevance_scoring: Default::default() } } }
 impl Default for ConceptExtractionConfig { fn default() -> Self { Self { min_concept_length: 3, max_concept_words: 5, use_noun_phrases: true, use_capitalization: true, use_title_case: true, use_tf_idf_scoring: true, min_term_frequency: 2, max_concepts_per_chunk: 10, min_concept_score: 0.1, exclude_stopwords: true, custom_stopwords: vec!["the".to_string(), "and".to_string(), "or".to_string()] } } }
 impl Default for CoOccurrenceConfig { fn default() -> Self { Self { window_size: 50, min_co_occurrence: 2, jaccard_threshold: 0.2, max_edges_per_node: 25 } } }
 impl Default for LazyIndexingConfig { fn default() -> Self { Self { use_bidirectional_index: true, enable_hnsw_index: false, cache_size: 10000 } } }
 impl Default for LazyQueryExpansionConfig { fn default() -> Self { Self { enabled: true, max_expansions: 3, expansion_model: "llama3.1:8b".to_string(), expansion_temperature: 0.1, max_tokens_per_expansion: 50 } } }
 impl Default for LazyRelevanceScoringConfig { fn default() -> Self { Self { enabled: true, scoring_model: "llama3.1:8b".to_string(), batch_size: 10, temperature: 0.2, max_tokens_per_score: 30 } } }
-impl Default for E2GraphRAGConfig { fn default() -> Self { Self { enabled: false, ner_extraction: Default::default(), keyword_extraction: Default::default(), graph_construction: Default::default(), indexing: Default::default() } } }
 impl Default for PureAlgorithmicConfig { fn default() -> Self { Self { enabled: true, pattern_extraction: Default::default(), keyword_extraction: Default::default(), relationship_discovery: Default::default(), search_ranking: Default::default() } } }
 impl Default for PatternExtractionConfig { fn default() -> Self { Self { capitalized_patterns: vec![r"[A-Z][a-z]+".to_string()], technical_patterns: vec![r"[a-z]+-[a-z]+".to_string()], context_patterns: vec![r"\b(the|this)\s+(\w+)".to_string()] } } }
 impl Default for PureKeywordExtractionConfig { fn default() -> Self { Self { algorithm: "tf_idf".to_string(), max_keywords: 20, min_word_length: 4, use_positional_boost: true, use_frequency_filter: true, min_term_frequency: 2, max_term_frequency_ratio: 0.8 } } }
 impl Default for RelationshipDiscoveryConfig { fn default() -> Self { Self { window_size: 30, min_co_occurrence: 2, use_mutual_information: true, relationship_types: vec!["co_occurs_with".to_string()], scoring_method: "jaccard_similarity".to_string(), min_similarity_score: 0.1 } } }
 impl Default for SearchRankingConfig { fn default() -> Self { Self { vector_search: VectorSearchConfig { enabled: false }, keyword_search: KeywordSearchConfig { enabled: true, algorithm: "bm25".to_string(), k1: 1.2, b: 0.75 }, graph_traversal: GraphTraversalConfig { enabled: true, algorithm: "pagerank".to_string(), damping_factor: 0.85, max_iterations: 20, personalized: true }, hybrid_fusion: HybridFusionConfig { enabled: true, weights: FusionWeights { keywords: 0.4, graph: 0.4, bm25: 0.2 } } } } }
 impl Default for HybridStrategyConfig { fn default() -> Self { Self { lazy_algorithmic: LazyAlgorithmicConfig { indexing_approach: "e2_graphrag".to_string(), query_approach: "lazy_graphrag".to_string(), cost_optimization: "indexing".to_string() }, progressive: ProgressiveConfig { level_0: "pure_algorithmic".to_string(), level_1: "pure_algorithmic".to_string(), level_2: "e2_graphrag".to_string(), level_3: "lazy_graphrag".to_string(), level_4_plus: "lazy_graphrag".to_string() }, budget_aware: BudgetAwareConfig { daily_budget_usd: 1.0, queries_per_day: 1000, max_llm_cost_per_query: 0.002, strategy: "lazy_graphrag".to_string(), fallback_to_algorithmic: true } } } }
-impl Default for VectorSearchConfig { fn default() -> Self { Self { enabled: false } } }
 impl Default for KeywordSearchConfig { fn default() -> Self { Self { enabled: true, algorithm: "bm25".to_string(), k1: 1.2, b: 0.75 } } }
 impl Default for GraphTraversalConfig { fn default() -> Self { Self { enabled: true, algorithm: "pagerank".to_string(), damping_factor: 0.85, max_iterations: 20, personalized: true } } }
 impl Default for HybridFusionConfig { fn default() -> Self { Self { enabled: true, weights: FusionWeights { keywords: 0.4, graph: 0.4, bm25: 0.2 } } } }
@@ -1353,6 +1353,33 @@ impl Config {
                     normalize_scores: parsed["enhancements"]["cross_encoder"]["normalize_scores"]
                         .as_bool()
                         .unwrap_or(true),
+                },
+                #[cfg(feature = "lazygraphrag")]
+                concept_selection: enhancements::ConceptSelectionConfig {
+                    enabled: parsed["enhancements"]["concept_selection"]["enabled"]
+                        .as_bool()
+                        .unwrap_or(true),
+                    top_k: parsed["enhancements"]["concept_selection"]["top_k"]
+                        .as_usize()
+                        .unwrap_or(20),
+                    min_score: parsed["enhancements"]["concept_selection"]["min_score"]
+                        .as_f32()
+                        .unwrap_or(0.1),
+                    degree_weight: parsed["enhancements"]["concept_selection"]["degree_weight"]
+                        .as_f32()
+                        .unwrap_or(0.4),
+                    pagerank_weight: parsed["enhancements"]["concept_selection"]["pagerank_weight"]
+                        .as_f32()
+                        .unwrap_or(0.4),
+                    idf_weight: parsed["enhancements"]["concept_selection"]["idf_weight"]
+                        .as_f32()
+                        .unwrap_or(0.2),
+                    use_semantic_matching: parsed["enhancements"]["concept_selection"]["use_semantic_matching"]
+                        .as_bool()
+                        .unwrap_or(true),
+                    max_query_concepts: parsed["enhancements"]["concept_selection"]["max_query_concepts"]
+                        .as_usize()
+                        .unwrap_or(10),
                 },
             },
             auto_save: AutoSaveConfig {

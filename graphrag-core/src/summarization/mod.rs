@@ -535,7 +535,7 @@ impl DocumentTree {
         self.config.llm_config.level_configs
             .get(&level)
             .cloned()
-            .unwrap_or_else(|| {
+            .unwrap_or({
                 // Default configuration based on level
                 LevelConfig {
                     max_length: self.config.max_summary_length,
@@ -564,7 +564,7 @@ impl DocumentTree {
 
         let mut result = String::new();
         for sentence in sentences {
-            if result.len() + sentence.len() + 1 <= max_length - 3 {
+            if result.len() + sentence.len() < max_length - 3 {
                 if !result.is_empty() {
                     result.push('.');
                 }

@@ -1,0 +1,141 @@
+# Example configuration file for GraphRAG Python bindings
+# Copy this file to config.toml and modify as needed
+
+# Large Language Model Configuration
+[llm]
+# Provider: "ollama", "openai", "anthropic"
+provider = "ollama"
+
+# Model name (depends on provider)
+# Ollama: "llama3", "llama3:70b", "mistral", etc.
+# OpenAI: "gpt-4", "gpt-3.5-turbo", etc.
+# Anthropic: "claude-3-opus", "claude-3-sonnet", etc.
+model = "llama3"
+
+# Base URL for the LLM API
+base_url = "http://localhost:11434"
+
+# Temperature (0.0-1.0): Controls randomness
+# Lower = more focused, Higher = more creative
+temperature = 0.7
+
+# Maximum tokens to generate
+max_tokens = 2048
+
+# API key (if using cloud providers)
+# Can also be set via environment variables:
+# - OPENAI_API_KEY
+# - ANTHROPIC_API_KEY
+# api_key = "your-api-key-here"
+
+# Embedding Model Configuration
+[embeddings]
+# Provider for embeddings: "ollama", "openai", "huggingface"
+provider = "ollama"
+
+# Embedding model name
+# Ollama: "nomic-embed-text", "mxbai-embed-large"
+# OpenAI: "text-embedding-ada-002", "text-embedding-3-small"
+# HuggingFace: any model from HuggingFace
+model = "nomic-embed-text"
+
+# Base URL for embedding API
+base_url = "http://localhost:11434"
+
+# Dimensions (usually auto-detected)
+# dimensions = 768
+
+# Text Chunking Configuration
+[chunking]
+# Strategy: "fixed", "semantic", "sentence"
+# - fixed: Split by character count
+# - semantic: Split by semantic boundaries
+# - sentence: Split by sentences
+strategy = "semantic"
+
+# Chunk size in tokens
+chunk_size = 512
+
+# Overlap between chunks (in tokens)
+chunk_overlap = 50
+
+# Maximum chunk size (hard limit)
+max_chunk_size = 1024
+
+# Retrieval Strategy Configuration
+[retrieval]
+# Strategy: "semantic", "keyword", "hybrid", "adaptive"
+# - semantic: Vector similarity search
+# - keyword: BM25 keyword search
+# - hybrid: Combines semantic + keyword
+# - adaptive: Dynamically chooses best strategy
+strategy = "adaptive"
+
+# Number of chunks to retrieve
+top_k = 5
+
+# Minimum similarity threshold (0.0-1.0)
+similarity_threshold = 0.7
+
+# Reranking configuration
+[reranking]
+# Enable reranking of retrieved results
+enabled = true
+
+# Reranking model (if different from main LLM)
+# model = "cross-encoder/ms-marco-MiniLM-L-12-v2"
+
+# Vector Store Configuration
+[vector_store]
+# Provider: "memory", "qdrant", "lancedb"
+# - memory: In-memory (fast, not persistent)
+# - qdrant: Qdrant vector database (persistent, scalable)
+# - lancedb: LanceDB (persistent, embedded)
+provider = "memory"
+
+# Configuration for Qdrant (if provider = "qdrant")
+# [vector_store.qdrant]
+# url = "http://localhost:6333"
+# collection_name = "graphrag"
+# api_key = "your-qdrant-api-key"  # Optional
+
+# Configuration for LanceDB (if provider = "lancedb")
+# [vector_store.lancedb]
+# path = "./lancedb_data"
+# table_name = "graphrag"
+
+# Knowledge Graph Configuration
+[graph]
+# Entity extraction prompt template
+# entity_extraction_prompt = "Extract entities from the following text: {text}"
+
+# Relationship extraction prompt template
+# relationship_extraction_prompt = "Extract relationships between entities: {entities}"
+
+# Minimum confidence for entity extraction (0.0-1.0)
+min_entity_confidence = 0.6
+
+# Minimum confidence for relationship extraction (0.0-1.0)
+min_relationship_confidence = 0.6
+
+# Logging Configuration
+[logging]
+# Log level: "debug", "info", "warn", "error"
+level = "info"
+
+# Log format: "json", "pretty"
+format = "pretty"
+
+# Performance Configuration
+[performance]
+# Batch size for processing documents
+batch_size = 10
+
+# Number of parallel workers
+num_workers = 4
+
+# Enable caching
+enable_cache = true
+
+# Cache TTL in seconds
+cache_ttl = 3600

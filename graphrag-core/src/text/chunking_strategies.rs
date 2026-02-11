@@ -78,7 +78,7 @@ impl ChunkingStrategy for HierarchicalChunkingStrategy {
 /// Wraps the existing SemanticChunker to implement ChunkingStrategy trait.
 /// This strategy uses embedding similarity to determine natural breakpoints.
 pub struct SemanticChunkingStrategy {
-    inner: SemanticChunker,
+    _inner: SemanticChunker,
     document_id: DocumentId,
 }
 
@@ -86,7 +86,7 @@ impl SemanticChunkingStrategy {
     /// Create a new semantic chunking strategy
     pub fn new(chunker: SemanticChunker, document_id: DocumentId) -> Self {
         Self {
-            inner: chunker,
+            _inner: chunker,
             document_id,
         }
     }
@@ -235,6 +235,278 @@ impl RustCodeChunkingStrategy {
                 }
             }
         }
+    }
+}
+
+/// Boundary-Aware Chunking Strategy (BAR-RAG)
+///
+/// This strategy implements the BAR-RAG (Boundary-Aware Retrieval-Augmented Generation)
+/// approach by:
+/// 1. Detecting semantic boundaries in text (sentences, paragraphs, headings, etc.)
+/// 2. Scoring chunk coherence using sentence embeddings
+/// 3. Finding optimal split points that maximize semantic unity
+///
+/// **Performance Target**: +40% semantic coherence, -60% entity fragmentation
+pub struct BoundaryAwareChunkingStrategy {
+    boundary_detector: crate::text::BoundaryDetector,
+    coherence_scorer: std::sync::Arc<crate::text::SemanticCoherenceScorer>,
+    max_chunk_chars: usize,
+    min_chunk_chars: usize,
+    document_id: DocumentId,
+}
+
+impl BoundaryAwareChunkingStrategy {
+    /// Create a new boundary-aware chunking strategy
+    ///
+    /// # Arguments
+    /// * `boundary_config` - Configuration for boundary detection
+    /// * `coherence_config` - Configuration for coherence scoring
+    /// * `embedding_provider` - Provider for generating sentence embeddings
+    /// * `max_chunk_chars` - Maximum characters per chunk
+    /// * `min_chunk_chars` - Minimum characters per chunk
+    /// * `document_id` - Document identifier for chunk IDs
+    pub fn new(
+        boundary_config: crate::text::BoundaryDetectionConfig,
+        coherence_config: crate::text::CoherenceConfig,
+        embedding_provider: std::sync::Arc<dyn crate::embeddings::EmbeddingProvider>,
+        max_chunk_chars: usize,
+        min_chunk_chars: usize,
+        document_id: DocumentId,
+    ) -> Self {
+        Self {
+            boundary_detector: crate::text::BoundaryDetector::with_config(boundary_config),
+            coherence_scorer: std::sync::Arc::new(
+                crate::text::SemanticCoherenceScorer::new(coherence_config, embedding_provider),
+            ),
+            max_chunk_chars,
+            min_chunk_chars,
+            document_id,
+        }
+    }
+
+    /// Create with default configuration
+    pub fn with_defaults(
+        embedding_provider: std::sync::Arc<dyn crate::embeddings::EmbeddingProvider>,
+        document_id: DocumentId,
+    ) -> Self {
+        Self::new(
+            crate::text::BoundaryDetectionConfig::default(),
+            crate::text::CoherenceConfig::default(),
+            embedding_provider,
+            2000, // max chars
+            200,  // min chars
+            document_id,
+        )
+    }
+
+    /// Chunk text asynchronously (helper for async contexts)
+    async fn chunk_async(&self, text: &str) -> Vec<TextChunk> {
+        // 1. Detect all semantic boundaries
+        let boundaries = self.boundary_detector.detect_boundaries(text);
+
+        // Extract boundary positions suitable for splitting
+        let boundary_positions: Vec<usize> = boundaries
+            .iter()
+            .filter(|b| {
+                // Filter boundaries that are good split points
+                matches!(
+                    b.boundary_type,
+                    crate::text::BoundaryType::Paragraph
+                        | crate::text::BoundaryType::Heading
+                        | crate::text::BoundaryType::CodeBlock
+                )
+            })
+            .map(|b| b.position)
+            .collect();
+
+        // 2. Find optimal splits using coherence scoring
+        let optimal_result = self
+            .coherence_scorer
+            .find_optimal_split(text, &boundary_positions)
+            .await;
+
+        let chunks = match optimal_result {
+            Ok(result) => {
+                // Use optimally scored chunks
+                self.create_text_chunks_from_scored(&result.chunks)
+            }
+            Err(_) => {
+                // Fallback: use boundary positions directly
+                self.create_text_chunks_from_boundaries(text, &boundary_positions)
+            }
+        };
+
+        // 3. Enforce size constraints
+        self.enforce_size_constraints(chunks)
+    }
+
+    /// Create TextChunk objects from scored chunks
+    fn create_text_chunks_from_scored(
+        &self,
+        scored_chunks: &[crate::text::ScoredChunk],
+    ) -> Vec<TextChunk> {
+        scored_chunks
+            .iter()
+            .enumerate()
+            .map(|(i, sc)| {
+                let chunk_id = ChunkId::new(format!("{}_{}", self.document_id, i));
+                let mut chunk = TextChunk::new(
+                    chunk_id,
+                    self.document_id.clone(),
+                    sc.text.clone(),
+                    sc.start_pos,
+                    sc.end_pos,
+                );
+
+                // Add coherence score to metadata
+                chunk
+                    .metadata
+                    .custom
+                    .insert("coherence_score".to_string(), sc.coherence_score.to_string());
+                chunk
+                    .metadata
+                    .custom
+                    .insert("sentence_count".to_string(), sc.sentence_count.to_string());
+
+                chunk
+            })
+            .collect()
+    }
+
+    /// Create TextChunk objects from boundary positions (fallback)
+    fn create_text_chunks_from_boundaries(
+        &self,
+        text: &str,
+        boundaries: &[usize],
+    ) -> Vec<TextChunk> {
+        let mut chunks = Vec::new();
+        let mut prev_pos = 0;
+
+        for (i, &pos) in boundaries.iter().enumerate() {
+            if pos > prev_pos {
+                let chunk_id = ChunkId::new(format!("{}_{}", self.document_id, i));
+                let chunk = TextChunk::new(
+                    chunk_id,
+                    self.document_id.clone(),
+                    text[prev_pos..pos].to_string(),
+                    prev_pos,
+                    pos,
+                );
+                chunks.push(chunk);
+                prev_pos = pos;
+            }
+        }
+
+        // Add final chunk
+        if prev_pos < text.len() {
+            let chunk_id = ChunkId::new(format!("{}_{}", self.document_id, chunks.len()));
+            let chunk = TextChunk::new(
+                chunk_id,
+                self.document_id.clone(),
+                text[prev_pos..].to_string(),
+                prev_pos,
+                text.len(),
+            );
+            chunks.push(chunk);
+        }
+
+        chunks
+    }
+
+    /// Enforce size constraints on chunks
+    fn enforce_size_constraints(&self, mut chunks: Vec<TextChunk>) -> Vec<TextChunk> {
+        let mut result = Vec::new();
+
+        for chunk in chunks.drain(..) {
+            let chunk_len = chunk.content.len();
+
+            if chunk_len > self.max_chunk_chars {
+                // Split large chunks at sentence boundaries
+                result.extend(self.split_large_chunk(chunk));
+            } else if chunk_len < self.min_chunk_chars && !result.is_empty() {
+                // Merge small chunks with previous
+                if let Some(mut prev_chunk) = result.pop() {
+                    prev_chunk.content.push(' ');
+                    prev_chunk.content.push_str(&chunk.content);
+                    prev_chunk.end_offset = chunk.end_offset;
+                    result.push(prev_chunk);
+                } else {
+                    result.push(chunk);
+                }
+            } else {
+                result.push(chunk);
+            }
+        }
+
+        result
+    }
+
+    /// Split a large chunk at sentence boundaries
+    fn split_large_chunk(&self, chunk: TextChunk) -> Vec<TextChunk> {
+        // Simple split at sentence boundaries
+        let sentences: Vec<&str> = chunk
+            .content
+            .split(&['.', '!', '?'][..])
+            .filter(|s| !s.trim().is_empty())
+            .collect();
+
+        let mut sub_chunks = Vec::new();
+        let mut current_text = String::new();
+        let mut current_start = chunk.start_offset;
+
+        for sentence in sentences {
+            if current_text.len() + sentence.len() > self.max_chunk_chars && !current_text.is_empty()
+            {
+                // Create chunk
+                let chunk_id = ChunkId::new(format!(
+                    "{}_{}",
+                    self.document_id,
+                    CHUNK_COUNTER.fetch_add(1, Ordering::SeqCst)
+                ));
+                let end = current_start + current_text.len();
+                sub_chunks.push(TextChunk::new(
+                    chunk_id,
+                    self.document_id.clone(),
+                    current_text.clone(),
+                    current_start,
+                    end,
+                ));
+
+                current_start = end;
+                current_text.clear();
+            }
+
+            current_text.push_str(sentence);
+            current_text.push('.');
+        }
+
+        // Add remaining text
+        if !current_text.is_empty() {
+            let chunk_id = ChunkId::new(format!(
+                "{}_{}",
+                self.document_id,
+                CHUNK_COUNTER.fetch_add(1, Ordering::SeqCst)
+            ));
+            sub_chunks.push(TextChunk::new(
+                chunk_id,
+                self.document_id.clone(),
+                current_text,
+                current_start,
+                chunk.end_offset,
+            ));
+        }
+
+        sub_chunks
+    }
+}
+
+impl ChunkingStrategy for BoundaryAwareChunkingStrategy {
+    fn chunk(&self, text: &str) -> Vec<TextChunk> {
+        // Create a Tokio runtime to execute async code synchronously
+        // This allows us to use async coherence scoring in a sync context
+        let runtime = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+
+        runtime.block_on(self.chunk_async(text))
     }
 }
 

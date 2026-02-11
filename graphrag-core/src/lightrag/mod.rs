@@ -26,6 +26,12 @@ pub mod graph_indexer;
 pub mod concept_graph;
 
 #[cfg(feature = "lazygraphrag")]
+pub mod concept_selection;
+
+#[cfg(feature = "lazygraphrag")]
+pub mod query_concepts;
+
+#[cfg(feature = "lazygraphrag")]
 pub mod query_refinement;
 
 #[cfg(feature = "lazygraphrag")]
@@ -51,3 +57,13 @@ pub use iterative_deepening::{IterativeDeepeningSearch, SearchConfig, SearchResu
 
 #[cfg(feature = "lazygraphrag")]
 pub use lazy_pipeline::{LazyGraphRAGPipeline, LazyPipelineConfig, PipelineStatistics, GraphStatistics};
+
+#[cfg(feature = "lazygraphrag")]
+pub use concept_selection::{
+    ConceptRanker, ConceptSelectionConfig, RankedConcept, ConceptRankingStats,
+};
+
+#[cfg(feature = "lazygraphrag")]
+pub use query_concepts::{
+    QueryConceptMatcher, QueryMatchConfig, MatchedConcept, MatchingStats,
+};

@@ -126,7 +126,7 @@ impl AdaptiveRetriever {
     }
 
     /// Perform adaptive retrieval based on query analysis
-    pub fn retrieve(
+    pub async fn retrieve(
         &mut self,
         query: &str,
         query_analysis: &QueryAnalysisResult,
@@ -140,10 +140,14 @@ impl AdaptiveRetriever {
 
         // Vector similarity search
         if strategy_weights.vector_weight > 0.0 {
-            let vector_results = self.retrieval_system.vector_search(
-                query,
-                (self.config.results_per_strategy as f32 * strategy_weights.vector_weight) as usize,
-            )?;
+            let vector_results = self
+                .retrieval_system
+                .vector_search(
+                    query,
+                    (self.config.results_per_strategy as f32 * strategy_weights.vector_weight)
+                        as usize,
+                )
+                .await?;
             all_results.extend(self.weight_results(vector_results, strategy_weights.vector_weight));
         }
 

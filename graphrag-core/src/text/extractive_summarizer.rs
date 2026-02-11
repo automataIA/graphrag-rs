@@ -199,7 +199,7 @@ impl ExtractiveSummarizer {
             .iter()
             .filter(|word| {
                 // Check if word starts with uppercase and is not sentence start
-                word.chars().next().map_or(false, |c| c.is_uppercase())
+                word.chars().next().is_some_and(|c| c.is_uppercase())
                     && word.len() > 2
                     && !self.stopwords.contains(&word.to_lowercase())
             })
@@ -245,7 +245,7 @@ impl ExtractiveSummarizer {
             let sentence_len = sentences[idx].len();
 
             // Check if adding this sentence would exceed limit
-            if current_length + sentence_len + 1 <= max_length {
+            if current_length + sentence_len < max_length {
                 // +1 for space
                 selected_indices.push(idx);
                 current_length += sentence_len + 1;
@@ -283,7 +283,7 @@ impl ExtractiveSummarizer {
             end -= 1;
         }
 
-        while end > 0 && !sentence.chars().nth(end).map_or(false, |c| c.is_whitespace()) {
+        while end > 0 && !sentence.chars().nth(end).is_some_and(|c| c.is_whitespace()) {
             end -= 1;
         }
 
