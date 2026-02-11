@@ -799,21 +799,356 @@ impl LogicFormExecutor {
     /// Execute temporal queries (When did X happen?)
     fn execute_happened_query(
         &self,
-        _logic_form: &LogicFormQuery,
-        _graph: &KnowledgeGraph,
+        logic_form: &LogicFormQuery,
+        graph: &KnowledgeGraph,
     ) -> Result<Vec<VariableBinding>> {
-        // TODO: Implement temporal reasoning
-        Ok(vec![])
+        let mut bindings = Vec::new();
+
+        if logic_form.arguments.is_empty() {
+            return Ok(bindings);
+        }
+
+        let event_arg = &logic_form.arguments[0];
+        let event_name = &event_arg.value;
+
+        // Find entity representing the event
+        if let Some(entity) = self.find_entity_by_name(graph, event_name) {
+            // Strategy 1: Look for temporal relationships
+            let relationships = graph.get_entity_relationships(&entity.id.0);
+            for rel in relationships {
+                let rel_type_lower = rel.relation_type.to_lowercase();
+
+                // Check for temporal relationship types
+                if rel_type_lower.contains("happened")
+                    || rel_type_lower.contains("occurred")
+                    || rel_type_lower.contains("during")
+                    || rel_type_lower.contains("before")
+                    || rel_type_lower.contains("after")
+                    || rel_type_lower.contains("when")
+                {
+                    // Get the related entity which might represent a time
+                    if let Some(time_entity) = graph.get_entity(&rel.target) {
+                        bindings.push(VariableBinding {
+                            variable: "T".to_string(),
+                            value: format!(
+                                "{} {} {}",
+                                event_name,
+                                rel.relation_type,
+                                time_entity.name
+                            ),
+                            entity_id: Some(time_entity.id.to_string()),
+                            confidence: rel.confidence,
+                        });
+                    }
+                }
+            }
+
+            // Strategy 2: Extract temporal info from entity mentions in chunks
+            for mention in &entity.mentions {
+                if let Some(chunk) = graph.get_chunk(&mention.chunk_id) {
+                    // Check chunk metadata for temporal information
+                    if let Some(date) = chunk.metadata.custom.get("date") {
+                        bindings.push(VariableBinding {
+                            variable: "T".to_string(),
+                            value: format!("{} occurred on {}", event_name, date),
+                            entity_id: Some(entity.id.to_string()),
+                            confidence: 0.8,
+                        });
+                    } else if let Some(timestamp) = chunk.metadata.custom.get("timestamp") {
+                        bindings.push(VariableBinding {
+                            variable: "T".to_string(),
+                            value: format!("{} occurred at {}", event_name, timestamp),
+                            entity_id: Some(entity.id.to_string()),
+                            confidence: 0.8,
+                        });
+                    } else if let Some(time) = chunk.metadata.custom.get("time") {
+                        bindings.push(VariableBinding {
+                            variable: "T".to_string(),
+                            value: format!("{} happened at {}", event_name, time),
+                            entity_id: Some(entity.id.to_string()),
+                            confidence: 0.8,
+                        });
+                    }
+
+                    // Strategy 3: Parse chunk content for temporal expressions
+                    // Look for common date patterns in the chunk content
+                    let content_lower = chunk.content.to_lowercase();
+                    let temporal_keywords = [
+                        "january", "february", "march", "april", "may", "june",
+                        "july", "august", "september", "october", "november", "december",
+                        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+                        "yesterday", "today", "tomorrow", "morning", "afternoon", "evening", "night",
+                        "spring", "summer", "autumn", "fall", "winter",
+                    ];
+
+                    for keyword in &temporal_keywords {
+                        if content_lower.contains(keyword) {
+                            // Extract surrounding context (rough temporal extraction)
+                            if let Some(pos) = content_lower.find(keyword) {
+                                let start = pos.saturating_sub(20);
+                                let end = (pos + keyword.len() + 20).min(chunk.content.len());
+                                let context = &chunk.content[start..end];
+
+                                bindings.push(VariableBinding {
+                                    variable: "T".to_string(),
+                                    value: format!("{} temporal context: \"{}\"", event_name, context.trim()),
+                                    entity_id: Some(entity.id.to_string()),
+                                    confidence: 0.6,
+                                });
+                                break; // Only add one temporal context per chunk
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Strategy 4: Use document position as temporal ordering heuristic
+            if let Some(first_mention) = entity.mentions.first() {
+                if let Some(chunk) = graph.get_chunk(&first_mention.chunk_id) {
+                    if let Some(position) = chunk.metadata.position_in_document {
+                        let temporal_order = if position < 0.33 {
+                            "early in the narrative"
+                        } else if position < 0.67 {
+                            "middle of the narrative"
+                        } else {
+                            "later in the narrative"
+                        };
+
+                        bindings.push(VariableBinding {
+                            variable: "T".to_string(),
+                            value: format!("{} occurred {} (position: {:.2})", event_name, temporal_order, position),
+                            entity_id: Some(entity.id.to_string()),
+                            confidence: 0.5,
+                        });
+                    }
+                }
+            }
+        }
+
+        // If no temporal information found, provide default response
+        if bindings.is_empty() {
+            bindings.push(VariableBinding {
+                variable: "T".to_string(),
+                value: format!("No temporal information found for {}", event_name),
+                entity_id: None,
+                confidence: 0.2,
+            });
+        }
+
+        Ok(bindings)
     }
 
     /// Execute causal queries (Why did X cause Y?)
     fn execute_caused_query(
         &self,
-        _logic_form: &LogicFormQuery,
-        _graph: &KnowledgeGraph,
+        logic_form: &LogicFormQuery,
+        graph: &KnowledgeGraph,
     ) -> Result<Vec<VariableBinding>> {
-        // TODO: Implement causal reasoning
-        Ok(vec![])
+        let mut bindings = Vec::new();
+
+        if logic_form.arguments.len() < 2 {
+            return Ok(bindings);
+        }
+
+        let cause_arg = &logic_form.arguments[0];
+        let effect_arg = &logic_form.arguments[1];
+
+        let cause_name = &cause_arg.value;
+        let effect_name = &effect_arg.value;
+
+        // Find entities representing cause and effect
+        let cause_entity = self.find_entity_by_name(graph, cause_name);
+        let effect_entity = self.find_entity_by_name(graph, effect_name);
+
+        if let (Some(cause_e), Some(effect_e)) = (cause_entity, effect_entity) {
+            // Strategy 1: Look for direct causal relationships
+            let relationships = graph.get_entity_relationships(&cause_e.id.0);
+
+            for rel in relationships {
+                let rel_type_lower = rel.relation_type.to_lowercase();
+
+                // Check for causal relationship types
+                if (rel_type_lower.contains("cause")
+                    || rel_type_lower.contains("leads_to")
+                    || rel_type_lower.contains("results_in")
+                    || rel_type_lower.contains("because")
+                    || rel_type_lower.contains("due_to")
+                    || rel_type_lower.contains("triggers")
+                    || rel_type_lower.contains("produces"))
+                    && (rel.target == effect_e.id || rel.source == effect_e.id)
+                {
+                    bindings.push(VariableBinding {
+                        variable: "C".to_string(),
+                        value: format!(
+                            "{} {} {}",
+                            cause_name,
+                            rel.relation_type,
+                            effect_name
+                        ),
+                        entity_id: None,
+                        confidence: rel.confidence,
+                    });
+                }
+            }
+
+            // Strategy 2: Build causal chains (indirect causality)
+            // Look for intermediate entities that connect cause to effect
+            let mut visited = std::collections::HashSet::new();
+            let mut causal_chains = Vec::new();
+
+            self.find_causal_chains(
+                graph,
+                &cause_e.id,
+                &effect_e.id,
+                &mut visited,
+                &mut vec![cause_e.name.clone()],
+                &mut causal_chains,
+                3, // Maximum depth of 3 hops
+            );
+
+            for chain in causal_chains {
+                let chain_str = chain.join(" → ");
+                bindings.push(VariableBinding {
+                    variable: "C".to_string(),
+                    value: format!("Causal chain: {}", chain_str),
+                    entity_id: None,
+                    confidence: 0.6 / (chain.len() as f32), // Decrease confidence with chain length
+                });
+            }
+
+            // Strategy 3: Analyze co-occurrence in chunks for implicit causality
+            let cause_chunks: std::collections::HashSet<_> = cause_e
+                .mentions
+                .iter()
+                .map(|m| &m.chunk_id)
+                .collect();
+
+            let effect_chunks: std::collections::HashSet<_> = effect_e
+                .mentions
+                .iter()
+                .map(|m| &m.chunk_id)
+                .collect();
+
+            // Find chunks where both entities are mentioned (potential causal context)
+            let common_chunks: Vec<_> = cause_chunks
+                .intersection(&effect_chunks)
+                .collect();
+
+            if !common_chunks.is_empty() {
+                for chunk_id in common_chunks {
+                    if let Some(chunk) = graph.get_chunk(chunk_id) {
+                        let content_lower = chunk.content.to_lowercase();
+
+                        // Look for causal keywords in the chunk content
+                        let causal_keywords = [
+                            "because", "therefore", "thus", "hence", "consequently",
+                            "as a result", "due to", "caused by", "leads to",
+                            "resulting in", "triggered by", "produced by",
+                        ];
+
+                        for keyword in &causal_keywords {
+                            if content_lower.contains(keyword) {
+                                // Extract context around the causal keyword
+                                if let Some(pos) = content_lower.find(keyword) {
+                                    let start = pos.saturating_sub(30);
+                                    let end = (pos + keyword.len() + 30).min(chunk.content.len());
+                                    let context = &chunk.content[start..end];
+
+                                    bindings.push(VariableBinding {
+                                        variable: "C".to_string(),
+                                        value: format!(
+                                            "Causal context: \"{}\"",
+                                            context.trim()
+                                        ),
+                                        entity_id: None,
+                                        confidence: 0.7,
+                                    });
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Strategy 4: Use relationship confidence scores to rank causal explanations
+            if !bindings.is_empty() {
+                // Sort by confidence (highest first)
+                bindings.sort_by(|a, b| {
+                    b.confidence
+                        .partial_cmp(&a.confidence)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+            }
+        }
+
+        // If no causal information found, provide default response
+        if bindings.is_empty() {
+            bindings.push(VariableBinding {
+                variable: "C".to_string(),
+                value: format!(
+                    "No causal relationship found between {} and {}",
+                    cause_name, effect_name
+                ),
+                entity_id: None,
+                confidence: 0.2,
+            });
+        }
+
+        Ok(bindings)
+    }
+
+    /// Helper function to find causal chains between two entities (DFS)
+    fn find_causal_chains(
+        &self,
+        graph: &KnowledgeGraph,
+        current_id: &crate::core::EntityId,
+        target_id: &crate::core::EntityId,
+        visited: &mut std::collections::HashSet<String>,
+        path: &mut Vec<String>,
+        chains: &mut Vec<Vec<String>>,
+        max_depth: usize,
+    ) {
+        if path.len() > max_depth {
+            return;
+        }
+
+        if current_id == target_id {
+            chains.push(path.clone());
+            return;
+        }
+
+        visited.insert(current_id.to_string());
+
+        let relationships = graph.get_entity_relationships(&current_id.0);
+        for rel in relationships {
+            let rel_type_lower = rel.relation_type.to_lowercase();
+
+            // Only follow causal relationships
+            if rel_type_lower.contains("cause")
+                || rel_type_lower.contains("leads_to")
+                || rel_type_lower.contains("results_in")
+                || rel_type_lower.contains("triggers")
+            {
+                if !visited.contains(&rel.target.to_string()) {
+                    if let Some(next_entity) = graph.get_entity(&rel.target) {
+                        path.push(next_entity.name.clone());
+                        self.find_causal_chains(
+                            graph,
+                            &rel.target,
+                            target_id,
+                            visited,
+                            path,
+                            chains,
+                            max_depth,
+                        );
+                        path.pop();
+                    }
+                }
+            }
+        }
+
+        visited.remove(&current_id.to_string());
     }
 
     /// Find entity by name (fuzzy matching)
