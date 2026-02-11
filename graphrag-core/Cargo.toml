@@ -21,7 +21,7 @@ ureq = ["dep:ureq"]
 # Storage backends
 memory-storage = []
 persistent-storage = ["arrow", "parquet"]  # Apache Parquet persistence
-# lance-storage = ["lancedb"]  # LanceDB vector storage (disabled due to version conflict)
+lancedb = ["dep:lancedb", "arrow", "arrow-array", "arrow-schema"]  # LanceDB vector storage
 
 # Retrieval methods
 basic-retrieval = []
@@ -45,6 +45,10 @@ yaml-support = ["serde_yaml"]
 toml-support = []  # TOML is always available as core dependency
 serde_json = []    # serde_json is always available as core dependency
 json5-support = ["json5", "jsonschema"]  # JSON5 + schema validation
+
+# Graph import formats
+graphml-import = ["quick-xml"]  # GraphML format support
+rdf-import = ["oxrdf", "oxttl"]  # RDF/Turtle format support
 
 # Caching features
 caching = ["moka", "tracing"]
@@ -144,6 +148,11 @@ json5 = { version = "0.4", optional = true }  # JSON5 parsing (JSON with comment
 jsonschema = { version = "0.18", optional = true, default-features = false }  # JSON Schema validation
 csv = { version = "1.3" }  # CSV parsing for data import
 
+# Graph format parsing (optional)
+quick-xml = { version = "0.36", optional = true }  # GraphML XML parsing
+oxrdf = { version = "0.2", optional = true }  # RDF data model
+oxttl = { version = "0.1", optional = true }  # Turtle RDF parser
+
 # Persistence storage (optional)
 arrow = { version = "52", optional = true, default-features = false, features = ["ipc"] }  # Apache Arrow
 parquet = { version = "52", optional = true, default-features = false, features = ["arrow", "snap"] }  # Parquet format
@@ -219,6 +228,12 @@ wasm-bindgen = { workspace = true, optional = true }
 web-sys = { workspace = true, optional = true }
 js-sys = { workspace = true, optional = true }
 
+# Vector databases
+lancedb = { workspace = true, optional = true }
+arrow-array = { workspace = true, optional = true }
+arrow-schema = { workspace = true, optional = true }
+qdrant-client = { workspace = true }
+
 # Force getrandom 0.2 to use js feature for WASM targets
 # This overrides the dependency resolution for transitive dependencies (rand, ureq)
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -243,4 +258,7 @@ tempfile = "3.8"
 [lib]
 crate-type = ["rlib", "cdylib"]  # rlib for Rust, cdylib for WASM/FFI
 
-# Benchmarks will be added later after migrating benches/ directory
+# Benchmarks
+[[bench]]
+name = "incremental_benchmark"
+harness = false  # Use criterion's harness
