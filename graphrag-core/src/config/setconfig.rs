@@ -752,6 +752,7 @@ pub struct SemanticGraphConfig {
 /// Algorithmic/Classic NLP pipeline configuration
 /// Uses pattern matching, TF-IDF, and keyword-based methods
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct AlgorithmicPipelineConfig {
     /// Enable algorithmic pipeline
     #[serde(default)]
@@ -1542,17 +1543,6 @@ impl Default for SemanticGraphConfig {
     }
 }
 
-impl Default for AlgorithmicPipelineConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            embeddings: AlgorithmicEmbeddingsConfig::default(),
-            entity_extraction: AlgorithmicEntityConfig::default(),
-            retrieval: AlgorithmicRetrievalConfig::default(),
-            graph_construction: AlgorithmicGraphConfig::default(),
-        }
-    }
-}
 
 impl Default for AlgorithmicEmbeddingsConfig {
     fn default() -> Self {
@@ -1729,10 +1719,10 @@ impl SetConfig {
 
     /// Convert to the existing Config format for compatibility
     pub fn to_graphrag_config(&self) -> crate::Config {
-        let mut config = crate::Config::default();
-
-        // Map pipeline approach (semantic/algorithmic/hybrid)
-        config.approach = self.mode.approach.clone();
+        let mut config = crate::Config {
+            approach: self.mode.approach.clone(),
+            ..Default::default()
+        };
 
         // Map text processing
         config.text.chunk_size = self.pipeline.text_extraction.chunk_size;

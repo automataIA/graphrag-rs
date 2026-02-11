@@ -328,7 +328,7 @@ impl EnrichedRetriever {
 
         // Also check for direct mentions like "Introduction", "Conclusion"
         for word in query_lower.split_whitespace() {
-            if word.chars().next().map_or(false, |c| c.is_uppercase()) && word.len() > 5 {
+            if word.chars().next().is_some_and(|c| c.is_uppercase()) && word.len() > 5 {
                 refs.push(word.to_string());
             }
         }

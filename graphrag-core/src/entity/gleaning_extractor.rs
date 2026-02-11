@@ -305,22 +305,22 @@ impl GleaningEntityExtractor {
     ) -> Result<Vec<Entity>> {
         let mut entities = Vec::new();
 
-        for data in entity_data {
+        for entity_item in entity_data {
             // Generate entity ID
             let entity_id = crate::core::EntityId::new(format!(
                 "{}_{}",
-                data.entity_type,
-                self.normalize_name(&data.name)
+                entity_item.entity_type,
+                self.normalize_name(&entity_item.name)
             ));
 
             // Find mentions in chunk
-            let mentions = self.find_mentions(&data.name, chunk_id, chunk_text);
+            let mentions = self.find_mentions(&entity_item.name, chunk_id, chunk_text);
 
             // Create entity with mentions
             let entity = Entity::new(
                 entity_id,
-                data.name.clone(),
-                data.entity_type.clone(),
+                entity_item.name.clone(),
+                entity_item.entity_type.clone(),
                 0.9, // High confidence since LLM-extracted
             )
             .with_mentions(mentions);
@@ -387,17 +387,17 @@ impl GleaningEntityExtractor {
             name_to_entity.insert(entity.name.to_lowercase(), entity);
         }
 
-        for data in relationship_data {
+        for rel_item in relationship_data {
             // Find source and target entities
-            let source_entity = name_to_entity.get(&data.source.to_lowercase());
-            let target_entity = name_to_entity.get(&data.target.to_lowercase());
+            let source_entity = name_to_entity.get(&rel_item.source.to_lowercase());
+            let target_entity = name_to_entity.get(&rel_item.target.to_lowercase());
 
             if let (Some(source), Some(target)) = (source_entity, target_entity) {
                 let relationship = Relationship {
                     source: source.id.clone(),
                     target: target.id.clone(),
-                    relation_type: data.description.clone(),
-                    confidence: data.strength as f32,
+                    relation_type: rel_item.description.clone(),
+                    confidence: rel_item.strength as f32,
                     context: vec![],
                 };
 
@@ -405,8 +405,8 @@ impl GleaningEntityExtractor {
             } else {
                 tracing::warn!(
                     "Skipping relationship: entity not found. Source: {}, Target: {}",
-                    data.source,
-                    data.target
+                    rel_item.source,
+                    rel_item.target
                 );
             }
         }

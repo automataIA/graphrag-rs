@@ -418,7 +418,7 @@ impl GraphConstructionValidator {
         // Check 2: Reasonable entity-to-chunk ratio
         if chunks > 0 {
             let entities_per_chunk = entities as f64 / chunks as f64;
-            let reasonable = entities_per_chunk >= 0.1 && entities_per_chunk <= 10.0;
+            let reasonable = (0.1..=10.0).contains(&entities_per_chunk);
 
             checks.push(ValidationCheck {
                 name: "entity_chunk_ratio_reasonable".to_string(),
@@ -535,7 +535,7 @@ impl PipelineValidationReport {
     /// Generate a detailed report string
     pub fn detailed_report(&self) -> String {
         let mut report = String::new();
-        report.push_str(&format!("# Pipeline Validation Report\n\n"));
+        report.push_str("# Pipeline Validation Report\n\n");
         report.push_str(&format!("{}\n\n", self.summary));
         report.push_str(&format!("**Total Checks**: {}/{} passed\n\n",
             self.passed_checks, self.total_checks));
@@ -560,7 +560,7 @@ impl PipelineValidationReport {
                 for warning in &phase.warnings {
                     report.push_str(&format!("⚠️  {}\n", warning));
                 }
-                report.push_str("\n");
+                report.push('\n');
             }
 
             // Metrics
@@ -569,7 +569,7 @@ impl PipelineValidationReport {
                 for (key, value) in &phase.metrics {
                     report.push_str(&format!("- {}: {:.2}\n", key, value));
                 }
-                report.push_str("\n");
+                report.push('\n');
             }
 
             report.push_str("---\n\n");

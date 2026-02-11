@@ -5,12 +5,21 @@
 ///! - Cache models locally to avoid re-downloading
 ///! - Load models with Candle framework
 ///! - Generate embeddings using downloaded models
-
 use crate::core::error::{GraphRAGError, Result};
 use crate::embeddings::{EmbeddingConfig, EmbeddingProvider};
 
 #[cfg(feature = "huggingface-hub")]
 use hf_hub::api::sync::{Api, ApiBuilder};
+
+/// Hugging Face Hub embedding provider
+#[cfg(feature = "neural-embeddings")]
+use candle_core::{Device, Tensor};
+#[cfg(feature = "neural-embeddings")]
+use candle_nn::VarBuilder;
+#[cfg(feature = "neural-embeddings")]
+use candle_transformers::models::bert::{BertModel, Config, Dtype};
+#[cfg(feature = "neural-embeddings")]
+use tokenizers::Tokenizer;
 
 /// Hugging Face Hub embedding provider
 pub struct HuggingFaceEmbeddings {
@@ -24,6 +33,15 @@ pub struct HuggingFaceEmbeddings {
 
     #[cfg(feature = "huggingface-hub")]
     model_path: Option<std::path::PathBuf>,
+
+    #[cfg(feature = "neural-embeddings")]
+    model: Option<BertModel>,
+
+    #[cfg(feature = "neural-embeddings")]
+    tokenizer: Option<Tokenizer>,
+
+    #[cfg(feature = "neural-embeddings")]
+    device: Option<Device>,
 }
 
 impl HuggingFaceEmbeddings {
@@ -54,6 +72,15 @@ impl HuggingFaceEmbeddings {
 
             #[cfg(feature = "huggingface-hub")]
             model_path: None,
+
+            #[cfg(feature = "neural-embeddings")]
+            model: None,
+
+            #[cfg(feature = "neural-embeddings")]
+            tokenizer: None,
+
+            #[cfg(feature = "neural-embeddings")]
+            device: None,
         }
     }
 
@@ -94,12 +121,23 @@ impl HuggingFaceEmbeddings {
                 message: format!("Failed to download model '{}': {}", self.model_id, e),
             })?;
 
-        // Also download config.json for model metadata
-        let _config_file = repo.get("config.json").ok();
+        // Also download config.json for model metadata (and cache it)
+        let _ = repo
+            .get("config.json")
+            .map_err(|e| GraphRAGError::Embedding {
+                message: format!("Failed to download config for '{}': {}", self.model_id, e),
+            })?;
 
-        // Also download tokenizer files
-        let _tokenizer_file = repo.get("tokenizer.json").ok();
-        let _tokenizer_config = repo.get("tokenizer_config.json").ok();
+        // Also download tokenizer files (and cache them)
+        let _ = repo
+            .get("tokenizer.json")
+            .map_err(|e| GraphRAGError::Embedding {
+                message: format!(
+                    "Failed to download tokenizer for '{}': {}",
+                    self.model_id, e
+                ),
+            })?;
+        let _ = repo.get("tokenizer_config.json").ok();
 
         Ok(model_file)
     }
@@ -114,7 +152,6 @@ impl HuggingFaceEmbeddings {
     /// Get recommended models for different use cases
     pub fn recommended_models() -> Vec<(&'static str, &'static str, usize)> {
         vec![
-            // (model_id, description, dimensions)
             (
                 "sentence-transformers/all-MiniLM-L6-v2",
                 "Fast, lightweight, general-purpose (default)",
@@ -126,49 +163,9 @@ impl HuggingFaceEmbeddings {
                 768,
             ),
             (
-                "BAAI/bge-small-en-v1.5",
-                "Small, efficient, good performance",
-                384,
-            ),
-            (
-                "BAAI/bge-base-en-v1.5",
-                "Balanced size and performance",
-                768,
-            ),
-            (
-                "BAAI/bge-large-en-v1.5",
-                "Best quality, larger size",
+                "BAAI/bge-m3",
+                "State-of-the-art multilingual, dense + sparse + colbert",
                 1024,
-            ),
-            (
-                "thenlper/gte-small",
-                "Small, efficient, trained on diverse data",
-                384,
-            ),
-            (
-                "thenlper/gte-base",
-                "Balanced performance",
-                768,
-            ),
-            (
-                "intfloat/e5-small-v2",
-                "E5 model, small size",
-                384,
-            ),
-            (
-                "intfloat/e5-base-v2",
-                "E5 model, base size",
-                768,
-            ),
-            (
-                "intfloat/e5-large-v2",
-                "E5 model, best quality",
-                1024,
-            ),
-            (
-                "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-                "Multilingual support, 50+ languages",
-                384,
             ),
         ]
     }
@@ -185,12 +182,70 @@ impl EmbeddingProvider for HuggingFaceEmbeddings {
         {
             // Download model
             let model_path = self.download_model().await?;
-            self.model_path = Some(model_path);
+            self.model_path = Some(model_path.clone());
+
+            #[cfg(feature = "neural-embeddings")]
+            {
+                // Initialize Candle model and tokenizer
+                let api = self.api.as_ref().ok_or_else(|| GraphRAGError::Embedding {
+                    message: "HF API not initialized".to_string(),
+                })?;
+                let repo = api.model(self.model_id.clone());
+
+                let tokenizer_filename =
+                    repo.get("tokenizer.json")
+                        .map_err(|e| GraphRAGError::Embedding {
+                            message: format!("Failed to get tokenizer: {}", e),
+                        })?;
+
+                let config_filename =
+                    repo.get("config.json")
+                        .map_err(|e| GraphRAGError::Embedding {
+                            message: format!("Failed to get config: {}", e),
+                        })?;
+
+                let device = Device::Cpu; // Default to CPU for max compatibility
+                let config: Config =
+                    serde_json::from_str(&std::fs::read_to_string(config_filename).map_err(
+                        |e| GraphRAGError::Embedding {
+                            message: format!("Failed to read config file: {}", e),
+                        },
+                    )?)
+                    .map_err(|e| GraphRAGError::Embedding {
+                        message: format!("Failed to parse config: {}", e),
+                    })?;
+
+                let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(|e| {
+                    GraphRAGError::Embedding {
+                        message: format!("Failed to load tokenizer: {}", e),
+                    }
+                })?;
+
+                let vb = unsafe {
+                    VarBuilder::from_mmaped_safetensors(&[model_path], Dtype::F32, &device)
+                        .map_err(|e| GraphRAGError::Embedding {
+                            message: format!("Failed to load model weights: {}", e),
+                        })?
+                };
+
+                let model = BertModel::load(vb, &config).map_err(|e| GraphRAGError::Embedding {
+                    message: format!("Failed to load BERT model: {}", e),
+                })?;
+
+                self.model = Some(model);
+                self.tokenizer = Some(tokenizer);
+                self.device = Some(device);
+
+                // Update dimensions based on loaded model config
+                self.dimensions = config.hidden_size;
+            }
+
             self.initialized = true;
 
             log::info!(
-                "HuggingFace model '{}' downloaded successfully",
-                self.model_id
+                "HuggingFace model '{}' initialized successfully (dims: {})",
+                self.model_id,
+                self.dimensions
             );
         }
 
@@ -204,7 +259,7 @@ impl EmbeddingProvider for HuggingFaceEmbeddings {
         Ok(())
     }
 
-    async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
+    async fn embed(&self, text: &str) -> Result<Vec<f32>> {
         if !self.initialized {
             return Err(GraphRAGError::Embedding {
                 message: "HuggingFace embeddings not initialized. Call initialize() first"
@@ -212,16 +267,63 @@ impl EmbeddingProvider for HuggingFaceEmbeddings {
             });
         }
 
-        // TODO: Implement actual embedding generation using Candle
-        // This requires loading the model with candle-transformers
-        // For now, return a placeholder
-
         #[cfg(feature = "neural-embeddings")]
         {
-            // Load model with Candle and generate embedding
-            // This is a placeholder - actual implementation would use candle-transformers
-            log::warn!("HuggingFace embedding generation not yet implemented");
-            Ok(vec![0.0; self.dimensions])
+            let model = self.model.as_ref().unwrap();
+            let tokenizer = self.tokenizer.as_ref().unwrap();
+            let device = self.device.as_ref().unwrap();
+
+            let tokens = tokenizer
+                .encode(text, true)
+                .map_err(|e| GraphRAGError::Embedding {
+                    message: format!("Tokenization failed: {}", e),
+                })?;
+
+            let token_ids = Tensor::new(tokens.get_ids(), device)
+                .map_err(|e| GraphRAGError::Embedding {
+                    message: format!("Failed to create tensor: {}", e),
+                })?
+                .unsqueeze(0)
+                .map_err(|_| GraphRAGError::Embedding {
+                    message: "Failed to unsqueeze".to_string(),
+                })?;
+
+            let token_type_ids = token_ids
+                .zeros_like()
+                .map_err(|_| GraphRAGError::Embedding {
+                    message: "Failed to create zero tensor".to_string(),
+                })?;
+
+            let embeddings = model.forward(&token_ids, &token_type_ids).map_err(|e| {
+                GraphRAGError::Embedding {
+                    message: format!("Model forward pass failed: {}", e),
+                }
+            })?;
+
+            // Mean pooling
+            let (_n_sentence, n_tokens, _hidden_size) =
+                embeddings.dims3().map_err(|e| GraphRAGError::Embedding {
+                    message: format!("Failed to get dimensions: {}", e),
+                })?;
+
+            let embeddings = (embeddings.sum(1).map_err(|e| GraphRAGError::Embedding {
+                message: format!("Sum failed: {}", e),
+            })? / (n_tokens as f64))
+                .map_err(|e| GraphRAGError::Embedding {
+                    message: format!("Division failed: {}", e),
+                })?;
+
+            let embeddings_vec = embeddings
+                .squeeze(0)
+                .map_err(|_| GraphRAGError::Embedding {
+                    message: "Squeeze failed".to_string(),
+                })?
+                .to_vec1::<f32>()
+                .map_err(|e| GraphRAGError::Embedding {
+                    message: format!("Failed to convert to vec: {}", e),
+                })?;
+
+            Ok(embeddings_vec)
         }
 
         #[cfg(not(feature = "neural-embeddings"))]
@@ -259,12 +361,12 @@ mod tests {
 
     #[test]
     fn test_new_embeddings() {
-        let embeddings = HuggingFaceEmbeddings::new(
-            "sentence-transformers/all-MiniLM-L6-v2",
-            None,
-        );
+        let embeddings = HuggingFaceEmbeddings::new("sentence-transformers/all-MiniLM-L6-v2", None);
 
-        assert_eq!(embeddings.model_id, "sentence-transformers/all-MiniLM-L6-v2");
+        assert_eq!(
+            embeddings.model_id,
+            "sentence-transformers/all-MiniLM-L6-v2"
+        );
         assert_eq!(embeddings.dimensions, 384);
         assert!(!embeddings.initialized);
     }
@@ -285,10 +387,8 @@ mod tests {
             return;
         }
 
-        let mut embeddings = HuggingFaceEmbeddings::new(
-            "sentence-transformers/all-MiniLM-L6-v2",
-            None,
-        );
+        let mut embeddings =
+            HuggingFaceEmbeddings::new("sentence-transformers/all-MiniLM-L6-v2", None);
 
         let result = embeddings.initialize().await;
         assert!(result.is_ok(), "Failed to download model: {:?}", result);

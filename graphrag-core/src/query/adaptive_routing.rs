@@ -61,7 +61,7 @@ pub enum QueryComplexity {
 
 impl QueryComplexity {
     /// Convert complexity to hierarchical level
-    pub fn to_level(&self, max_level: usize) -> usize {
+    pub fn to_level(self, max_level: usize) -> usize {
         match self {
             QueryComplexity::VeryBroad => max_level.max(2),
             QueryComplexity::Broad => (max_level - 1).max(1),
