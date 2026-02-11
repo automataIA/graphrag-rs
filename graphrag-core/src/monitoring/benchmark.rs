@@ -331,11 +331,14 @@ impl BenchmarkRunner {
         // BLEU score (n-gram overlap with brevity penalty)
         let bleu_score = Some(self.calculate_bleu_score(generated, ground_truth));
 
+        // ROUGE-L score (Longest Common Subsequence F-score)
+        let rouge_l = Some(self.calculate_rouge_l(generated, ground_truth));
+
         QualityMetrics {
             exact_match,
             f1_score,
             bleu_score,
-            rouge_l: None,     // TODO: Implement ROUGE-L
+            rouge_l,
             semantic_similarity: None,
         }
     }
@@ -477,6 +480,77 @@ impl BenchmarkRunner {
             .collect()
     }
 
+    /// Calculate ROUGE-L score (Recall-Oriented Understudy for Gisting Evaluation - Longest Common Subsequence)
+    ///
+    /// ROUGE-L measures the similarity between candidate and reference text using
+    /// the Longest Common Subsequence (LCS) to compute precision, recall, and F-score.
+    ///
+    /// Formula: F = ((1 + β²) * precision * recall) / (β² * precision + recall)
+    /// where β controls the importance of recall (typically β=1.2)
+    fn calculate_rouge_l(&self, candidate: &str, reference: &str) -> f32 {
+        // Tokenize candidate and reference
+        let candidate_tokens: Vec<&str> = candidate.split_whitespace().collect();
+        let reference_tokens: Vec<&str> = reference.split_whitespace().collect();
+
+        if candidate_tokens.is_empty() || reference_tokens.is_empty() {
+            return 0.0;
+        }
+
+        // Calculate LCS length
+        let lcs_length = self.lcs_length(&candidate_tokens, &reference_tokens);
+
+        if lcs_length == 0 {
+            return 0.0;
+        }
+
+        // Calculate precision and recall
+        let precision = lcs_length as f32 / candidate_tokens.len() as f32;
+        let recall = lcs_length as f32 / reference_tokens.len() as f32;
+
+        // Calculate F-score with β=1.2 (slightly favors recall)
+        let beta = 1.2;
+        let beta_squared = beta * beta;
+
+        let f_score = ((1.0 + beta_squared) * precision * recall)
+            / (beta_squared * precision + recall);
+
+        // Clamp to [0, 1] range
+        f_score.max(0.0).min(1.0)
+    }
+
+    /// Calculate the length of the Longest Common Subsequence (LCS) using dynamic programming
+    ///
+    /// LCS is the longest sequence of tokens that appear in both texts in the same order
+    /// (but not necessarily consecutively).
+    ///
+    /// Time complexity: O(m * n) where m and n are the lengths of the two sequences
+    fn lcs_length(&self, seq1: &[&str], seq2: &[&str]) -> usize {
+        let m = seq1.len();
+        let n = seq2.len();
+
+        if m == 0 || n == 0 {
+            return 0;
+        }
+
+        // Create DP table: dp[i][j] = LCS length of seq1[0..i] and seq2[0..j]
+        let mut dp = vec![vec![0; n + 1]; m + 1];
+
+        // Fill the DP table
+        for i in 1..=m {
+            for j in 1..=n {
+                if seq1[i - 1] == seq2[j - 1] {
+                    // Characters match: extend LCS by 1
+                    dp[i][j] = dp[i - 1][j - 1] + 1;
+                } else {
+                    // Characters don't match: take max of excluding either character
+                    dp[i][j] = dp[i - 1][j].max(dp[i][j - 1]);
+                }
+            }
+        }
+
+        dp[m][n]
+    }
+
     /// Compute aggregate summary
     fn compute_summary(&self, config_name: String, results: Vec<QueryBenchmark>) -> BenchmarkSummary {
         let total = results.len();
@@ -528,6 +602,17 @@ impl BenchmarkRunner {
             0.0
         };
 
+        // Calculate average ROUGE-L score (only count queries where ROUGE-L was computed)
+        let rouge_scores: Vec<f64> = results
+            .iter()
+            .filter_map(|r| r.quality.rouge_l.map(|s| s as f64))
+            .collect();
+        let avg_rouge_l = if !rouge_scores.is_empty() {
+            rouge_scores.iter().sum::<f64>() / rouge_scores.len() as f64
+        } else {
+            0.0
+        };
+
         let features = if !results.is_empty() {
             results[0].features_enabled.clone()
         } else {
@@ -548,7 +633,7 @@ impl BenchmarkRunner {
             avg_exact_match,
             avg_f1_score,
             avg_bleu_score,
-            avg_rouge_l: 0.0,     // TODO
+            avg_rouge_l,
             features,
             query_results: results,
         }
@@ -564,6 +649,9 @@ impl BenchmarkRunner {
         println!("  F1 Score:     {:.3}", summary.avg_f1_score);
         if summary.avg_bleu_score > 0.0 {
             println!("  BLEU Score:   {:.3}", summary.avg_bleu_score);
+        }
+        if summary.avg_rouge_l > 0.0 {
+            println!("  ROUGE-L:      {:.3}", summary.avg_rouge_l);
         }
 
         println!("\n⏱️  Latency Metrics (avg):");
