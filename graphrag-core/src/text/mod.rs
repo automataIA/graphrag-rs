@@ -18,6 +18,10 @@ pub mod parsers;
 pub mod chunk_enricher;
 /// Trait-based chunking strategies
 pub mod chunking_strategies;
+/// Semantic boundary detection for BAR-RAG
+pub mod boundary_detection;
+/// Semantic coherence scoring for BAR-RAG
+pub mod semantic_coherence;
 
 pub use semantic_chunking::{
     SemanticChunk, SemanticChunker, SemanticChunkerConfig, BreakpointStrategy,
@@ -32,7 +36,13 @@ pub use extractive_summarizer::ExtractiveSummarizer;
 pub use layout_parser::{LayoutParser, LayoutParserFactory};
 pub use chunk_enricher::{ChunkEnricher, EnrichmentStatistics};
 pub use chunking_strategies::{
-    HierarchicalChunkingStrategy, SemanticChunkingStrategy,
+    HierarchicalChunkingStrategy, SemanticChunkingStrategy, BoundaryAwareChunkingStrategy,
+};
+pub use boundary_detection::{
+    BoundaryDetector, BoundaryDetectionConfig, Boundary, BoundaryType,
+};
+pub use semantic_coherence::{
+    SemanticCoherenceScorer, CoherenceConfig, ScoredChunk, OptimalSplit,
 };
 
 #[cfg(feature = "code-chunking")]

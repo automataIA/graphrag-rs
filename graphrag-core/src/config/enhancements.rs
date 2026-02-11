@@ -24,6 +24,9 @@ pub struct EnhancementsConfig {
     /// Cross-encoder reranking configuration
     #[cfg(feature = "cross-encoder")]
     pub cross_encoder: CrossEncoderConfig,
+    /// Concept selection (G2ConS) configuration
+    #[cfg(feature = "lazygraphrag")]
+    pub concept_selection: ConceptSelectionConfig,
 }
 
 impl Default for EnhancementsConfig {
@@ -40,6 +43,8 @@ impl Default for EnhancementsConfig {
             leiden: LeidenCommunitiesConfig::default(),
             #[cfg(feature = "cross-encoder")]
             cross_encoder: CrossEncoderConfig::default(),
+            #[cfg(feature = "lazygraphrag")]
+            concept_selection: ConceptSelectionConfig::default(),
         }
     }
 }
@@ -308,6 +313,44 @@ impl Default for CrossEncoderConfig {
     }
 }
 
+/// Concept selection (G2ConS) configuration
+#[cfg(feature = "lazygraphrag")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConceptSelectionConfig {
+    /// Enable concept-based chunk filtering
+    pub enabled: bool,
+    /// Top-K concepts to select per query
+    pub top_k: usize,
+    /// Minimum concept score threshold (0.0-1.0)
+    pub min_score: f32,
+    /// Weight for degree centrality (0.0-1.0)
+    pub degree_weight: f32,
+    /// Weight for PageRank score (0.0-1.0)
+    pub pagerank_weight: f32,
+    /// Weight for IDF score (0.0-1.0)
+    pub idf_weight: f32,
+    /// Enable semantic query-concept matching
+    pub use_semantic_matching: bool,
+    /// Maximum number of concepts to match per query
+    pub max_query_concepts: usize,
+}
+
+#[cfg(feature = "lazygraphrag")]
+impl Default for ConceptSelectionConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            top_k: 20,
+            min_score: 0.1,
+            degree_weight: 0.4,
+            pagerank_weight: 0.4,
+            idf_weight: 0.2,
+            use_semantic_matching: true,
+            max_query_concepts: 10,
+        }
+    }
+}
+
 impl EnhancementsConfig {
     /// Check if any enhancement is enabled
     pub fn has_any_enabled(&self) -> bool {
@@ -342,6 +385,16 @@ impl EnhancementsConfig {
                         self.cross_encoder.enabled
                     }
                     #[cfg(not(feature = "cross-encoder"))]
+                    {
+                        false
+                    }
+                }
+                || {
+                    #[cfg(feature = "lazygraphrag")]
+                    {
+                        self.concept_selection.enabled
+                    }
+                    #[cfg(not(feature = "lazygraphrag"))]
                     {
                         false
                     }
@@ -380,6 +433,10 @@ impl EnhancementsConfig {
         if self.cross_encoder.enabled {
             enabled.push("Cross-Encoder Reranking".to_string());
         }
+        #[cfg(feature = "lazygraphrag")]
+        if self.concept_selection.enabled {
+            enabled.push("Concept Selection (G2ConS)".to_string());
+        }
 
         enabled
     }
@@ -408,6 +465,10 @@ impl EnhancementsConfig {
         {
             self.cross_encoder.enabled = false;
         }
+        #[cfg(feature = "lazygraphrag")]
+        {
+            self.concept_selection.enabled = false;
+        }
 
         // Then enable specified ones
         for component in components {
@@ -426,6 +487,8 @@ impl EnhancementsConfig {
                 "leiden" | "communities" => self.leiden.enabled = true,
                 #[cfg(feature = "cross-encoder")]
                 "cross_encoder" | "reranking" => self.cross_encoder.enabled = true,
+                #[cfg(feature = "lazygraphrag")]
+                "concept_selection" | "g2cons" => self.concept_selection.enabled = true,
                 _ => eprintln!("Unknown enhancement component: {component}"),
             }
         }

@@ -365,6 +365,7 @@ impl SyntaxAnalyzer {
             .unwrap_or(0);
 
         // Find subject (noun/pronoun before verb)
+        #[allow(clippy::needless_range_loop)]
         for i in 0..root_idx {
             if matches!(
                 tokens[i].pos,
@@ -380,6 +381,7 @@ impl SyntaxAnalyzer {
         }
 
         // Find object (noun after verb)
+        #[allow(clippy::needless_range_loop)]
         for i in (root_idx + 1)..tokens.len() {
             if matches!(tokens[i].pos, POSTag::Noun | POSTag::ProperNoun) {
                 dependencies.push(Dependency {

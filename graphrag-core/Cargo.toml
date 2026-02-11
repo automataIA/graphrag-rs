@@ -154,7 +154,7 @@ oxrdf = { version = "0.2", optional = true }  # RDF data model
 oxttl = { version = "0.1", optional = true }  # Turtle RDF parser
 
 # Persistence storage (optional)
-arrow = { version = "52", optional = true, default-features = false, features = ["ipc"] }  # Apache Arrow
+arrow = { workspace = true, optional = true, default-features = false, features = ["ipc"] }  # Apache Arrow
 parquet = { version = "52", optional = true, default-features = false, features = ["arrow", "snap"] }  # Parquet format
 # lancedb = { version = "0.15", optional = true }  # LanceDB vector storage (disabled due to version conflict)
 
@@ -227,9 +227,7 @@ serde-wasm-bindgen = { version = "0.6", optional = true }
 wasm-bindgen = { workspace = true, optional = true }
 web-sys = { workspace = true, optional = true }
 js-sys = { workspace = true, optional = true }
-
-# Vector databases
-lancedb = { workspace = true, optional = true }
+lancedb = { workspace = true, optional = true, features = ["remote"] }
 arrow-array = { workspace = true, optional = true }
 arrow-schema = { workspace = true, optional = true }
 qdrant-client = { workspace = true }

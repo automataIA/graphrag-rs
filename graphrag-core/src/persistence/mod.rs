@@ -53,10 +53,8 @@ pub mod workspace;
 #[cfg(feature = "persistent-storage")]
 pub mod parquet;
 
-// Lance storage temporarily disabled due to version conflicts
-// TODO: Re-enable when lancedb dependencies are resolved
-// #[cfg(feature = "lance-storage")]
-// pub mod lance;
+#[cfg(feature = "lancedb")]
+pub mod lance;
 
 // Re-exports (workspace always available)
 pub use workspace::{WorkspaceManager, WorkspaceMetadata, WorkspaceInfo};
@@ -64,9 +62,8 @@ pub use workspace::{WorkspaceManager, WorkspaceMetadata, WorkspaceInfo};
 #[cfg(feature = "persistent-storage")]
 pub use parquet::{ParquetPersistence, ParquetConfig};
 
-// Lance storage temporarily disabled
-// #[cfg(feature = "lance-storage")]
-// pub use lance::{LanceVectorStore, LanceConfig};
+#[cfg(feature = "lancedb")]
+pub use lance::{LanceVectorStore, LanceConfig, IndexType, DistanceMetric, SearchResult};
 
 /// Persistence trait for knowledge graphs
 pub trait Persistence {
