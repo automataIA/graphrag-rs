@@ -324,16 +324,111 @@ impl Default for ServiceConfig {
 
 impl ServiceConfig {
     /// Create a registry builder from this configuration
+    ///
+    /// This method creates service instances based on the configuration and available features.
+    /// Services are registered in the following order:
+    ///
+    /// 1. Storage (MemoryStorage with memory-storage feature)
+    /// 2. Vector Store (when vector storage implementations are available)
+    /// 3. Embedder (when embedding providers are available)
+    /// 4. Entity Extractor (when NER models are available)
+    /// 5. Retriever (when retrieval systems are implemented)
+    /// 6. Language Model (when LLM clients are available)
+    /// 7. Metrics Collector (when monitoring is enabled)
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use graphrag_core::core::registry::ServiceConfig;
+    ///
+    /// let config = ServiceConfig::default();
+    /// let registry = config.build_registry().build();
+    /// ```
     pub fn build_registry(&self) -> RegistryBuilder {
         let mut builder = RegistryBuilder::new();
 
+        // 1. Storage Layer
         #[cfg(feature = "memory-storage")]
         {
             use crate::storage::MemoryStorage;
             builder = builder.with_storage(MemoryStorage::new());
         }
 
-        // TODO: Add other service implementations when they're available
+        // 2. Vector Store
+        // Note: Core traits::VectorStore implementation needed
+        // When available, create based on config (LanceDB, Qdrant, or Memory)
+        #[cfg(feature = "vector-memory")]
+        {
+            // TODO: Register MemoryVectorStore when it implements core::traits::VectorStore
+            // if let Some(dimension) = self.vector_dimension {
+            //     use crate::vector::memory_store::MemoryVectorStore;
+            //     builder = builder.with_vector_store(MemoryVectorStore::new());
+            // }
+        }
+
+        // 3. Embedding Provider
+        // Create embedder based on configuration and available features
+        #[cfg(feature = "ollama")]
+        {
+            // TODO: Register Ollama embedder when EmbeddingProvider implements core::traits::Embedder
+            // if let (Some(base_url), Some(model)) = (&self.ollama_base_url, &self.embedding_model) {
+            //     use crate::embeddings::ollama::OllamaEmbedder;
+            //     // builder = builder.with_embedder(OllamaEmbedder::new(base_url, model));
+            // }
+        }
+
+        // 4. Entity Extractor
+        // Register entity extraction service when NER models are available
+        #[cfg(feature = "entity-extraction")]
+        {
+            // TODO: Register entity extractor
+            // if let Some(threshold) = self.entity_confidence_threshold {
+            //     // Create LLM-based or NER-based extractor
+            //     // builder = builder.with_entity_extractor(extractor);
+            // }
+        }
+
+        // 5. Retriever
+        // Register retrieval system when implementation is complete
+        #[cfg(feature = "retrieval")]
+        {
+            // TODO: Register retrieval system
+            // use crate::retrieval::RetrievalSystem;
+            // builder = builder.with_retriever(retrieval_system);
+        }
+
+        // 6. Language Model
+        // Register LLM client for text generation
+        #[cfg(feature = "ollama")]
+        {
+            // TODO: Register Ollama LLM client when it implements core::traits::LanguageModel
+            // if let (Some(base_url), Some(model)) = (&self.ollama_base_url, &self.language_model) {
+            //     use crate::ollama::OllamaClient;
+            //     // builder = builder.with_language_model(OllamaClient::new(base_url, model));
+            // }
+        }
+
+        // 7. Metrics Collector
+        // Register metrics collector when monitoring is enabled
+        #[cfg(feature = "monitoring")]
+        {
+            if self.enable_monitoring {
+                // TODO: Register metrics collector
+                // use crate::monitoring::MetricsCollector;
+                // builder = builder.with_metrics_collector(MetricsCollector::new());
+            }
+        }
+
+        // 8. Function Registry
+        // Register function calling capabilities when enabled
+        #[cfg(feature = "function-calling")]
+        {
+            if self.enable_function_calling {
+                // TODO: Register function registry
+                // use crate::functions::FunctionRegistry;
+                // builder = builder.with_function_registry(FunctionRegistry::new());
+            }
+        }
 
         builder
     }

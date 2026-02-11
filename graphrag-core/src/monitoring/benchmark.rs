@@ -207,14 +207,80 @@ pub struct BenchmarkSummary {
 /// Main benchmarking coordinator
 pub struct BenchmarkRunner {
     config: BenchmarkConfig,
+    /// Optional retrieval system for actual benchmarking
+    retrieval_fn: Option<Box<dyn Fn(&str) -> Vec<String> + Send + Sync>>,
+    /// Optional reranker function
+    reranker_fn: Option<Box<dyn Fn(&[String]) -> Vec<String> + Send + Sync>>,
+    /// Optional LLM generation function
+    llm_fn: Option<Box<dyn Fn(&str, &[String]) -> String + Send + Sync>>,
 }
 
 impl BenchmarkRunner {
-    /// Create a new benchmark runner
+    /// Create a new benchmark runner with simulation mode
     pub fn new(config: BenchmarkConfig) -> Self {
         Self {
             config,
+            retrieval_fn: None,
+            reranker_fn: None,
+            llm_fn: None,
         }
+    }
+
+    /// Set a custom retrieval function for actual benchmarking
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use graphrag_core::monitoring::benchmark::{BenchmarkRunner, BenchmarkConfig};
+    /// let mut runner = BenchmarkRunner::new(BenchmarkConfig::default());
+    /// runner.with_retrieval(|query| {
+    ///     // Your retrieval implementation
+    ///     vec!["doc1".to_string(), "doc2".to_string()]
+    /// });
+    /// ```
+    pub fn with_retrieval<F>(&mut self, f: F) -> &mut Self
+    where
+        F: Fn(&str) -> Vec<String> + Send + Sync + 'static,
+    {
+        self.retrieval_fn = Some(Box::new(f));
+        self
+    }
+
+    /// Set a custom reranker function
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use graphrag_core::monitoring::benchmark::{BenchmarkRunner, BenchmarkConfig};
+    /// let mut runner = BenchmarkRunner::new(BenchmarkConfig::default());
+    /// runner.with_reranker(|docs| {
+    ///     // Your reranking implementation
+    ///     docs.to_vec()
+    /// });
+    /// ```
+    pub fn with_reranker<F>(&mut self, f: F) -> &mut Self
+    where
+        F: Fn(&[String]) -> Vec<String> + Send + Sync + 'static,
+    {
+        self.reranker_fn = Some(Box::new(f));
+        self
+    }
+
+    /// Set a custom LLM generation function
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use graphrag_core::monitoring::benchmark::{BenchmarkRunner, BenchmarkConfig};
+    /// let mut runner = BenchmarkRunner::new(BenchmarkConfig::default());
+    /// runner.with_llm(|query, context| {
+    ///     // Your LLM implementation
+    ///     format!("Generated answer for: {}", query)
+    /// });
+    /// ```
+    pub fn with_llm<F>(&mut self, f: F) -> &mut Self
+    where
+        F: Fn(&str, &[String]) -> String + Send + Sync + 'static,
+    {
+        self.llm_fn = Some(Box::new(f));
+        self
     }
 
     /// Run benchmark on a dataset
@@ -239,24 +305,41 @@ impl BenchmarkRunner {
     fn benchmark_query(&self, query: &BenchmarkQuery) -> QueryBenchmark {
         let start = Instant::now();
 
-        // Simulate retrieval
+        // Retrieval phase
         let retrieval_start = Instant::now();
-        // TODO: Call actual retrieval system
+        let retrieved_docs = if let Some(ref retrieval_fn) = self.retrieval_fn {
+            // Call actual retrieval system
+            retrieval_fn(&query.question)
+        } else {
+            // Simulation mode: return empty results
+            vec![]
+        };
         let retrieval_time = retrieval_start.elapsed();
 
-        // Simulate reranking (if enabled)
-        let reranking_time = if self.config.enable_cross_encoder {
+        // Reranking phase (if enabled)
+        let (reranked_docs, reranking_time) = if self.config.enable_cross_encoder {
             let reranking_start = Instant::now();
-            // TODO: Call cross-encoder reranking
-            Some(reranking_start.elapsed())
+            let reranked = if let Some(ref reranker_fn) = self.reranker_fn {
+                // Call actual cross-encoder reranking
+                reranker_fn(&retrieved_docs)
+            } else {
+                // Simulation mode: no reranking
+                retrieved_docs.clone()
+            };
+            (reranked, Some(reranking_start.elapsed()))
         } else {
-            None
+            (retrieved_docs.clone(), None)
         };
 
-        // Simulate generation
+        // Generation phase
         let generation_start = Instant::now();
-        // TODO: Call actual LLM generation
-        let generated_answer = format!("Generated answer for: {}", query.question);
+        let generated_answer = if let Some(ref llm_fn) = self.llm_fn {
+            // Call actual LLM generation with context
+            llm_fn(&query.question, &reranked_docs)
+        } else {
+            // Simulation mode: generate placeholder
+            format!("Generated answer for: {}", query.question)
+        };
         let generation_time = generation_start.elapsed();
 
         let total_time = start.elapsed();
