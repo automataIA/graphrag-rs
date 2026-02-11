@@ -155,7 +155,7 @@ oxttl = { version = "0.1", optional = true }  # Turtle RDF parser
 
 # Persistence storage (optional)
 arrow = { workspace = true, optional = true, default-features = false, features = ["ipc"] }  # Apache Arrow
-parquet = { version = "52", optional = true, default-features = false, features = ["arrow", "snap"] }  # Parquet format
+parquet = { version = "57", optional = true, default-features = false, features = ["arrow", "snap"] }  # Parquet format
 # lancedb = { version = "0.15", optional = true }  # LanceDB vector storage (disabled due to version conflict)
 
 # Random number generation
