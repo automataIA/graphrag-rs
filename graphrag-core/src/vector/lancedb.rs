@@ -74,29 +74,112 @@ impl VectorStore for LanceDBStore {
         &self,
         vectors: Vec<(&str, Vec<f32>, HashMap<String, String>)>,
     ) -> Result<()> {
-        let conn = connect(&self.uri)
+        use arrow_array::types::Float32Type;
+
+        if vectors.is_empty() {
+            return Ok(());
+        }
+
+        let table = self.get_table().await?;
+
+        // Extract IDs and embeddings
+        let ids: Vec<&str> = vectors.iter().map(|(id, _, _)| *id).collect();
+        let id_array = Arc::new(StringArray::from(ids));
+
+        // Convert embeddings to FixedSizeListArray
+        let embeddings: Vec<Option<Vec<Option<f32>>>> = vectors
+            .iter()
+            .map(|(_, vec, _)| Some(vec.iter().map(|&v| Some(v)).collect()))
+            .collect();
+
+        let vector_array = Arc::new(FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
+            embeddings,
+            self.dimension as i32,
+        ));
+
+        // Create schema and RecordBatch
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Utf8, false),
+            Field::new(
+                "vector",
+                DataType::FixedSizeList(
+                    Arc::new(Field::new("item", DataType::Float32, true)),
+                    self.dimension as i32,
+                ),
+                false,
+            ),
+        ]));
+
+        let batch = RecordBatch::try_new(schema.clone(), vec![id_array, vector_array])
+            .map_err(|e| GraphRAGError::VectorSearch {
+                message: format!("Failed to create record batch: {}", e),
+            })?;
+
+        // Add to table
+        let batches = RecordBatchIterator::new(vec![Ok(batch)].into_iter(), schema);
+
+        table
+            .add(Box::new(batches))
             .execute()
             .await
             .map_err(|e| GraphRAGError::VectorSearch {
-                message: e.to_string(),
+                message: format!("Failed to add vectors: {}", e),
             })?;
 
-        // Construct Arrow arrays
-        // Note: simplified for brevity, real impl needs robust arrow construction
-        // For MVP we might need to rely on higher level bindings or careful construction
-        // This is a placeholder for the actual Arrow logic which is verbose
-
-        // TODO: Implement actual Arrow RecordBatch construction
         Ok(())
     }
 
     async fn search(&self, query_embedding: &[f32], top_k: usize) -> Result<Vec<SearchResult>> {
+        use arrow_array::cast::AsArray;
+        use arrow_array::types::Float32Type;
+        use futures::stream::TryStreamExt;
+        use lancedb::query::{ExecutableQuery, QueryBase};
+
         let table = self.get_table().await?;
 
-        // Placeholder for vector search query
-        // let results = table.search(query_embedding).limit(top_k).execute().await...
+        // Perform vector search (limit before nearest_to)
+        let results = table
+            .query()
+            .limit(top_k)
+            .nearest_to(query_embedding)
+            .map_err(|e| GraphRAGError::VectorSearch {
+                message: format!("Failed to create query: {}", e),
+            })?
+            .execute()
+            .await
+            .map_err(|e| GraphRAGError::VectorSearch {
+                message: format!("Failed to execute search: {}", e),
+            })?
+            .try_collect::<Vec<_>>()
+            .await
+            .map_err(|e| GraphRAGError::VectorSearch {
+                message: format!("Failed to collect results: {}", e),
+            })?;
 
-        Ok(vec![])
+        // Convert RecordBatch results to SearchResult
+        let mut search_results = Vec::new();
+
+        for batch in results {
+            let id_array = batch
+                .column(0)
+                .as_string::<i32>()
+                .iter()
+                .map(|s| s.unwrap_or("").to_string())
+                .collect::<Vec<_>>();
+
+            for id in id_array.iter() {
+                // Use inverse ranking as score (1.0 for closest, decreasing)
+                let score = 1.0 / (search_results.len() as f32 + 1.0);
+
+                search_results.push(SearchResult {
+                    id: id.clone(),
+                    score,
+                    metadata: HashMap::new(), // LanceDB doesn't return metadata by default
+                });
+            }
+        }
+
+        Ok(search_results)
     }
 
     async fn delete(&self, id: &str) -> Result<()> {
