@@ -324,16 +324,141 @@ impl SemanticChunker {
     }
 
     /// Semantic similarity-based chunking
+    ///
+    /// Uses lexical cohesion (word overlap) to measure similarity between sentences.
+    /// Creates chunk boundaries where similarity drops below threshold.
     fn chunk_by_similarity(&self, text: &str) -> Vec<SemanticChunk> {
-        // For now, fall back to sentence-based chunking
-        // TODO: Implement proper embedding-based similarity chunking
-        // This requires:
-        // 1. Generate embeddings for each sentence
-        // 2. Calculate cosine similarity between adjacent sentences
-        // 3. Create boundaries where similarity drops below threshold
-        // 4. Merge small chunks that are below min_size
+        let sentences = self.split_sentences(text);
 
-        self.chunk_by_sentences(text)
+        if sentences.is_empty() {
+            return vec![];
+        }
+
+        if sentences.len() == 1 {
+            let sentence = &sentences[0];
+            return vec![SemanticChunk {
+                text: sentence.clone(),
+                start: 0,
+                end: sentence.len(),
+                sentence_count: 1,
+                paragraph_count: 1,
+                coherence: 1.0,
+            }];
+        }
+
+        // Calculate similarity between adjacent sentences
+        let mut similarities = Vec::new();
+        for i in 0..sentences.len() - 1 {
+            let similarity = self.lexical_cohesion(&sentences[i], &sentences[i + 1]);
+            similarities.push(similarity);
+        }
+
+        // Identify chunk boundaries where similarity < threshold
+        let mut boundaries = vec![0]; // Start with first sentence
+        for (i, &similarity) in similarities.iter().enumerate() {
+            if similarity < self.config.similarity_threshold {
+                // Low similarity → create boundary
+                boundaries.push(i + 1);
+            }
+        }
+        boundaries.push(sentences.len()); // End boundary
+
+        // Create chunks from boundaries
+        let mut chunks: Vec<SemanticChunk> = Vec::new();
+        let mut text_pos = 0;
+
+        for window in boundaries.windows(2) {
+            let start_idx = window[0];
+            let end_idx = window[1];
+
+            let chunk_sentences = &sentences[start_idx..end_idx];
+            let chunk_text = chunk_sentences.join(" ");
+            let chunk_len = chunk_text.len();
+
+            // Skip empty chunks
+            if chunk_text.trim().is_empty() {
+                continue;
+            }
+
+            // Check size constraints
+            if chunk_len < self.config.min_size && !chunks.is_empty() {
+                // Merge with previous chunk if too small
+                if let Some(last_chunk) = chunks.last_mut() {
+                    last_chunk.text.push(' ');
+                    last_chunk.text.push_str(&chunk_text);
+                    last_chunk.end = text_pos + chunk_len;
+                    last_chunk.sentence_count += chunk_sentences.len();
+                    last_chunk.paragraph_count = self.count_paragraphs(&last_chunk.text);
+                    last_chunk.coherence = self.calculate_coherence(
+                        &self.split_sentences(&last_chunk.text),
+                    );
+                    text_pos += chunk_len + 1; // +1 for space
+                    continue;
+                }
+            }
+
+            // Split large chunks by sentence boundaries
+            if chunk_len > self.config.max_size {
+                // Further split by sentences while respecting max_size
+                let mut current_text = String::new();
+                let mut current_start = text_pos;
+                let mut current_sentences = Vec::new();
+
+                for sentence in chunk_sentences {
+                    if current_text.len() + sentence.len() > self.config.max_size
+                        && !current_text.is_empty()
+                    {
+                        // Create chunk
+                        chunks.push(SemanticChunk {
+                            text: current_text.trim().to_string(),
+                            start: current_start,
+                            end: current_start + current_text.len(),
+                            sentence_count: current_sentences.len(),
+                            paragraph_count: self.count_paragraphs(&current_text),
+                            coherence: self.calculate_coherence(&current_sentences),
+                        });
+
+                        current_start += current_text.len() + 1;
+                        current_text = String::new();
+                        current_sentences.clear();
+                    }
+
+                    if !current_text.is_empty() {
+                        current_text.push(' ');
+                    }
+                    current_text.push_str(sentence);
+                    current_sentences.push(sentence.clone());
+                }
+
+                // Add remaining text
+                if !current_text.is_empty() {
+                    chunks.push(SemanticChunk {
+                        text: current_text.trim().to_string(),
+                        start: current_start,
+                        end: current_start + current_text.len(),
+                        sentence_count: current_sentences.len(),
+                        paragraph_count: self.count_paragraphs(&current_text),
+                        coherence: self.calculate_coherence(&current_sentences),
+                    });
+                }
+
+                text_pos += chunk_len + 1;
+            } else {
+                // Normal chunk
+                chunks.push(SemanticChunk {
+                    text: chunk_text.clone(),
+                    start: text_pos,
+                    end: text_pos + chunk_len,
+                    sentence_count: chunk_sentences.len(),
+                    paragraph_count: self.count_paragraphs(&chunk_text),
+                    coherence: self.calculate_coherence(chunk_sentences),
+                });
+
+                text_pos += chunk_len + 1; // +1 for space between chunks
+            }
+        }
+
+        chunks
     }
 
     /// Hybrid chunking strategy
