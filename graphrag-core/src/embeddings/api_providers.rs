@@ -315,6 +315,138 @@ impl HttpEmbeddingProvider {
             message: "ureq feature required for HTTP-based embeddings".to_string(),
         })
     }
+
+    /// Make batch embedding request for multiple texts
+    #[cfg(feature = "ureq")]
+    fn make_batch_request(&self, inputs: &[&str]) -> Result<Vec<Vec<f32>>> {
+        // Build request body based on provider
+        let request_body = match self.provider_type {
+            EmbeddingProviderType::OpenAI => {
+                serde_json::json!({
+                    "model": self.model.clone(),
+                    "input": inputs,
+                })
+            }
+            EmbeddingProviderType::VoyageAI => {
+                serde_json::json!({
+                    "model": self.model.clone(),
+                    "input": inputs,
+                    "input_type": "document",
+                })
+            }
+            EmbeddingProviderType::Cohere => {
+                serde_json::json!({
+                    "model": self.model.clone(),
+                    "texts": inputs,
+                    "input_type": "search_document",
+                    "embedding_types": vec!["float"],
+                })
+            }
+            EmbeddingProviderType::JinaAI | EmbeddingProviderType::Mistral | EmbeddingProviderType::TogetherAI => {
+                serde_json::json!({
+                    "model": self.model.clone(),
+                    "input": inputs,
+                })
+            }
+            _ => {
+                return Err(GraphRAGError::Embedding {
+                    message: "Unsupported provider type for batch".to_string(),
+                })
+            }
+        };
+
+        // Make HTTP request
+        let response = self
+            .client
+            .post(&self.endpoint)
+            .set("Authorization", &format!("Bearer {}", self.api_key))
+            .set("Content-Type", "application/json")
+            .send_json(request_body)
+            .map_err(|e| GraphRAGError::Embedding {
+                message: format!("Batch HTTP request failed: {}", e),
+            })?;
+
+        // Parse response
+        let json_response: serde_json::Value =
+            response.into_json().map_err(|e| GraphRAGError::Embedding {
+                message: format!("Failed to parse batch JSON response: {}", e),
+            })?;
+
+        // Extract embeddings based on provider response format
+        let embeddings = match self.provider_type {
+            EmbeddingProviderType::OpenAI
+            | EmbeddingProviderType::VoyageAI
+            | EmbeddingProviderType::JinaAI
+            | EmbeddingProviderType::Mistral
+            | EmbeddingProviderType::TogetherAI => {
+                // OpenAI-compatible format: { "data": [{ "embedding": [...] }, ...] }
+                let data_array = json_response["data"]
+                    .as_array()
+                    .ok_or_else(|| GraphRAGError::Embedding {
+                        message: "Invalid batch response format: expected data array".to_string(),
+                    })?;
+
+                data_array
+                    .iter()
+                    .map(|item| {
+                        item["embedding"]
+                            .as_array()
+                            .ok_or_else(|| GraphRAGError::Embedding {
+                                message: "Invalid embedding format in batch".to_string(),
+                            })
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|v| v.as_f64().map(|f| f as f32))
+                                    .collect()
+                            })
+                    })
+                    .collect::<Result<Vec<Vec<f32>>>>()?
+            }
+            EmbeddingProviderType::Cohere => {
+                // Cohere format: { "embeddings": [[...], [...], ...] }
+                let embeddings_array = json_response["embeddings"]
+                    .as_array()
+                    .ok_or_else(|| GraphRAGError::Embedding {
+                        message: "Invalid Cohere batch response format".to_string(),
+                    })?;
+
+                embeddings_array
+                    .iter()
+                    .map(|emb| {
+                        emb.as_array()
+                            .ok_or_else(|| GraphRAGError::Embedding {
+                                message: "Invalid embedding array in Cohere batch".to_string(),
+                            })
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|v| v.as_f64().map(|f| f as f32))
+                                    .collect()
+                            })
+                    })
+                    .collect::<Result<Vec<Vec<f32>>>>()?
+            }
+            _ => vec![],
+        };
+
+        if embeddings.is_empty() || embeddings.len() != inputs.len() {
+            return Err(GraphRAGError::Embedding {
+                message: format!(
+                    "Batch embedding count mismatch: expected {}, got {}",
+                    inputs.len(),
+                    embeddings.len()
+                ),
+            });
+        }
+
+        Ok(embeddings)
+    }
+
+    #[cfg(not(feature = "ureq"))]
+    fn make_batch_request(&self, _inputs: &[&str]) -> Result<Vec<Vec<f32>>> {
+        Err(GraphRAGError::Embedding {
+            message: "ureq feature required for batch embeddings".to_string(),
+        })
+    }
 }
 
 #[async_trait::async_trait]
@@ -329,7 +461,28 @@ impl EmbeddingProvider for HttpEmbeddingProvider {
     }
 
     async fn embed_batch(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>> {
-        // TODO: Implement batch API calls for providers that support it
+        // Use batch API for providers that support it
+        if texts.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // For single text, use regular embed
+        if texts.len() == 1 {
+            return Ok(vec![self.embed(texts[0]).await?]);
+        }
+
+        #[cfg(feature = "ureq")]
+        {
+            // Try batch request for supported providers
+            match self.make_batch_request(texts) {
+                Ok(embeddings) => return Ok(embeddings),
+                Err(_) => {
+                    // Fallback to sequential requests if batch fails
+                }
+            }
+        }
+
+        // Fallback: sequential requests
         let mut embeddings = Vec::with_capacity(texts.len());
         for text in texts {
             embeddings.push(self.embed(text).await?);
