@@ -40,23 +40,23 @@
 //! ```
 
 use crate::core::{
-    ChunkId, Document, DocumentId, Entity, EntityId, EntityMention, GraphRAGError,
-    KnowledgeGraph, Relationship, Result, TextChunk,
+    ChunkId, Document, DocumentId, Entity, EntityId, GraphRAGError, KnowledgeGraph, Relationship,
+    Result, TextChunk,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
 
 #[cfg(feature = "persistent-storage")]
 use arrow::array::{
-    ArrayRef, Float32Array, Float32Builder, Int64Array, ListArray, ListBuilder, RecordBatch,
-    StringArray, StringBuilder, UInt64Array,
+    Array, Float32Array, Int64Array, ListArray, ListBuilder, RecordBatch, StringArray,
+    StringBuilder, UInt64Array,
 };
 #[cfg(feature = "persistent-storage")]
 use arrow::datatypes::{DataType, Field, Schema};
 #[cfg(feature = "persistent-storage")]
 use parquet::arrow::arrow_writer::ArrowWriter;
 #[cfg(feature = "persistent-storage")]
-use parquet::arrow::ArrowReader;
+use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 #[cfg(feature = "persistent-storage")]
 use parquet::file::properties::WriterProperties;
 
@@ -242,9 +242,19 @@ impl ParquetPersistence {
             .map(|e| Some(e.mentions.len() as i64))
             .collect();
 
-        // TODO: Handle embeddings (List<Float32>)
-        // For now, create null array
-        let embeddings: ArrayRef = Arc::new(ListArray::new_null(DataType::Float32, entities.len()));
+        // Build embeddings ListArray
+        let mut embedding_builder = ListBuilder::new(arrow::array::Float32Builder::new());
+        for entity in entities.iter() {
+            if let Some(ref emb) = entity.embedding {
+                for &val in emb {
+                    embedding_builder.values().append_value(val);
+                }
+                embedding_builder.append(true);
+            } else {
+                embedding_builder.append(false); // null
+            }
+        }
+        let embeddings = embedding_builder.finish();
 
         // Create RecordBatch
         let batch = RecordBatch::try_new(
@@ -255,7 +265,7 @@ impl ParquetPersistence {
                 Arc::new(types),
                 Arc::new(confidences),
                 Arc::new(mention_counts),
-                embeddings,
+                Arc::new(embeddings),
             ],
         )
         .map_err(|e| GraphRAGError::Config {
@@ -302,7 +312,7 @@ impl ParquetPersistence {
         }
 
         let file = std::fs::File::open(&file_path)?;
-        let reader = parquet::arrow::ParquetRecordBatchReaderBuilder::try_new(file)
+        let reader = ParquetRecordBatchReaderBuilder::try_new(file)
             .map_err(|e| GraphRAGError::Config {
                 message: format!("Failed to create Parquet reader: {}", e),
             })?
@@ -350,14 +360,43 @@ impl ParquetPersistence {
                     message: "Invalid confidence column type".to_string(),
                 })?;
 
+            let embeddings = batch
+                .column(5)
+                .as_any()
+                .downcast_ref::<ListArray>()
+                .ok_or_else(|| GraphRAGError::Config {
+                    message: "Invalid embedding column type".to_string(),
+                })?;
+
             for i in 0..batch.num_rows() {
+                // Extract embedding
+                let embedding = if !embeddings.is_null(i) {
+                    let emb_list = embeddings.value(i);
+                    let emb_floats = emb_list
+                        .as_any()
+                        .downcast_ref::<Float32Array>()
+                        .ok_or_else(|| GraphRAGError::Config {
+                            message: "Invalid embedding list type".to_string(),
+                        })?;
+
+                    let mut emb_vec = Vec::with_capacity(emb_floats.len());
+                    for j in 0..emb_floats.len() {
+                        if !emb_floats.is_null(j) {
+                            emb_vec.push(emb_floats.value(j));
+                        }
+                    }
+                    Some(emb_vec)
+                } else {
+                    None
+                };
+
                 let entity = Entity {
                     id: EntityId::new(ids.value(i).to_string()),
                     name: names.value(i).to_string(),
                     entity_type: types.value(i).to_string(),
                     confidence: confidences.value(i),
                     mentions: Vec::new(), // Will be populated later if needed
-                    embedding: None,      // TODO: Load embeddings
+                    embedding,
                 };
 
                 entities.push(entity);
@@ -479,7 +518,7 @@ impl ParquetPersistence {
         }
 
         let file = std::fs::File::open(&file_path)?;
-        let reader = parquet::arrow::ParquetRecordBatchReaderBuilder::try_new(file)
+        let reader = ParquetRecordBatchReaderBuilder::try_new(file)
             .map_err(|e| GraphRAGError::Config {
                 message: format!("Failed to create Parquet reader: {}", e),
             })?
@@ -732,7 +771,7 @@ impl ParquetPersistence {
         }
 
         let file = std::fs::File::open(&file_path)?;
-        let reader = parquet::arrow::ParquetRecordBatchReaderBuilder::try_new(file)
+        let reader = ParquetRecordBatchReaderBuilder::try_new(file)
             .map_err(|e| GraphRAGError::Config {
                 message: format!("Failed to create Parquet reader: {}", e),
             })?
@@ -1035,7 +1074,7 @@ impl ParquetPersistence {
         }
 
         let file = std::fs::File::open(&file_path)?;
-        let reader = parquet::arrow::ParquetRecordBatchReaderBuilder::try_new(file)
+        let reader = ParquetRecordBatchReaderBuilder::try_new(file)
             .map_err(|e| GraphRAGError::Config {
                 message: format!("Failed to create Parquet reader: {}", e),
             })?
