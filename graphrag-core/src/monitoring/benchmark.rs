@@ -328,10 +328,13 @@ impl BenchmarkRunner {
         // F1 score (token overlap)
         let f1_score = self.calculate_f1_score(generated, ground_truth);
 
+        // BLEU score (n-gram overlap with brevity penalty)
+        let bleu_score = Some(self.calculate_bleu_score(generated, ground_truth));
+
         QualityMetrics {
             exact_match,
             f1_score,
-            bleu_score: None,  // TODO: Implement BLEU
+            bleu_score,
             rouge_l: None,     // TODO: Implement ROUGE-L
             semantic_similarity: None,
         }
@@ -371,6 +374,107 @@ impl BenchmarkRunner {
         let recall = common as f32 / gt_tokens.len() as f32;
 
         2.0 * (precision * recall) / (precision + recall)
+    }
+
+    /// Calculate BLEU score (BiLingual Evaluation Understudy)
+    ///
+    /// BLEU score measures n-gram overlap between generated and reference text,
+    /// with a brevity penalty for overly short outputs.
+    ///
+    /// Formula: BLEU = BP * exp(1/N * sum(log(P_n)))
+    /// where P_n is the precision for n-grams and BP is the brevity penalty.
+    fn calculate_bleu_score(&self, candidate: &str, reference: &str) -> f32 {
+        // Tokenize candidate and reference
+        let candidate_tokens: Vec<&str> = candidate.split_whitespace().collect();
+        let reference_tokens: Vec<&str> = reference.split_whitespace().collect();
+
+        if candidate_tokens.is_empty() || reference_tokens.is_empty() {
+            return 0.0;
+        }
+
+        // Calculate n-gram precisions (n=1 to 4)
+        let max_n = 4;
+        let mut log_precision_sum = 0.0;
+        let mut valid_n_grams = 0;
+
+        for n in 1..=max_n {
+            let precision = self.calculate_ngram_precision(&candidate_tokens, &reference_tokens, n);
+
+            if precision > 0.0 {
+                log_precision_sum += precision.ln();
+                valid_n_grams += 1;
+            } else {
+                // If any n-gram precision is 0, BLEU score is 0
+                return 0.0;
+            }
+        }
+
+        // Calculate brevity penalty
+        let candidate_len = candidate_tokens.len() as f32;
+        let reference_len = reference_tokens.len() as f32;
+
+        let brevity_penalty = if candidate_len >= reference_len {
+            1.0
+        } else {
+            (1.0 - reference_len / candidate_len).exp()
+        };
+
+        // Final BLEU score: BP * exp(1/N * sum(log(P_n)))
+        let bleu = brevity_penalty * (log_precision_sum / valid_n_grams as f32).exp();
+
+        // Clamp to [0, 1] range
+        bleu.max(0.0).min(1.0)
+    }
+
+    /// Calculate precision for n-grams with clipping
+    fn calculate_ngram_precision(&self, candidate: &[&str], reference: &[&str], n: usize) -> f32 {
+        if candidate.len() < n || reference.len() < n {
+            return 0.0;
+        }
+
+        // Extract n-grams from candidate
+        let candidate_ngrams = self.extract_ngrams(candidate, n);
+
+        // Extract n-grams from reference and count frequencies
+        let reference_ngrams = self.extract_ngrams(reference, n);
+        let mut reference_counts = std::collections::HashMap::new();
+        for ngram in &reference_ngrams {
+            *reference_counts.entry(ngram).or_insert(0) += 1;
+        }
+
+        // Count clipped matches (clip to max count in reference)
+        let mut clipped_matches = 0;
+        let mut candidate_counts = std::collections::HashMap::new();
+
+        for ngram in &candidate_ngrams {
+            let candidate_count = candidate_counts.entry(ngram).or_insert(0);
+            *candidate_count += 1;
+
+            if let Some(&ref_count) = reference_counts.get(&ngram) {
+                if *candidate_count <= ref_count {
+                    clipped_matches += 1;
+                }
+            }
+        }
+
+        // Precision = clipped_matches / total_candidate_ngrams
+        if candidate_ngrams.is_empty() {
+            0.0
+        } else {
+            clipped_matches as f32 / candidate_ngrams.len() as f32
+        }
+    }
+
+    /// Extract all n-grams from a token sequence
+    fn extract_ngrams(&self, tokens: &[&str], n: usize) -> Vec<Vec<String>> {
+        if tokens.len() < n {
+            return Vec::new();
+        }
+
+        tokens
+            .windows(n)
+            .map(|window| window.iter().map(|&s| s.to_string()).collect())
+            .collect()
     }
 
     /// Compute aggregate summary
@@ -413,6 +517,17 @@ impl BenchmarkRunner {
         let avg_exact_match = results.iter().map(|r| r.quality.exact_match as f64).sum::<f64>() / total as f64;
         let avg_f1_score = results.iter().map(|r| r.quality.f1_score as f64).sum::<f64>() / total as f64;
 
+        // Calculate average BLEU score (only count queries where BLEU was computed)
+        let bleu_scores: Vec<f64> = results
+            .iter()
+            .filter_map(|r| r.quality.bleu_score.map(|s| s as f64))
+            .collect();
+        let avg_bleu_score = if !bleu_scores.is_empty() {
+            bleu_scores.iter().sum::<f64>() / bleu_scores.len() as f64
+        } else {
+            0.0
+        };
+
         let features = if !results.is_empty() {
             results[0].features_enabled.clone()
         } else {
@@ -432,7 +547,7 @@ impl BenchmarkRunner {
             avg_tokens_per_query: (total_input_tokens + total_output_tokens) as f64 / total as f64,
             avg_exact_match,
             avg_f1_score,
-            avg_bleu_score: 0.0,  // TODO
+            avg_bleu_score,
             avg_rouge_l: 0.0,     // TODO
             features,
             query_results: results,
@@ -447,6 +562,9 @@ impl BenchmarkRunner {
         println!("\n🎯 Quality Metrics:");
         println!("  Exact Match:  {:.1}%", summary.avg_exact_match * 100.0);
         println!("  F1 Score:     {:.3}", summary.avg_f1_score);
+        if summary.avg_bleu_score > 0.0 {
+            println!("  BLEU Score:   {:.3}", summary.avg_bleu_score);
+        }
 
         println!("\n⏱️  Latency Metrics (avg):");
         println!("  Total:        {:.1} ms", summary.avg_latency_ms);
