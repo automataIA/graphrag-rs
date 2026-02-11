@@ -1690,13 +1690,13 @@ mod tests {
         assert!(results[0].contains("test query"));
     }
 
-    #[test]
-    fn test_graph_indexing() {
+    #[tokio::test]
+    async fn test_graph_indexing() {
         let config = Config::default();
         let mut retrieval = RetrievalSystem::new(&config).unwrap();
         let graph = KnowledgeGraph::new();
 
-        let result = retrieval.index_graph(&graph);
+        let result = retrieval.index_graph(&graph).await;
         assert!(result.is_ok());
     }
 }
