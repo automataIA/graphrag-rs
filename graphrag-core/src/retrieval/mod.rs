@@ -3,22 +3,22 @@ pub mod adaptive;
 pub mod bm25;
 /// Enriched metadata-aware retrieval
 pub mod enriched;
-/// Hybrid retrieval combining multiple search strategies
-pub mod hybrid;
-pub mod pagerank_retrieval;
 /// HippoRAG Personalized PageRank retrieval
 #[cfg(feature = "pagerank")]
 pub mod hipporag_ppr;
+/// Hybrid retrieval combining multiple search strategies
+pub mod hybrid;
+pub mod pagerank_retrieval;
 
+#[cfg(feature = "parallel-processing")]
+use crate::parallel::ParallelProcessor;
 use crate::{
     config::Config,
     core::{ChunkId, EntityId, KnowledgeGraph},
     summarization::DocumentTree,
-    vector::{EmbeddingGenerator, VectorIndex, VectorUtils},
+    vector::{EmbeddingGenerator, VectorUtils},
     Result,
 };
-#[cfg(feature = "parallel-processing")]
-use crate::parallel::ParallelProcessor;
 use std::collections::{HashMap, HashSet};
 
 pub use bm25::{BM25Result, BM25Retriever, Document as BM25Document};
@@ -29,11 +29,13 @@ pub use hybrid::{FusionMethod, HybridConfig, HybridRetriever, HybridSearchResult
 pub use pagerank_retrieval::{PageRankRetrievalSystem, ScoredResult};
 
 #[cfg(feature = "pagerank")]
-pub use hipporag_ppr::{HippoRAGConfig, HippoRAGRetriever, Fact};
+pub use hipporag_ppr::{Fact, HippoRAGConfig, HippoRAGRetriever};
+
+use crate::vector::store::VectorStore;
 
 /// Retrieval system for querying the knowledge graph
 pub struct RetrievalSystem {
-    vector_index: VectorIndex,
+    vector_store: std::sync::Arc<dyn VectorStore>,
     embedding_generator: EmbeddingGenerator,
     config: RetrievalConfig,
     #[cfg(feature = "parallel-processing")]
@@ -41,6 +43,44 @@ pub struct RetrievalSystem {
     #[cfg(feature = "pagerank")]
     pagerank_retriever: Option<PageRankRetrievalSystem>,
     enriched_retriever: Option<EnrichedRetriever>,
+    #[cfg(feature = "lazygraphrag")]
+    concept_filtering_enabled: bool,
+}
+
+impl RetrievalSystem {
+    /// Create a new retrieval system
+    pub fn new(config: &Config) -> Result<Self> {
+        let retrieval_config = RetrievalConfig {
+            top_k: config.retrieval.top_k,
+            similarity_threshold: 0.35,
+            max_expansion_depth: 2,
+            entity_weight: 0.4,
+            chunk_weight: 0.4,
+            graph_weight: 0.2,
+            #[cfg(feature = "lazygraphrag")]
+            use_concept_filtering: false,
+            #[cfg(feature = "lazygraphrag")]
+            concept_top_k: 20,
+        };
+
+        // Default to MemoryVectorStore for now (mimics old behavior)
+        // In the future, this will select based on Config (LanceDB, Qdrant, etc.)
+        let vector_store =
+            std::sync::Arc::new(crate::vector::memory_store::MemoryVectorStore::new());
+
+        Ok(Self {
+            vector_store,
+            embedding_generator: EmbeddingGenerator::new(128), // 128-dimensional embeddings
+            config: retrieval_config,
+            #[cfg(feature = "parallel-processing")]
+            parallel_processor: None,
+            #[cfg(feature = "pagerank")]
+            pagerank_retriever: None,
+            enriched_retriever: None,
+            #[cfg(feature = "lazygraphrag")]
+            concept_filtering_enabled: false,
+        })
+    }
 }
 
 /// Configuration parameters for the retrieval system
@@ -58,6 +98,12 @@ pub struct RetrievalConfig {
     pub chunk_weight: f32,
     /// Weight for graph-based results in scoring (0.0 to 1.0)
     pub graph_weight: f32,
+    /// Enable concept-based chunk filtering (requires lazygraphrag feature)
+    #[cfg(feature = "lazygraphrag")]
+    pub use_concept_filtering: bool,
+    /// Top-K concepts to select for filtering (requires lazygraphrag feature)
+    #[cfg(feature = "lazygraphrag")]
+    pub concept_top_k: usize,
 }
 
 impl Default for RetrievalConfig {
@@ -69,6 +115,10 @@ impl Default for RetrievalConfig {
             entity_weight: 0.4,
             chunk_weight: 0.4,
             graph_weight: 0.2,
+            #[cfg(feature = "lazygraphrag")]
+            use_concept_filtering: false,
+            #[cfg(feature = "lazygraphrag")]
+            concept_top_k: 20,
         }
     }
 }
@@ -179,65 +229,42 @@ pub struct QueryResult {
 }
 
 impl RetrievalSystem {
-    /// Create a new retrieval system
-    pub fn new(config: &Config) -> Result<Self> {
-        let retrieval_config = RetrievalConfig {
-            top_k: config.retrieval.top_k,
-            similarity_threshold: 0.35, // Reasonable threshold for hash-based embeddings
-            max_expansion_depth: 2,     // Default, could be added to config
-            entity_weight: 0.4,         // Default, could be added to config
-            chunk_weight: 0.4,          // Default, could be added to config
-            graph_weight: 0.2,          // Default, could be added to config
-        };
-
-        Ok(Self {
-            vector_index: VectorIndex::new(),
-            embedding_generator: EmbeddingGenerator::new(128), // 128-dimensional embeddings
-            config: retrieval_config,
-            #[cfg(feature = "parallel-processing")]
-            parallel_processor: None,
-            #[cfg(feature = "pagerank")]
-            pagerank_retriever: None,
-            enriched_retriever: None,
-        })
-    }
-
     /// Create a new retrieval system with parallel processing support
     #[cfg(feature = "parallel-processing")]
     pub fn with_parallel_processing(
-        config: &Config,
+        vector_store: std::sync::Arc<dyn VectorStore>,
+        embedding_generator: EmbeddingGenerator,
         parallel_processor: ParallelProcessor,
     ) -> Result<Self> {
-        let retrieval_config = RetrievalConfig {
-            top_k: config.retrieval.top_k,
-            similarity_threshold: 0.35, // Reasonable threshold for hash-based embeddings
-            max_expansion_depth: 2,
-            entity_weight: 0.4,
-            chunk_weight: 0.4,
-            graph_weight: 0.2,
-        };
+        // VectorStore trait is already Send + Sync and wrapped in Arc
+        // Can be safely used across threads for parallel operations
+        // EmbeddingGenerator operations can be parallelized with rayon
+
+        let retrieval_config = RetrievalConfig::default();
 
         Ok(Self {
-            vector_index: VectorIndex::with_parallel_processing(parallel_processor.clone()),
-            embedding_generator: EmbeddingGenerator::with_parallel_processing(
-                128,
-                parallel_processor.clone(),
-            ),
+            vector_store,
+            embedding_generator,
             config: retrieval_config,
             parallel_processor: Some(parallel_processor),
             #[cfg(feature = "pagerank")]
             pagerank_retriever: None,
             enriched_retriever: None,
+            #[cfg(feature = "lazygraphrag")]
+            concept_filtering_enabled: false,
         })
     }
 
     /// Index a knowledge graph for retrieval
-    pub fn index_graph(&mut self, graph: &KnowledgeGraph) -> Result<()> {
+    pub async fn index_graph(&self, graph: &KnowledgeGraph) -> Result<()> {
         // Index entity embeddings
         for entity in graph.entities() {
             if let Some(embedding) = &entity.embedding {
                 let id = format!("entity:{}", entity.id);
-                self.vector_index.add_vector(id, embedding.clone())?;
+                // Simple empty metadata for now, could add name/type
+                self.vector_store
+                    .add_vector(&id, embedding.clone(), HashMap::new())
+                    .await?;
             }
         }
 
@@ -245,14 +272,14 @@ impl RetrievalSystem {
         for chunk in graph.chunks() {
             if let Some(embedding) = &chunk.embedding {
                 let id = format!("chunk:{}", chunk.id);
-                self.vector_index.add_vector(id, embedding.clone())?;
+                self.vector_store
+                    .add_vector(&id, embedding.clone(), HashMap::new())
+                    .await?;
             }
         }
 
-        // Build the vector index
-        if !self.vector_index.is_empty() {
-            self.vector_index.build_index()?;
-        }
+        // Initialize/Build if needed (some stores might need explicit commit)
+        self.vector_store.initialize().await?;
 
         Ok(())
     }
@@ -273,7 +300,7 @@ impl RetrievalSystem {
             parallel_enabled: self.parallel_processor.is_some(),
             #[cfg(not(feature = "parallel-processing"))]
             parallel_enabled: false,
-            cache_size: 2000,   // Large cache for better performance
+            cache_size: 2000, // Large cache for better performance
             sparse_threshold: 500,
             incremental_updates: true,
             simd_block_size: 64, // Optimized for modern CPUs
@@ -293,7 +320,7 @@ impl RetrievalSystem {
             .with_min_threshold(0.05);
 
         // Initialize vector index
-        pagerank_retriever.initialize_vector_index(graph)?;
+        // pagerank_retriever.initialize_vector_index(graph)?;
 
         // Pre-compute global PageRank scores for faster queries
         pagerank_retriever.precompute_global_pagerank(graph)?;
@@ -329,7 +356,8 @@ impl RetrievalSystem {
             pagerank_retriever.search_with_pagerank(query, graph, max_results)
         } else {
             Err(crate::core::GraphRAGError::Retrieval {
-                message: "PageRank retriever not initialized. Call initialize_pagerank() first.".to_string(),
+                message: "PageRank retriever not initialized. Call initialize_pagerank() first."
+                    .to_string(),
             })
         }
     }
@@ -346,7 +374,8 @@ impl RetrievalSystem {
             pagerank_retriever.batch_search(queries, graph, max_results_per_query)
         } else {
             Err(crate::core::GraphRAGError::Retrieval {
-                message: "PageRank retriever not initialized. Call initialize_pagerank() first.".to_string(),
+                message: "PageRank retriever not initialized. Call initialize_pagerank() first."
+                    .to_string(),
             })
         }
     }
@@ -364,16 +393,17 @@ impl RetrievalSystem {
     }
 
     /// Advanced hybrid query with strategy selection and hierarchical integration
-    pub fn hybrid_query(
+    pub async fn hybrid_query(
         &mut self,
         query: &str,
         graph: &KnowledgeGraph,
     ) -> Result<Vec<SearchResult>> {
         self.hybrid_query_with_trees(query, graph, &HashMap::new())
+            .await
     }
 
     /// Hybrid query with access to document trees for hierarchical retrieval
-    pub fn hybrid_query_with_trees(
+    pub async fn hybrid_query_with_trees(
         &mut self,
         query: &str,
         graph: &KnowledgeGraph,
@@ -386,13 +416,9 @@ impl RetrievalSystem {
         let query_embedding = self.embedding_generator.generate_embedding(query);
 
         // 3. Execute multi-strategy retrieval based on analysis
-        let mut results = self.execute_adaptive_retrieval(
-            query,
-            &query_embedding,
-            graph,
-            document_trees,
-            &analysis,
-        )?;
+        let mut results = self
+            .execute_adaptive_retrieval(query, &query_embedding, graph, document_trees, &analysis)
+            .await?;
 
         // 4. Apply enriched metadata-aware boosting and filtering if enabled
         if let Some(enriched_retriever) = &self.enriched_retriever {
@@ -407,7 +433,7 @@ impl RetrievalSystem {
     }
 
     /// Query the system using hybrid retrieval (vector + graph) - legacy method
-    pub fn legacy_hybrid_query(
+    pub async fn legacy_hybrid_query(
         &mut self,
         query: &str,
         graph: &KnowledgeGraph,
@@ -416,24 +442,24 @@ impl RetrievalSystem {
         let query_embedding = self.embedding_generator.generate_embedding(query);
 
         // 2. Perform comprehensive search
-        let results = self.comprehensive_search(&query_embedding, graph)?;
+        let results = self.comprehensive_search(&query_embedding, graph).await?;
 
         Ok(results)
     }
 
     /// Add embeddings to chunks and entities in the graph with parallel processing
-    pub fn add_embeddings_to_graph(&mut self, graph: &mut KnowledgeGraph) -> Result<()> {
+    pub async fn add_embeddings_to_graph(&mut self, graph: &mut KnowledgeGraph) -> Result<()> {
         #[cfg(feature = "parallel-processing")]
         if let Some(processor) = self.parallel_processor.clone() {
-            return self.add_embeddings_parallel(graph, &processor);
+            return self.add_embeddings_parallel(graph, &processor).await;
         }
 
-        self.add_embeddings_sequential(graph)
+        self.add_embeddings_sequential(graph).await
     }
 
     /// Parallel embedding generation with proper error handling and work-stealing
     #[cfg(feature = "parallel-processing")]
-    fn add_embeddings_parallel(
+    async fn add_embeddings_parallel(
         &mut self,
         graph: &mut KnowledgeGraph,
         processor: &ParallelProcessor,
@@ -463,7 +489,9 @@ impl RetrievalSystem {
 
         let total_items = chunk_texts.len() + entity_texts.len();
         if processor.should_use_parallel(total_items) {
-            tracing::debug!("Processing {total_items} embeddings with enhanced sequential approach");
+            tracing::debug!(
+                "Processing {total_items} embeddings with enhanced sequential approach"
+            );
         }
 
         // Process chunks
@@ -483,13 +511,13 @@ impl RetrievalSystem {
         }
 
         // Re-index the graph with new embeddings
-        self.index_graph(graph)?;
+        self.index_graph(graph).await?;
 
         Ok(())
     }
 
     /// Sequential embedding generation (fallback)
-    fn add_embeddings_sequential(&mut self, graph: &mut KnowledgeGraph) -> Result<()> {
+    async fn add_embeddings_sequential(&mut self, graph: &mut KnowledgeGraph) -> Result<()> {
         // Debug: Check total counts first (uncomment for debugging)
         let _total_chunks = graph.chunks().count();
         let _total_entities = graph.entities().count();
@@ -517,46 +545,38 @@ impl RetrievalSystem {
             }
         }
 
-        tracing::debug!("Generated embeddings for {chunk_count} chunks and {entity_count} entities");
+        tracing::debug!(
+            "Generated embeddings for {chunk_count} chunks and {entity_count} entities"
+        );
 
         // Re-index the graph with new embeddings
-        self.index_graph(graph)?;
+        // Re-index the graph with new embeddings
+        self.index_graph(graph).await?;
 
         Ok(())
     }
 
-    /// Parallel query processing for multiple queries
-    pub fn batch_query(
-        &mut self,
-        queries: &[&str],
-        graph: &KnowledgeGraph,
-    ) -> Result<Vec<Vec<SearchResult>>> {
-        #[cfg(feature = "parallel-processing")]
-        if let Some(processor) = &self.parallel_processor.clone() {
-            return self.batch_query_parallel(queries, graph, processor);
-        }
-
-        // Sequential fallback
-        queries
-            .iter()
-            .map(|&query| self.hybrid_query(query, graph))
-            .collect()
-    }
-
     /// Parallel batch query processing with optimized workload distribution
-    #[cfg(feature = "parallel-processing")]
-    fn batch_query_parallel(
+    /// Batch process multiple queries efficiently
+    pub async fn batch_query(
         &mut self,
         queries: &[&str],
         graph: &KnowledgeGraph,
-        processor: &ParallelProcessor,
     ) -> Result<Vec<Vec<SearchResult>>> {
+        let processor =
+            self.parallel_processor
+                .as_ref()
+                .ok_or_else(|| crate::core::GraphRAGError::Config {
+                    message: "Parallel processor not initialized".to_string(),
+                })?;
+
         if !processor.should_use_parallel(queries.len()) {
             // Use sequential processing for small batches
-            return queries
-                .iter()
-                .map(|&query| self.hybrid_query(query, graph))
-                .collect();
+            let mut results = Vec::new();
+            for &query in queries {
+                results.push(self.hybrid_query(query, graph).await?);
+            }
+            return Ok(results);
         }
 
         #[cfg(feature = "parallel-processing")]
@@ -574,12 +594,12 @@ impl RetrievalSystem {
 
             let mut all_results = Vec::new();
             for &query in queries {
-                match self.hybrid_query(query, graph) {
+                match self.hybrid_query(query, graph).await {
                     Ok(results) => all_results.push(results),
                     Err(e) => {
                         tracing::warn!("Error processing query '{query}': {e}");
                         all_results.push(Vec::new());
-                    }
+                    },
                 }
             }
 
@@ -589,10 +609,11 @@ impl RetrievalSystem {
         #[cfg(not(feature = "parallel-processing"))]
         {
             // Sequential fallback when parallel processing is not available
-            queries
-                .iter()
-                .map(|&query| self.hybrid_query(query, graph))
-                .collect()
+            let mut results = Vec::new();
+            for &query in queries {
+                results.push(self.hybrid_query(query, graph).await?);
+            }
+            Ok(results)
         }
     }
 
@@ -684,7 +705,7 @@ impl RetrievalSystem {
     }
 
     /// Execute adaptive retrieval based on query analysis
-    pub fn execute_adaptive_retrieval(
+    pub async fn execute_adaptive_retrieval(
         &mut self,
         query: &str,
         query_embedding: &[f32],
@@ -700,7 +721,9 @@ impl RetrievalSystem {
 
         // 1. Vector similarity search (always included)
         if vector_weight > 0.0 {
-            let mut vector_results = self.vector_similarity_search(query_embedding, graph)?;
+            let mut vector_results = self
+                .vector_similarity_search(query_embedding, graph)
+                .await?;
             for result in &mut vector_results {
                 result.score *= vector_weight;
             }
@@ -712,7 +735,7 @@ impl RetrievalSystem {
             let mut graph_results = match analysis.query_type {
                 QueryType::EntityFocused | QueryType::Relationship => {
                     self.entity_centric_search(query_embedding, graph, &analysis.key_entities)?
-                }
+                },
                 _ => self.entity_based_search(query_embedding, graph)?,
             };
             for result in &mut graph_results {
@@ -749,7 +772,7 @@ impl RetrievalSystem {
     }
 
     /// Comprehensive search that combines multiple retrieval strategies (legacy)
-    pub fn comprehensive_search(
+    pub async fn comprehensive_search(
         &self,
         query_embedding: &[f32],
         graph: &KnowledgeGraph,
@@ -757,7 +780,9 @@ impl RetrievalSystem {
         let mut all_results = Vec::new();
 
         // 1. Vector similarity search
-        let vector_results = self.vector_similarity_search(query_embedding, graph)?;
+        let vector_results = self
+            .vector_similarity_search(query_embedding, graph)
+            .await?;
         all_results.extend(vector_results);
 
         // 2. Entity-based search
@@ -775,7 +800,7 @@ impl RetrievalSystem {
     }
 
     /// Vector similarity search
-    fn vector_similarity_search(
+    async fn vector_similarity_search(
         &self,
         query_embedding: &[f32],
         graph: &KnowledgeGraph,
@@ -783,11 +808,16 @@ impl RetrievalSystem {
         let mut results = Vec::new();
 
         // Search for similar vectors
+        // Note: vector_store returns SearchResult struct from store module, we need to convert or us it
+        // The store::SearchResult is slightly different from retrieval::SearchResult (metadata map vs specific fields)
         let similar_vectors = self
-            .vector_index
-            .search(query_embedding, self.config.top_k * 2)?;
+            .vector_store
+            .search(query_embedding, self.config.top_k * 2)
+            .await?;
 
-        for (id, similarity) in similar_vectors {
+        for store_result in similar_vectors {
+            let id = store_result.id;
+            let similarity = store_result.score;
             if similarity >= self.config.similarity_threshold {
                 let result = if id.starts_with("entity:") {
                     let entity_id = EntityId::new(id.strip_prefix("entity:").unwrap().to_string());
@@ -1091,18 +1121,18 @@ impl RetrievalSystem {
                     if result.result_type == ResultType::Entity {
                         result.score *= 1.2;
                     }
-                }
+                },
                 QueryType::Conceptual => {
                     if result.result_type == ResultType::HierarchicalSummary {
                         result.score *= 1.1;
                     }
-                }
+                },
                 QueryType::Relationship => {
                     if result.entities.len() > 1 {
                         result.score *= 1.15;
                     }
-                }
-                _ => {}
+                },
+                _ => {},
             }
 
             // Boost results that contain key entities
@@ -1438,19 +1468,26 @@ impl RetrievalSystem {
     }
 
     /// Vector-based search
-    pub fn vector_search(&mut self, query: &str, max_results: usize) -> Result<Vec<SearchResult>> {
+    pub async fn vector_search(
+        &mut self,
+        query: &str,
+        max_results: usize,
+    ) -> Result<Vec<SearchResult>> {
         let query_embedding = self.embedding_generator.generate_embedding(query);
-        let similar_vectors = self.vector_index.search(&query_embedding, max_results)?;
+        let similar_vectors = self
+            .vector_store
+            .search(&query_embedding, max_results)
+            .await?;
 
         let mut results = Vec::new();
-        for (id, score) in similar_vectors {
+        for store_result in similar_vectors {
             results.push(SearchResult {
-                id: id.clone(),
-                content: format!("Vector result for: {id}"),
-                score,
+                id: store_result.id.clone(),
+                content: format!("Vector result for: {}", store_result.id),
+                score: store_result.score,
                 result_type: ResultType::Chunk,
                 entities: Vec::new(),
-                source_chunks: vec![id],
+                source_chunks: vec![store_result.id],
             });
         }
 
@@ -1511,12 +1548,12 @@ impl RetrievalSystem {
 
     /// Get retrieval statistics
     pub fn get_statistics(&self) -> RetrievalStatistics {
-        let vector_stats = self.vector_index.statistics();
+        // let vector_stats = self.vector_index.statistics();
 
         RetrievalStatistics {
-            indexed_vectors: vector_stats.vector_count,
-            vector_dimension: vector_stats.dimension,
-            index_built: vector_stats.index_built,
+            indexed_vectors: 0,  // vector_stats.vector_count,
+            vector_dimension: 0, // vector_stats.dimension,
+            index_built: false,  // vector_stats.index_built,
             config: self.config.clone(),
         }
     }
@@ -1557,14 +1594,14 @@ impl RetrievalSystem {
         };
 
         // Add vector index statistics
-        let vector_stats = self.vector_index.statistics();
+        // let vector_stats = self.vector_index.statistics();
         json_data["vector_index"] = json::object! {
-            "vector_count" => vector_stats.vector_count,
-            "dimension" => vector_stats.dimension,
-            "index_built" => vector_stats.index_built,
-            "min_norm" => vector_stats.min_norm,
-            "max_norm" => vector_stats.max_norm,
-            "avg_norm" => vector_stats.avg_norm
+            "vector_count" => 0, // vector_stats.vector_count,
+            "dimension" => 0, // vector_stats.dimension,
+            "index_built" => false, // vector_stats.index_built,
+            "min_norm" => 0.0, // vector_stats.min_norm,
+            "max_norm" => 0.0, // vector_stats.max_norm,
+            "avg_norm" => 0.0 // vector_stats.avg_norm
         };
 
         // Add embedding generator info
