@@ -572,7 +572,7 @@ GraphRAG-rs implements cutting-edge 2024 research in retrieval-augmented generat
 - **Incremental Updates**: Zero-downtime real-time graph processing with ACID-like guarantees
 - **Intelligent Caching**: LLM response cache with 80%+ hit rates and 6x cost reduction
 - **Hybrid Retrieval**: Combines semantic, keyword, BM25, and graph-based search strategies
-- **ROGRAG Decomposition**: Advanced query decomposition with 60%→75% accuracy boost
+- **ROGRAG Decomposition**: Advanced query decomposition with 60%→75% accuracy boost, temporal and causal reasoning
 
 ### Architecture & Quality
 - **Modular Workspace**: 4 publishable crates (core, wasm, leptos, server)
@@ -829,7 +829,7 @@ A: OpenAI support is planned. Currently works with Ollama's local models.
 - [x] **LightRAG**: Dual-level retrieval (6000x token reduction)
 - [x] **Incremental Updates**: Zero-downtime graph processing
 - [x] **Intelligent Caching**: 80%+ hit rates, 6x cost reduction
-- [x] **ROGRAG**: Query decomposition (60%→75% accuracy)
+- [x] **ROGRAG**: Query decomposition (60%→75% accuracy) + temporal/causal reasoning
 - [x] **Hybrid Retrieval**: Semantic + keyword + BM25 + graph
 - [x] **Parallel Processing**: Multi-threaded document processing
 - [x] **Configuration System**: Complete TOML-driven pipeline
@@ -879,7 +879,8 @@ A: OpenAI support is planned. Currently works with Ollama's local models.
 **Analytics & Insights:**
 - [ ] Graph analytics (community detection, centrality)
 - [ ] Entity clustering and relationships
-- [ ] Temporal analysis of knowledge evolution
+- [x] **Temporal reasoning**: Event timeline extraction and narrative ordering
+- [x] **Causal reasoning**: Cause-effect chain discovery with confidence ranking
 - [ ] Quality metrics and confidence scoring
 
 **Data Integration:**

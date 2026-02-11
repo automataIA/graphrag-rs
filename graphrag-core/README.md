@@ -249,6 +249,35 @@ enable_lightrag = true  # 6000x token reduction!
 enable_pagerank = true  # 27x performance boost
 ```
 
+### RoGRAG (Logic Form Reasoning)
+
+Advanced query processing with temporal and causal reasoning:
+
+```toml
+[features]
+rograg = []  # Enable logic form query decomposition
+```
+
+**Capabilities:**
+- **Query Decomposition**: Break complex queries into logic forms (60%→75% accuracy)
+- **Temporal Reasoning**: Extract event timelines from relationships and metadata
+  - Temporal relationship detection (happened_before, occurred_during)
+  - Date/time extraction from chunk metadata and content
+  - Narrative ordering using document position heuristics
+- **Causal Reasoning**: Discover cause-effect relationships with confidence ranking
+  - Direct causal relationship identification (causes, leads_to, results_in)
+  - Causal chain discovery using DFS traversal (max depth 3)
+  - Co-occurrence analysis with causal keyword detection
+  - Confidence-based ranking of causal explanations
+
+**Supported Query Types:**
+- Identity: "What is X?"
+- Relationships: "How are X and Y related?"
+- Properties: "What does X have?"
+- Temporal: "When did X happen?"
+- Causal: "Why did X cause Y?"
+- Comparison: "Compare X and Y"
+
 ### Intelligent Caching
 
 ```toml
