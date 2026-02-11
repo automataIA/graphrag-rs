@@ -330,21 +330,105 @@ impl LanceVectorStore {
     #[cfg(feature = "lancedb")]
     pub async fn store_embeddings_batch(
         &self,
-        _embeddings: Vec<(String, Vec<f32>)>,
+        embeddings: Vec<(String, Vec<f32>)>,
     ) -> Result<()> {
-        // TODO: Implement batch storage
-        Err(GraphRAGError::Config {
-            message: "LanceDB batch storage not yet implemented".to_string(),
-        })
+        if embeddings.is_empty() {
+            return Ok(());
+        }
+
+        // Validate all embedding dimensions
+        for (id, embedding) in &embeddings {
+            if embedding.len() != self.config.dimension {
+                return Err(GraphRAGError::Config {
+                    message: format!(
+                        "Embedding dimension mismatch for '{}': expected {}, got {}",
+                        id,
+                        self.config.dimension,
+                        embedding.len()
+                    ),
+                });
+            }
+        }
+
+        // Create Arrow arrays for batch
+        let ids: Vec<&str> = embeddings.iter().map(|(id, _)| id.as_str()).collect();
+        let id_array = Arc::new(StringArray::from(ids));
+
+        let vectors: Vec<Option<Vec<Option<f32>>>> = embeddings
+            .iter()
+            .map(|(_, vec)| Some(vec.iter().map(|&v| Some(v)).collect()))
+            .collect();
+
+        let vector_array = Arc::new(
+            FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
+                vectors,
+                self.config.dimension as i32,
+            ),
+        );
+
+        // Create RecordBatch
+        let schema = self.table.schema().await.map_err(|e| GraphRAGError::Config {
+            message: format!("Failed to get table schema: {}", e),
+        })?;
+
+        let batch = RecordBatch::try_new(schema.clone(), vec![id_array, vector_array])
+            .map_err(|e| GraphRAGError::Config {
+                message: format!("Failed to create record batch: {}", e),
+            })?;
+
+        // Add to table
+        let batches = RecordBatchIterator::new(vec![Ok(batch)].into_iter(), schema);
+
+        self.table
+            .add(Box::new(batches))
+            .execute()
+            .await
+            .map_err(|e| GraphRAGError::Config {
+                message: format!("Failed to store embeddings batch: {}", e),
+            })?;
+
+        #[cfg(feature = "tracing")]
+        tracing::debug!("Stored {} embeddings in batch", embeddings.len());
+
+        Ok(())
     }
 
     /// Get embedding by ID
     #[cfg(feature = "lancedb")]
-    pub async fn get_embedding(&self, _id: &str) -> Result<Option<Vec<f32>>> {
-        // TODO: Implement embedding retrieval
-        Err(GraphRAGError::Config {
-            message: "LanceDB embedding retrieval not yet implemented".to_string(),
-        })
+    pub async fn get_embedding(&self, id: &str) -> Result<Option<Vec<f32>>> {
+        use arrow_array::cast::AsArray;
+        use futures::stream::TryStreamExt;
+
+        // Query table by ID using SQL filter
+        let results = self
+            .table
+            .query()
+            .only_if(format!("id = '{}'", id))
+            .execute()
+            .await
+            .map_err(|e| GraphRAGError::VectorSearch {
+                message: format!("Failed to query by ID: {}", e),
+            })?
+            .try_collect::<Vec<_>>()
+            .await
+            .map_err(|e| GraphRAGError::VectorSearch {
+                message: format!("Failed to collect results: {}", e),
+            })?;
+
+        // Extract embedding from first result
+        for batch in results {
+            if batch.num_rows() == 0 {
+                continue;
+            }
+
+            let vector_array = batch.column(1).as_fixed_size_list();
+
+            if let Some(values) = vector_array.value(0).as_primitive_opt::<Float32Type>() {
+                return Ok(Some(values.values().to_vec()));
+            }
+        }
+
+        Ok(None)
     }
 
     /// Count total embeddings
