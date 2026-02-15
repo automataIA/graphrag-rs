@@ -1,9 +1,10 @@
 //! GraphRAG builder module
 //!
-//! This module provides a builder pattern for constructing GraphRAG instances.
+//! This module provides builder patterns for constructing GraphRAG instances.
 //!
-//! ## Example
+//! ## Two Builder Options
 //!
+//! ### 1. Simple Builder (GraphRAGBuilder) - Flexible, runtime validation
 //! ```no_run
 //! use graphrag_core::builder::GraphRAGBuilder;
 //!
@@ -11,15 +12,267 @@
 //! let graphrag = GraphRAGBuilder::new()
 //!     .with_output_dir("./my_output")
 //!     .with_chunk_size(512)
-//!     .with_ollama_base_url("http://localhost:11434")
-//!     .with_embedding_model("nomic-embed-text:latest")
 //!     .build()?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### 2. Typed Builder (TypedBuilder) - Compile-time validation
+//! ```no_run
+//! use graphrag_core::builder::TypedBuilder;
+//!
+//! # fn example() -> graphrag_core::Result<()> {
+//! // This won't compile until you configure required settings!
+//! let graphrag = TypedBuilder::new()
+//!     .with_output_dir("./my_output")  // Required - transitions state
+//!     .with_ollama()                    // Required - transitions state
+//!     .with_chunk_size(512)             // Optional
+//!     .build()?;                        // Only available when properly configured
 //! # Ok(())
 //! # }
 //! ```
 
 use crate::config::Config;
 use crate::core::Result;
+use std::marker::PhantomData;
+
+// ============================================================================
+// TYPE-STATE BUILDER - Compile-time validation
+// ============================================================================
+
+/// Marker: Output directory not configured
+pub struct NoOutput;
+/// Marker: Output directory is configured
+pub struct HasOutput;
+
+/// Marker: LLM/embedding not configured
+pub struct NoLlm;
+/// Marker: LLM/embedding is configured (Ollama, hash, or other)
+pub struct HasLlm;
+
+/// Typed builder with compile-time validation
+///
+/// Uses Rust's type system to ensure required configuration is set before building.
+/// The builder transitions through states as you configure it:
+///
+/// ```text
+/// TypedBuilder<NoOutput, NoLlm>  -- with_output_dir() -->  TypedBuilder<HasOutput, NoLlm>
+/// TypedBuilder<HasOutput, NoLlm> -- with_ollama()     -->  TypedBuilder<HasOutput, HasLlm>
+/// TypedBuilder<HasOutput, HasLlm> can call .build()
+/// ```
+///
+/// # Example
+/// ```no_run
+/// use graphrag_core::builder::TypedBuilder;
+///
+/// # fn example() -> graphrag_core::Result<()> {
+/// // Configure required settings to unlock build()
+/// let graphrag = TypedBuilder::new()
+///     .with_output_dir("./output")
+///     .with_ollama()  // or .with_hash_embeddings()
+///     .with_chunk_size(512)
+///     .build()?;
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug)]
+pub struct TypedBuilder<Output = NoOutput, Llm = NoLlm> {
+    config: Config,
+    _output: PhantomData<Output>,
+    _llm: PhantomData<Llm>,
+}
+
+impl TypedBuilder<NoOutput, NoLlm> {
+    /// Create a new typed builder
+    ///
+    /// Starts in unconfigured state - you must call:
+    /// - `with_output_dir()` to set the output directory
+    /// - `with_ollama()` or `with_hash_embeddings()` to configure LLM/embeddings
+    pub fn new() -> Self {
+        Self {
+            config: Config::default(),
+            _output: PhantomData,
+            _llm: PhantomData,
+        }
+    }
+}
+
+impl Default for TypedBuilder<NoOutput, NoLlm> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// Output directory configuration - transitions NoOutput -> HasOutput
+impl<Llm> TypedBuilder<NoOutput, Llm> {
+    /// Set the output directory (required)
+    ///
+    /// This transitions the builder to the `HasOutput` state.
+    pub fn with_output_dir(mut self, dir: &str) -> TypedBuilder<HasOutput, Llm> {
+        self.config.output_dir = dir.to_string();
+        TypedBuilder {
+            config: self.config,
+            _output: PhantomData,
+            _llm: PhantomData,
+        }
+    }
+}
+
+// LLM configuration - transitions NoLlm -> HasLlm
+impl<Output> TypedBuilder<Output, NoLlm> {
+    /// Configure for Ollama LLM (enables semantic extraction)
+    ///
+    /// This transitions the builder to the `HasLlm` state.
+    /// Sets up Ollama with default localhost:11434 configuration.
+    pub fn with_ollama(mut self) -> TypedBuilder<Output, HasLlm> {
+        self.config.ollama.enabled = true;
+        self.config.ollama.host = "localhost".to_string();
+        self.config.ollama.port = 11434;
+        self.config.embeddings.backend = "ollama".to_string();
+        TypedBuilder {
+            config: self.config,
+            _output: PhantomData,
+            _llm: PhantomData,
+        }
+    }
+
+    /// Configure for Ollama with custom settings
+    pub fn with_ollama_custom(
+        mut self,
+        host: &str,
+        port: u16,
+        chat_model: &str,
+    ) -> TypedBuilder<Output, HasLlm> {
+        self.config.ollama.enabled = true;
+        self.config.ollama.host = host.to_string();
+        self.config.ollama.port = port;
+        self.config.ollama.chat_model = chat_model.to_string();
+        self.config.embeddings.backend = "ollama".to_string();
+        TypedBuilder {
+            config: self.config,
+            _output: PhantomData,
+            _llm: PhantomData,
+        }
+    }
+
+    /// Configure for hash-based embeddings (no LLM required, offline)
+    ///
+    /// This transitions the builder to the `HasLlm` state.
+    /// Uses deterministic hash embeddings - fast but less semantic understanding.
+    pub fn with_hash_embeddings(mut self) -> TypedBuilder<Output, HasLlm> {
+        self.config.ollama.enabled = false;
+        self.config.embeddings.backend = "hash".to_string();
+        self.config.approach = "algorithmic".to_string();
+        TypedBuilder {
+            config: self.config,
+            _output: PhantomData,
+            _llm: PhantomData,
+        }
+    }
+
+    /// Configure for Candle neural embeddings (local, no API needed)
+    pub fn with_candle_embeddings(mut self) -> TypedBuilder<Output, HasLlm> {
+        self.config.embeddings.backend = "candle".to_string();
+        TypedBuilder {
+            config: self.config,
+            _output: PhantomData,
+            _llm: PhantomData,
+        }
+    }
+}
+
+// Optional configuration - available in any state
+impl<Output, Llm> TypedBuilder<Output, Llm> {
+    /// Set the chunk size for text processing (optional)
+    pub fn with_chunk_size(mut self, size: usize) -> Self {
+        self.config.chunk_size = size;
+        self.config.text.chunk_size = size;
+        self
+    }
+
+    /// Set the chunk overlap (optional)
+    pub fn with_chunk_overlap(mut self, overlap: usize) -> Self {
+        self.config.chunk_overlap = overlap;
+        self.config.text.chunk_overlap = overlap;
+        self
+    }
+
+    /// Set the top-k results for retrieval (optional)
+    pub fn with_top_k(mut self, k: usize) -> Self {
+        self.config.top_k_results = Some(k);
+        self.config.retrieval.top_k = k;
+        self
+    }
+
+    /// Set the similarity threshold (optional)
+    pub fn with_similarity_threshold(mut self, threshold: f32) -> Self {
+        self.config.similarity_threshold = Some(threshold);
+        self.config.graph.similarity_threshold = threshold;
+        self
+    }
+
+    /// Set the pipeline approach (optional)
+    /// Options: "semantic", "algorithmic", "hybrid"
+    pub fn with_approach(mut self, approach: &str) -> Self {
+        self.config.approach = approach.to_string();
+        self
+    }
+
+    /// Enable/disable parallel processing (optional)
+    pub fn with_parallel(mut self, enabled: bool) -> Self {
+        self.config.parallel.enabled = enabled;
+        self
+    }
+
+    /// Enable entity gleaning with LLM (optional, requires Ollama)
+    pub fn with_gleaning(mut self, max_rounds: usize) -> Self {
+        self.config.entities.use_gleaning = true;
+        self.config.entities.max_gleaning_rounds = max_rounds;
+        self
+    }
+
+    /// Get a reference to the current configuration
+    pub fn config(&self) -> &Config {
+        &self.config
+    }
+}
+
+// Build method - only available when fully configured
+impl TypedBuilder<HasOutput, HasLlm> {
+    /// Build the GraphRAG instance
+    ///
+    /// This method is only available when both output directory and
+    /// LLM/embedding backend are configured.
+    ///
+    /// # Example
+    /// ```no_run
+    /// use graphrag_core::builder::TypedBuilder;
+    ///
+    /// # fn example() -> graphrag_core::Result<()> {
+    /// let graphrag = TypedBuilder::new()
+    ///     .with_output_dir("./output")
+    ///     .with_ollama()
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn build(self) -> Result<crate::GraphRAG> {
+        crate::GraphRAG::new(self.config)
+    }
+
+    /// Build and initialize the GraphRAG instance
+    ///
+    /// Equivalent to calling `build()?.initialize()?`
+    pub fn build_and_init(self) -> Result<crate::GraphRAG> {
+        let mut graphrag = crate::GraphRAG::new(self.config)?;
+        graphrag.initialize()?;
+        Ok(graphrag)
+    }
+}
+
+// ============================================================================
+// SIMPLE BUILDER - Runtime validation (backward compatible)
+// ============================================================================
 
 /// Builder for GraphRAG instances
 ///
@@ -454,5 +707,105 @@ mod tests {
         assert_eq!(builder.config().chunk_overlap, 32);
         assert_eq!(builder.config().top_k_results, Some(15));
         assert_eq!(builder.config().approach, "hybrid");
+    }
+
+    // ============================================================================
+    // TypedBuilder Tests - Compile-time validation
+    // ============================================================================
+
+    #[test]
+    fn test_typed_builder_state_transitions() {
+        // Start unconfigured
+        let builder = TypedBuilder::new();
+
+        // Add output dir - transitions to HasOutput
+        let builder = builder.with_output_dir("./test_output");
+        assert_eq!(builder.config().output_dir, "./test_output");
+
+        // Add Ollama - transitions to HasLlm
+        let builder = builder.with_ollama();
+        assert!(builder.config().ollama.enabled);
+        assert_eq!(builder.config().ollama.host, "localhost");
+        assert_eq!(builder.config().ollama.port, 11434);
+    }
+
+    #[test]
+    fn test_typed_builder_with_hash_embeddings() {
+        let builder = TypedBuilder::new()
+            .with_output_dir("./test")
+            .with_hash_embeddings();
+
+        assert!(!builder.config().ollama.enabled);
+        assert_eq!(builder.config().embeddings.backend, "hash");
+        assert_eq!(builder.config().approach, "algorithmic");
+    }
+
+    #[test]
+    fn test_typed_builder_with_ollama_custom() {
+        let builder = TypedBuilder::new()
+            .with_output_dir("./test")
+            .with_ollama_custom("my-server", 8080, "mistral:latest");
+
+        assert!(builder.config().ollama.enabled);
+        assert_eq!(builder.config().ollama.host, "my-server");
+        assert_eq!(builder.config().ollama.port, 8080);
+        assert_eq!(builder.config().ollama.chat_model, "mistral:latest");
+    }
+
+    #[test]
+    fn test_typed_builder_with_candle() {
+        let builder = TypedBuilder::new()
+            .with_output_dir("./test")
+            .with_candle_embeddings();
+
+        assert_eq!(builder.config().embeddings.backend, "candle");
+    }
+
+    #[test]
+    fn test_typed_builder_optional_methods() {
+        let builder = TypedBuilder::new()
+            .with_chunk_size(512)
+            .with_chunk_overlap(64)
+            .with_top_k(20)
+            .with_similarity_threshold(0.75)
+            .with_approach("hybrid")
+            .with_parallel(true)
+            .with_gleaning(3);
+
+        assert_eq!(builder.config().chunk_size, 512);
+        assert_eq!(builder.config().chunk_overlap, 64);
+        assert_eq!(builder.config().top_k_results, Some(20));
+        assert_eq!(builder.config().similarity_threshold, Some(0.75));
+        assert_eq!(builder.config().approach, "hybrid");
+        assert!(builder.config().parallel.enabled);
+        assert!(builder.config().entities.use_gleaning);
+        assert_eq!(builder.config().entities.max_gleaning_rounds, 3);
+    }
+
+    #[test]
+    fn test_typed_builder_order_independence() {
+        // Test that optional methods can be called in any order before required ones
+        let builder1 = TypedBuilder::new()
+            .with_chunk_size(512)
+            .with_output_dir("./test1")
+            .with_ollama();
+
+        let builder2 = TypedBuilder::new()
+            .with_output_dir("./test2")
+            .with_chunk_size(512)
+            .with_ollama();
+
+        assert_eq!(builder1.config().chunk_size, builder2.config().chunk_size);
+    }
+
+    #[test]
+    fn test_typed_builder_llm_before_output() {
+        // Can configure LLM before output directory
+        let builder = TypedBuilder::new()
+            .with_ollama()  // LLM first
+            .with_output_dir("./test");  // Output second
+
+        assert!(builder.config().ollama.enabled);
+        assert_eq!(builder.config().output_dir, "./test");
     }
 }

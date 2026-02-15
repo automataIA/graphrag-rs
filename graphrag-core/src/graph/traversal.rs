@@ -616,6 +616,10 @@ mod tests {
             relation_type: "RELATED_TO".to_string(),
             confidence: 0.8,
             context: Vec::new(),
+            embedding: None,
+            temporal_type: None,
+            temporal_range: None,
+            causal_strength: None,
         });
 
         let _ = graph.add_relationship(Relationship {
@@ -624,6 +628,10 @@ mod tests {
             relation_type: "RELATED_TO".to_string(),
             confidence: 0.9,
             context: Vec::new(),
+            embedding: None,
+            temporal_type: None,
+            temporal_range: None,
+            causal_strength: None,
         });
 
         let _ = graph.add_relationship(Relationship {
@@ -632,6 +640,10 @@ mod tests {
             relation_type: "RELATED_TO".to_string(),
             confidence: 0.7,
             context: Vec::new(),
+            embedding: None,
+            temporal_type: None,
+            temporal_range: None,
+            causal_strength: None,
         });
 
         graph

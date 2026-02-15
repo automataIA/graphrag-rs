@@ -1,0 +1,210 @@
+{
+  "mode": {
+    "approach": "algorithmic"
+  },
+  "general": {
+    "output_dir": "/home/dio/graphrag-rs/tests/e2e/results/output_algo_hash_large__symposium",
+    "log_level": "info",
+    "max_threads": 4
+  },
+  "pipeline": {
+    "workflows": [
+      "extract_text",
+      "extract_entities",
+      "build_graph",
+      "detect_communities"
+    ],
+    "parallel_execution": true,
+    "text_extraction": {
+      "chunk_size": 800,
+      "chunk_overlap": 300,
+      "min_chunk_size": 100,
+      "clean_control_chars": true,
+      "normalize_whitespace": true
+    },
+    "entity_extraction": {
+      "model_name": "none",
+      "temperature": 0.0,
+      "max_tokens": 1200,
+      "entity_types": ["PERSON", "CONCEPT", "LOCATION", "OBJECT", "EVENT", "RELATIONSHIP"],
+      "confidence_threshold": 0.6
+    },
+    "graph_building": {
+      "relation_scorer": "cosine_similarity",
+      "min_relation_score": 0.4,
+      "max_connections_per_node": 20,
+      "bidirectional_relations": true
+    },
+    "community_detection": {
+      "algorithm": "leiden",
+      "resolution": 0.8,
+      "min_community_size": 2,
+      "max_community_size": 20
+    }
+  },
+  "text_processing": {
+    "enabled": true,
+    "chunk_size": 800,
+    "chunk_overlap": 300,
+    "min_chunk_size": 100,
+    "max_chunk_size": 1500,
+    "normalize_whitespace": true,
+    "remove_artifacts": true,
+    "extract_keywords": true,
+    "keyword_min_score": 0.15,
+    "enrichment": {
+      "enabled": true,
+      "auto_detect_format": true,
+      "parser_type": "auto",
+      "extract_keywords": true,
+      "max_keywords_per_chunk": 5,
+      "use_tfidf": true,
+      "generate_summaries": true,
+      "min_chunk_length_for_summary": 150,
+      "max_summary_length": 150,
+      "extract_chapter": true,
+      "extract_section": true,
+      "extract_position": true,
+      "calculate_confidence": true,
+      "detect_headings": true,
+      "detect_numbering": true,
+      "detect_underlines": true,
+      "detect_all_caps": true
+    }
+  },
+  "entity_extraction": {
+    "enabled": true,
+    "min_confidence": 0.6,
+    "use_gleaning": false,
+    "max_gleaning_rounds": 0,
+    "gleaning_improvement_threshold": 0.08,
+    "semantic_merging": true,
+    "merge_similarity_threshold": 0.85,
+    "automatic_linking": true,
+    "linking_confidence_threshold": 0.7
+  },
+  "graph_construction": {
+    "enabled": true,
+    "incremental_updates": true,
+    "use_pagerank": true,
+    "pagerank_damping": 0.85,
+    "pagerank_iterations": 50,
+    "pagerank_convergence": 0.0001,
+    "extract_relationships": true,
+    "relationship_confidence_threshold": 0.5
+  },
+  "vector_processing": {
+    "enabled": true,
+    "embedding_model": "none",
+    "embedding_dimensions": 384,
+    "use_hnsw_index": true,
+    "hnsw_ef_construction": 200,
+    "hnsw_m": 16,
+    "similarity_threshold": 0.7
+  },
+  "query_processing": {
+    "enabled": true,
+    "use_advanced_pipeline": true,
+    "use_intent_classification": true,
+    "use_concept_extraction": true,
+    "use_temporal_parsing": false,
+    "confidence_threshold": 0.5
+  },
+  "ollama": {
+    "enabled": false,
+    "host": "http://localhost",
+    "port": 11434,
+    "chat_model": "none",
+    "embedding_model": "none",
+    "timeout_seconds": 120,
+    "max_retries": 3,
+    "fallback_to_hash": true,
+    "max_tokens": 1200,
+    "temperature": 0.0,
+    "generation": {
+      "temperature": 0.0,
+      "top_p": 0.9,
+      "max_tokens": 1500,
+      "stream": false
+    }
+  },
+  "performance": {
+    "batch_processing": true,
+    "batch_size": 50,
+    "worker_threads": 4,
+    "memory_limit_mb": 4096,
+    "cache_embeddings": true
+  },
+  "enhancements": {
+    "enabled": true,
+    "query_analysis": {
+      "enabled": true,
+      "min_confidence": 0.6,
+      "enable_strategy_suggestion": true,
+      "enable_keyword_analysis": true,
+      "enable_complexity_scoring": true
+    },
+    "adaptive_retrieval": {
+      "enabled": true,
+      "use_query_analysis": true,
+      "enable_cross_strategy_fusion": true,
+      "diversity_threshold": 0.8,
+      "enable_diversity_selection": true,
+      "enable_confidence_weighting": true
+    },
+    "lightrag": {
+      "enabled": false,
+      "max_keywords": 15,
+      "high_level_weight": 0.6,
+      "low_level_weight": 0.4,
+      "merge_strategy": "weighted",
+      "language": "English",
+      "enable_cache": true
+    },
+    "leiden": {
+      "enabled": true,
+      "max_cluster_size": 15,
+      "use_lcc": true,
+      "seed": 42,
+      "resolution": 0.8,
+      "max_levels": 4,
+      "min_improvement": 0.001,
+      "enable_hierarchical": true,
+      "generate_summaries": true,
+      "max_summary_length": 5,
+      "use_extractive_summary": true,
+      "adaptive_routing": {
+        "enabled": true,
+        "default_level": 1,
+        "keyword_weight": 0.5,
+        "length_weight": 0.3,
+        "entity_weight": 0.2
+      }
+    },
+    "cross_encoder": {
+      "enabled": false,
+      "model_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+      "max_length": 512,
+      "batch_size": 32,
+      "top_k": 10,
+      "min_confidence": 0.0,
+      "normalize_scores": true
+    },
+    "enhanced_function_registry": {
+      "enabled": false,
+      "categorization": false,
+      "usage_statistics": false,
+      "dynamic_registration": false,
+      "performance_monitoring": false,
+      "recommendation_system": false
+    },
+    "performance_benchmarking": {
+      "enabled": false,
+      "auto_recommendations": false,
+      "comprehensive_testing": false,
+      "iterations": 1,
+      "include_parallel": false,
+      "enable_memory_profiling": false
+    }
+  }
+}

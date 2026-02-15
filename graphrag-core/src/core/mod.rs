@@ -14,11 +14,27 @@ pub mod registry;
 #[cfg(feature = "async")]
 pub mod traits;
 
+// Ollama adapters require both async and ollama features
+#[cfg(all(feature = "async", feature = "ollama"))]
+pub mod ollama_adapters;
+
+// Entity extraction adapters require async feature
+#[cfg(feature = "async")]
+pub mod entity_adapters;
+
+// Retrieval system adapters require async feature
+#[cfg(feature = "async")]
+pub mod retrieval_adapters;
+
+// Test utilities for mock implementations
+#[cfg(feature = "async")]
+pub mod test_utils;
+
 #[cfg(test)]
 pub mod test_traits;
 
 // Re-export key items for convenience
-pub use error::{ErrorContext, ErrorSeverity, GraphRAGError, Result};
+pub use error::{ErrorContext, ErrorSeverity, ErrorSuggestion, GraphRAGError, Result};
 pub use metadata::ChunkMetadata;
 
 #[cfg(feature = "async")]
@@ -214,6 +230,17 @@ pub struct Entity {
     pub mentions: Vec<EntityMention>,
     /// Optional vector embedding for the entity
     pub embedding: Option<Vec<f32>>,
+
+    // Temporal fields (Phase 1.2 - Advanced GraphRAG)
+    /// First time this entity was mentioned (Unix timestamp)
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub first_mentioned: Option<i64>,
+    /// Last time this entity was mentioned (Unix timestamp)
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub last_mentioned: Option<i64>,
+    /// Temporal validity range (when the entity exists in the real world)
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub temporal_validity: Option<crate::graph::temporal::TemporalRange>,
 }
 
 /// A mention of an entity in text
@@ -242,15 +269,94 @@ pub struct Relationship {
     pub confidence: f32,
     /// Chunk IDs providing context for this relationship
     pub context: Vec<ChunkId>,
+
+    /// Optional embedding vector for semantic similarity matching
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub embedding: Option<Vec<f32>>,
+
+    // Temporal and causal fields (Phase 1.2 - Advanced GraphRAG)
+    /// Type of temporal relationship (Before, During, Caused, etc.)
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub temporal_type: Option<crate::graph::temporal::TemporalRelationType>,
+    /// Temporal range when this relationship was valid
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub temporal_range: Option<crate::graph::temporal::TemporalRange>,
+    /// Strength of causal relationship (0.0-1.0), only meaningful for causal temporal types
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub causal_strength: Option<f32>,
+}
+
+impl Relationship {
+    /// Create a new relationship
+    pub fn new(
+        source: EntityId,
+        target: EntityId,
+        relation_type: String,
+        confidence: f32,
+    ) -> Self {
+        Self {
+            source,
+            target,
+            relation_type,
+            confidence,
+            context: Vec::new(),
+            embedding: None,
+            // Temporal fields default to None (backward compatible)
+            temporal_type: None,
+            temporal_range: None,
+            causal_strength: None,
+        }
+    }
+
+    /// Add context chunks to the relationship
+    pub fn with_context(mut self, context: Vec<ChunkId>) -> Self {
+        self.context = context;
+        self
+    }
+
+    /// Set temporal type for this relationship
+    pub fn with_temporal_type(
+        mut self,
+        temporal_type: crate::graph::temporal::TemporalRelationType,
+    ) -> Self {
+        self.temporal_type = Some(temporal_type);
+        // Auto-set causal strength based on type if not already set
+        if self.causal_strength.is_none() && temporal_type.is_causal() {
+            self.causal_strength = Some(temporal_type.default_strength());
+        }
+        self
+    }
+
+    /// Set temporal range for this relationship
+    pub fn with_temporal_range(mut self, start: i64, end: i64) -> Self {
+        self.temporal_range = Some(crate::graph::temporal::TemporalRange::new(start, end));
+        self
+    }
+
+    /// Set causal strength for this relationship
+    pub fn with_causal_strength(mut self, strength: f32) -> Self {
+        self.causal_strength = Some(strength.clamp(0.0, 1.0));
+        self
+    }
+
+    /// Set embedding vector for this relationship (Phase 2.2)
+    pub fn with_embedding(mut self, embedding: Vec<f32>) -> Self {
+        self.embedding = Some(embedding);
+        self
+    }
 }
 
 /// Knowledge graph containing entities and their relationships
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct KnowledgeGraph {
     graph: Graph<Entity, Relationship>,
     entity_index: HashMap<EntityId, NodeIndex>,
     documents: IndexMap<DocumentId, Document>,
     chunks: IndexMap<ChunkId, TextChunk>,
+
+    /// Hierarchical organization of relationships (Phase 3.1)
+    #[cfg(feature = "async")]
+    pub relationship_hierarchy: Option<crate::graph::hierarchical_relationships::RelationshipHierarchy>,
 }
 
 impl KnowledgeGraph {
@@ -261,6 +367,8 @@ impl KnowledgeGraph {
             entity_index: HashMap::new(),
             documents: IndexMap::new(),
             chunks: IndexMap::new(),
+            #[cfg(feature = "async")]
+            relationship_hierarchy: None,
         }
     }
 
@@ -432,6 +540,9 @@ impl KnowledgeGraph {
                     confidence,
                     mentions,
                     embedding: None, // Embeddings not stored in JSON
+                    first_mentioned: None,
+                    last_mentioned: None,
+                    temporal_validity: None,
                 };
 
                 kg.add_entity(entity)?;
@@ -461,6 +572,10 @@ impl KnowledgeGraph {
                     relation_type,
                     confidence,
                     context,
+                    embedding: None,
+                    temporal_type: None,
+                    temporal_range: None,
+                    causal_strength: None,
                 };
 
                 // Ignore errors if entities don't exist
@@ -807,6 +922,132 @@ impl KnowledgeGraph {
         // Note: documents and chunks are preserved
     }
 
+    /// Calculate cosine similarity between two embedding vectors
+    ///
+    /// # Arguments
+    ///
+    /// * `a` - First embedding vector
+    /// * `b` - Second embedding vector
+    ///
+    /// # Returns
+    ///
+    /// Cosine similarity score (range: -1.0 to 1.0, typically 0.0 to 1.0 for embeddings)
+    fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+        if a.len() != b.len() || a.is_empty() {
+            return 0.0;
+        }
+
+        let dot_product: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+        let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+        let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+
+        if norm_a == 0.0 || norm_b == 0.0 {
+            return 0.0;
+        }
+
+        dot_product / (norm_a * norm_b)
+    }
+
+    /// Calculate temporal relevance score for a temporal range
+    ///
+    /// Gives higher scores to:
+    /// - Recent events (closer to current time)
+    /// - Events with known temporal bounds
+    ///
+    /// # Arguments
+    ///
+    /// * `range` - The temporal range to score
+    ///
+    /// # Returns
+    ///
+    /// Temporal relevance boost (0.0-0.3 range)
+    fn calculate_temporal_relevance(range: &crate::graph::temporal::TemporalRange) -> f32 {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        // Get current timestamp
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+
+        // Calculate recency: how close is the event to now?
+        let mid_point = (range.start + range.end) / 2;
+        let years_ago = ((now - mid_point) / (365 * 24 * 3600)).abs();
+
+        // Decay function: more recent = higher score
+        // Events in the past 10 years get max boost (0.3)
+        // Older events get gradually less boost
+        let recency_boost = if years_ago <= 10 {
+            0.3
+        } else if years_ago <= 50 {
+            0.3 * (1.0 - (years_ago - 10) as f32 / 40.0)
+        } else if years_ago <= 200 {
+            0.1 * (1.0 - (years_ago - 50) as f32 / 150.0)
+        } else {
+            0.05 // Ancient events still get small boost for having temporal info
+        };
+
+        recency_boost.max(0.0)
+    }
+
+    /// Calculate dynamic weight for a relationship based on query context (Phase 2.2)
+    ///
+    /// Combines multiple factors:
+    /// - Base weight: relationship.confidence
+    /// - Semantic boost: similarity between relationship and query embeddings
+    /// - Temporal boost: relevance of temporal range
+    /// - Conceptual boost: matching query concepts in relationship type
+    ///
+    /// # Arguments
+    ///
+    /// * `relationship` - The relationship to weight
+    /// * `query_embedding` - Optional embedding vector for the query
+    /// * `query_concepts` - Concepts extracted from the query
+    ///
+    /// # Returns
+    ///
+    /// Dynamic weight value (typically 0.0-2.0, can be higher with strong matches)
+    pub fn dynamic_weight(
+        &self,
+        relationship: &Relationship,
+        query_embedding: Option<&[f32]>,
+        query_concepts: &[String],
+    ) -> f32 {
+        let base_weight = relationship.confidence;
+
+        // Semantic boost: similarity between relationship and query
+        let semantic_boost = if let (Some(rel_emb), Some(query_emb)) =
+            (relationship.embedding.as_deref(), query_embedding)
+        {
+            Self::cosine_similarity(rel_emb, query_emb).max(0.0)
+        } else {
+            0.0
+        };
+
+        // Temporal boost: relationships with recent or relevant temporal ranges
+        let temporal_boost = if let Some(tr) = &relationship.temporal_range {
+            Self::calculate_temporal_relevance(tr)
+        } else {
+            0.0
+        };
+
+        // Conceptual boost: relationships whose type matches query concepts
+        let concept_boost = query_concepts
+            .iter()
+            .filter(|c| relationship.relation_type.to_lowercase().contains(&c.to_lowercase()))
+            .count() as f32 * 0.15; // 15% boost per matching concept
+
+        // Causal boost: causal relationships get extra weight
+        let causal_boost = if let Some(strength) = relationship.causal_strength {
+            strength * 0.2 // Up to 20% boost for strong causal links
+        } else {
+            0.0
+        };
+
+        // Combine all factors
+        base_weight * (1.0 + semantic_boost + temporal_boost + concept_boost + causal_boost)
+    }
+
     /// Convert KnowledgeGraph to petgraph format for Leiden clustering
     /// Returns a graph with entity names as nodes and relationship confidences as edge weights
     /// Only available when leiden feature is enabled
@@ -897,6 +1138,51 @@ impl KnowledgeGraph {
             })
             .collect()
     }
+
+    /// Build hierarchical organization of relationships (Phase 3.1)
+    ///
+    /// Creates multi-level clusters of relationships using recursive community detection
+    /// and LLM-generated summaries for efficient retrieval.
+    ///
+    /// # Arguments
+    /// * `num_levels` - Number of hierarchy levels to create (default: 3)
+    /// * `ollama_client` - Optional Ollama client for generating cluster summaries
+    ///
+    /// # Returns
+    /// Result containing the built hierarchy or an error
+    ///
+    /// # Example
+    /// ```no_run
+    /// use graphrag_core::{KnowledgeGraph, ollama::OllamaClient};
+    ///
+    /// let mut graph = KnowledgeGraph::new();
+    /// // ... build graph ...
+    ///
+    /// let ollama = OllamaClient::new("http://localhost:11434", "llama3.2");
+    /// graph.build_relationship_hierarchy(3, Some(ollama)).await.unwrap();
+    /// ```
+    #[cfg(feature = "async")]
+    pub async fn build_relationship_hierarchy(
+        &mut self,
+        num_levels: usize,
+        ollama_client: Option<crate::ollama::OllamaClient>,
+    ) -> Result<()> {
+        use crate::graph::hierarchical_relationships::HierarchyBuilder;
+
+        let builder = HierarchyBuilder::from_graph(self)
+            .with_num_levels(num_levels);
+
+        let builder = if let Some(client) = ollama_client {
+            builder.with_ollama_client(client)
+        } else {
+            builder
+        };
+
+        let hierarchy = builder.build().await?;
+        self.relationship_hierarchy = Some(hierarchy);
+
+        Ok(())
+    }
 }
 
 impl Default for KnowledgeGraph {
@@ -980,6 +1266,10 @@ impl Entity {
             confidence,
             mentions: Vec::new(),
             embedding: None,
+            // Temporal fields default to None (backward compatible)
+            first_mentioned: None,
+            last_mentioned: None,
+            temporal_validity: None,
         }
     }
 
@@ -993,5 +1283,175 @@ impl Entity {
     pub fn with_embedding(mut self, embedding: Vec<f32>) -> Self {
         self.embedding = Some(embedding);
         self
+    }
+
+    /// Set temporal validity range for this entity
+    pub fn with_temporal_validity(mut self, start: i64, end: i64) -> Self {
+        self.temporal_validity = Some(crate::graph::temporal::TemporalRange::new(start, end));
+        self
+    }
+
+    /// Set mention timestamps for this entity
+    pub fn with_mention_times(mut self, first: i64, last: i64) -> Self {
+        self.first_mentioned = Some(first);
+        self.last_mentioned = Some(last);
+        self
+    }
+}
+
+#[cfg(test)]
+mod temporal_tests {
+    use super::*;
+
+    #[test]
+    fn test_entity_with_temporal_fields() {
+        let entity = Entity::new(
+            EntityId::new("socrates".to_string()),
+            "Socrates".to_string(),
+            "PERSON".to_string(),
+            0.9,
+        )
+        .with_temporal_validity(-470 * 365 * 24 * 3600, -399 * 365 * 24 * 3600) // 470-399 BC
+        .with_mention_times(1000, 2000);
+
+        assert_eq!(entity.name, "Socrates");
+        assert!(entity.temporal_validity.is_some());
+        assert!(entity.first_mentioned.is_some());
+        assert!(entity.last_mentioned.is_some());
+
+        let validity = entity.temporal_validity.unwrap();
+        assert_eq!(validity.start, -470 * 365 * 24 * 3600);
+        assert_eq!(validity.end, -399 * 365 * 24 * 3600);
+    }
+
+    #[test]
+    fn test_entity_temporal_serialization() {
+        let entity = Entity::new(
+            EntityId::new("test".to_string()),
+            "Test Entity".to_string(),
+            "TEST".to_string(),
+            0.8,
+        )
+        .with_temporal_validity(100, 200);
+
+        let json = serde_json::to_string(&entity).unwrap();
+        let deserialized: Entity = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.name, "Test Entity");
+        assert!(deserialized.temporal_validity.is_some());
+
+        let validity = deserialized.temporal_validity.unwrap();
+        assert_eq!(validity.start, 100);
+        assert_eq!(validity.end, 200);
+    }
+
+    #[test]
+    fn test_relationship_with_temporal_type() {
+        let rel = Relationship::new(
+            EntityId::new("socrates".to_string()),
+            EntityId::new("plato".to_string()),
+            "TAUGHT".to_string(),
+            0.9,
+        )
+        .with_temporal_type(crate::graph::temporal::TemporalRelationType::Caused)
+        .with_temporal_range(100, 200);
+
+        assert!(rel.temporal_type.is_some());
+        assert!(rel.temporal_range.is_some());
+        assert!(rel.causal_strength.is_some());
+
+        let temporal_type = rel.temporal_type.unwrap();
+        assert_eq!(temporal_type, crate::graph::temporal::TemporalRelationType::Caused);
+
+        // Auto-set causal strength for causal types
+        let strength = rel.causal_strength.unwrap();
+        assert_eq!(strength, 0.9); // Default strength for Caused
+    }
+
+    #[test]
+    fn test_relationship_with_causal_strength() {
+        let rel = Relationship::new(
+            EntityId::new("a".to_string()),
+            EntityId::new("b".to_string()),
+            "INFLUENCED".to_string(),
+            0.8,
+        )
+        .with_temporal_type(crate::graph::temporal::TemporalRelationType::Enabled)
+        .with_causal_strength(0.75);
+
+        assert!(rel.causal_strength.is_some());
+        assert_eq!(rel.causal_strength.unwrap(), 0.75);
+    }
+
+    #[test]
+    fn test_relationship_temporal_serialization() {
+        let rel = Relationship::new(
+            EntityId::new("source".to_string()),
+            EntityId::new("target".to_string()),
+            "CAUSED".to_string(),
+            0.9,
+        )
+        .with_temporal_type(crate::graph::temporal::TemporalRelationType::Caused)
+        .with_temporal_range(100, 200)
+        .with_causal_strength(0.95);
+
+        let json = serde_json::to_string(&rel).unwrap();
+        let deserialized: Relationship = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.relation_type, "CAUSED");
+        assert!(deserialized.temporal_type.is_some());
+        assert!(deserialized.temporal_range.is_some());
+        assert!(deserialized.causal_strength.is_some());
+
+        let temporal_type = deserialized.temporal_type.unwrap();
+        assert_eq!(temporal_type, crate::graph::temporal::TemporalRelationType::Caused);
+
+        let range = deserialized.temporal_range.unwrap();
+        assert_eq!(range.start, 100);
+        assert_eq!(range.end, 200);
+
+        assert_eq!(deserialized.causal_strength.unwrap(), 0.95);
+    }
+
+    #[test]
+    fn test_entity_backward_compatibility() {
+        // Test that entities without temporal fields still work
+        let entity = Entity::new(
+            EntityId::new("test".to_string()),
+            "Test".to_string(),
+            "TEST".to_string(),
+            0.9,
+        );
+
+        assert!(entity.first_mentioned.is_none());
+        assert!(entity.last_mentioned.is_none());
+        assert!(entity.temporal_validity.is_none());
+
+        // Serialization should skip None fields
+        let json = serde_json::to_string(&entity).unwrap();
+        assert!(!json.contains("first_mentioned"));
+        assert!(!json.contains("last_mentioned"));
+        assert!(!json.contains("temporal_validity"));
+    }
+
+    #[test]
+    fn test_relationship_backward_compatibility() {
+        // Test that relationships without temporal fields still work
+        let rel = Relationship::new(
+            EntityId::new("a".to_string()),
+            EntityId::new("b".to_string()),
+            "RELATED_TO".to_string(),
+            0.8,
+        );
+
+        assert!(rel.temporal_type.is_none());
+        assert!(rel.temporal_range.is_none());
+        assert!(rel.causal_strength.is_none());
+
+        // Serialization should skip None fields
+        let json = serde_json::to_string(&rel).unwrap();
+        assert!(!json.contains("temporal_type"));
+        assert!(!json.contains("temporal_range"));
+        assert!(!json.contains("causal_strength"));
     }
 }

@@ -2705,13 +2705,12 @@ mod tests {
         store.upsert_entity(entity1.clone()).await.unwrap();
         store.upsert_entity(entity2.clone()).await.unwrap();
 
-        let relationship = Relationship {
-            source: entity1.id,
-            target: entity2.id,
-            relation_type: "KNOWS".to_string(),
-            confidence: 0.8,
-            context: vec![],
-        };
+        let relationship = Relationship::new(
+            entity1.id,
+            entity2.id,
+            "KNOWS".to_string(),
+            0.8,
+        );
 
         let update_id = store.upsert_relationship(relationship).await.unwrap();
         assert!(!update_id.as_str().is_empty());

@@ -606,6 +606,17 @@ pub enum ErrorSeverity {
     Critical,
 }
 
+/// Structured suggestion for error recovery
+#[derive(Debug, Clone)]
+pub struct ErrorSuggestion {
+    /// Short description of what to do
+    pub action: String,
+    /// Example code snippet (if applicable)
+    pub code_example: Option<String>,
+    /// Link to documentation (if applicable)
+    pub doc_link: Option<String>,
+}
+
 impl GraphRAGError {
     /// Get the severity level of this error
     pub fn severity(&self) -> ErrorSeverity {
@@ -687,6 +698,237 @@ impl GraphRAGError {
             GraphRAGError::IncrementalUpdate { .. } => "incremental_update",
         }
     }
+
+    /// Get structured suggestions for recovering from this error
+    ///
+    /// Returns actionable suggestions with optional code examples.
+    ///
+    /// # Example
+    /// ```rust
+    /// use graphrag_core::GraphRAGError;
+    ///
+    /// let error = GraphRAGError::NotInitialized;
+    /// let suggestion = error.suggestion();
+    /// println!("Action: {}", suggestion.action);
+    /// if let Some(code) = suggestion.code_example {
+    ///     println!("Example:\n{}", code);
+    /// }
+    /// ```
+    pub fn suggestion(&self) -> ErrorSuggestion {
+        match self {
+            GraphRAGError::Config { message } => {
+                let (action, code) = if message.contains("not found") || message.contains("load") {
+                    (
+                        "Create a config file or use defaults with Config::default()".to_string(),
+                        Some(r#"// Option 1: Use defaults
+let config = Config::default();
+
+// Option 2: Load with hierarchy (user -> project -> env)
+let config = Config::load()?;
+
+// Option 3: Use TypedBuilder for compile-time safety
+let graphrag = TypedBuilder::new()
+    .with_output_dir("./output")
+    .with_ollama()
+    .build()?;"#.to_string())
+                    )
+                } else {
+                    (
+                        "Check configuration values and TOML syntax".to_string(),
+                        Some(r#"// Validate config before use
+let config = Config::from_toml_file("config.toml")?;
+
+// Or use hierarchical loading with env var overrides
+// Set GRAPHRAG_OLLAMA_HOST=localhost to override
+let config = Config::load()?;"#.to_string())
+                    )
+                };
+                ErrorSuggestion { action, code_example: code, doc_link: None }
+            }
+            GraphRAGError::NotInitialized => ErrorSuggestion {
+                action: "Initialize the GraphRAG system before querying".to_string(),
+                code_example: Some(r#"// Option 1: Manual initialization
+let mut graphrag = GraphRAG::new(config)?;
+graphrag.initialize()?;
+
+// Option 2: Use quick_start (recommended)
+let mut graphrag = GraphRAG::quick_start("Your document text").await?;
+
+// Option 3: Use builder with auto-init
+let graphrag = TypedBuilder::new()
+    .with_output_dir("./output")
+    .with_ollama()
+    .build_and_init()?;"#.to_string()),
+                doc_link: None,
+            },
+            GraphRAGError::NoDocuments => ErrorSuggestion {
+                action: "Add documents before building the graph or querying".to_string(),
+                code_example: Some(r#"// Add text directly
+graphrag.add_document_from_text("Your document content here")?;
+
+// Add from file
+graphrag.add_document_from_file("document.txt")?;
+
+// Add multiple documents
+for file in glob("docs/*.txt")? {
+    graphrag.add_document_from_file(file)?;
+}
+
+// Then build the graph
+graphrag.build_graph().await?;"#.to_string()),
+                doc_link: None,
+            },
+            GraphRAGError::Http(_) => ErrorSuggestion {
+                action: "Check network connectivity and service availability".to_string(),
+                code_example: Some(r#"// Check Ollama is running
+// Terminal: curl http://localhost:11434/api/tags
+
+// Verify Ollama config
+let config = Config::default();
+assert!(config.ollama.enabled);
+assert_eq!(config.ollama.host, "localhost");
+assert_eq!(config.ollama.port, 11434);
+
+// Or use hash embeddings for offline mode
+let graphrag = TypedBuilder::new()
+    .with_output_dir("./output")
+    .with_hash_embeddings()  // No network needed
+    .build()?;"#.to_string()),
+                doc_link: None,
+            },
+            GraphRAGError::LanguageModel { message } => {
+                let action = if message.contains("not found") || message.contains("model") {
+                    "Ensure the LLM model is pulled and available".to_string()
+                } else {
+                    "Check LLM provider configuration".to_string()
+                };
+                ErrorSuggestion {
+                    action,
+                    code_example: Some(r#"// Pull the model first (in terminal)
+// ollama pull llama3.2:latest
+// ollama pull nomic-embed-text:latest
+
+// Or specify a different model
+let graphrag = GraphRAGBuilder::new()
+    .with_ollama_enabled(true)
+    .with_chat_model("mistral:latest")
+    .with_ollama_embedding_model("nomic-embed-text:latest")
+    .build()?;"#.to_string()),
+                    doc_link: None,
+                }
+            }
+            GraphRAGError::Embedding { message } => {
+                let action = if message.contains("dimension") {
+                    "Check embedding dimension matches your model".to_string()
+                } else {
+                    "Verify embedding provider configuration".to_string()
+                };
+                ErrorSuggestion {
+                    action,
+                    code_example: Some(r#"// Use matching dimension for your model
+// nomic-embed-text: 768, all-MiniLM-L6-v2: 384
+let graphrag = GraphRAGBuilder::new()
+    .with_embedding_dimension(768)
+    .with_embedding_backend("ollama")
+    .build()?;
+
+// Or use hash embeddings (dimension-agnostic)
+let graphrag = TypedBuilder::new()
+    .with_output_dir("./output")
+    .with_hash_embeddings()
+    .build()?;"#.to_string()),
+                    doc_link: None,
+                }
+            }
+            GraphRAGError::Retrieval { .. } => ErrorSuggestion {
+                action: "Ensure documents are added and graph is built before querying".to_string(),
+                code_example: Some(r#"// Full workflow
+let mut graphrag = GraphRAG::new(config)?;
+graphrag.initialize()?;
+graphrag.add_document_from_text("Your content")?;
+graphrag.build_graph().await?;
+
+// Now you can query
+let answer = graphrag.ask("Your question").await?;"#.to_string()),
+                doc_link: None,
+            },
+            GraphRAGError::VectorSearch { .. } => ErrorSuggestion {
+                action: "Initialize embeddings and ensure vectors are indexed".to_string(),
+                code_example: Some(r#"// Make sure embeddings are configured
+let graphrag = GraphRAGBuilder::new()
+    .with_embedding_backend("ollama")
+    .with_embedding_model("nomic-embed-text:latest")
+    .build()?;
+
+// Or check if documents need reindexing
+graphrag.build_graph().await?;"#.to_string()),
+                doc_link: None,
+            },
+            GraphRAGError::Timeout { operation, duration } => ErrorSuggestion {
+                action: format!("Operation '{}' took too long ({:?}). Consider increasing timeout or optimizing.", operation, duration),
+                code_example: Some(r#"// Increase timeout in config
+let mut config = Config::default();
+config.ollama.timeout_seconds = 120;  // 2 minutes
+
+// Or process smaller chunks
+config.chunk_size = 500;  // Smaller chunks
+config.parallel.enabled = true;  // Parallel processing"#.to_string()),
+                doc_link: None,
+            },
+            GraphRAGError::RateLimit { .. } => ErrorSuggestion {
+                action: "You've hit rate limits. Wait and retry, or use local models.".to_string(),
+                code_example: Some(r#"// Switch to local Ollama (no rate limits)
+let graphrag = TypedBuilder::new()
+    .with_output_dir("./output")
+    .with_ollama()  // Local, no API limits
+    .build()?;
+
+// Or enable caching to reduce API calls
+let mut config = Config::default();
+config.caching.enabled = true;"#.to_string()),
+                doc_link: None,
+            },
+            GraphRAGError::Storage { .. } => ErrorSuggestion {
+                action: "Check file permissions and disk space".to_string(),
+                code_example: Some(r#"// Verify output directory exists and is writable
+std::fs::create_dir_all("./output")?;
+
+// Use a different output directory
+let graphrag = GraphRAGBuilder::new()
+    .with_output_dir("/tmp/graphrag_output")
+    .build()?;"#.to_string()),
+                doc_link: None,
+            },
+            GraphRAGError::NotFound { resource, id } => ErrorSuggestion {
+                action: format!("{} '{}' not found. Verify it exists.", resource, id),
+                code_example: None,
+                doc_link: None,
+            },
+            GraphRAGError::AlreadyExists { resource, id } => ErrorSuggestion {
+                action: format!("{} '{}' already exists. Use a different ID or update existing.", resource, id),
+                code_example: None,
+                doc_link: None,
+            },
+            // Default suggestions for other errors
+            _ => ErrorSuggestion {
+                action: "Check the error message for details".to_string(),
+                code_example: None,
+                doc_link: None,
+            },
+        }
+    }
+
+    /// Get a formatted error message with suggestion
+    ///
+    /// Returns a user-friendly error message including the suggestion.
+    pub fn display_with_suggestion(&self) -> String {
+        let suggestion = self.suggestion();
+        let mut output = format!("{}\n\n💡 Suggestion: {}", self, suggestion.action);
+        if let Some(code) = &suggestion.code_example {
+            output.push_str(&format!("\n\nExample:\n```rust\n{}\n```", code));
+        }
+        output
+    }
 }
 
 impl From<regex::Error> for GraphRAGError {
@@ -745,5 +987,61 @@ mod tests {
         };
         assert_eq!(warning_error.severity(), ErrorSeverity::Warning);
         assert!(warning_error.is_recoverable());
+    }
+
+    #[test]
+    fn test_error_suggestion_not_initialized() {
+        let error = GraphRAGError::NotInitialized;
+        let suggestion = error.suggestion();
+
+        assert!(suggestion.action.contains("Initialize"));
+        assert!(suggestion.code_example.is_some());
+        let code = suggestion.code_example.unwrap();
+        assert!(code.contains("initialize()") || code.contains("quick_start"));
+    }
+
+    #[test]
+    fn test_error_suggestion_no_documents() {
+        let error = GraphRAGError::NoDocuments;
+        let suggestion = error.suggestion();
+
+        assert!(suggestion.action.contains("Add documents"));
+        assert!(suggestion.code_example.is_some());
+        let code = suggestion.code_example.unwrap();
+        assert!(code.contains("add_document"));
+    }
+
+    #[test]
+    fn test_error_suggestion_config() {
+        let error = GraphRAGError::Config {
+            message: "File not found".to_string(),
+        };
+        let suggestion = error.suggestion();
+
+        assert!(suggestion.code_example.is_some());
+        let code = suggestion.code_example.unwrap();
+        assert!(code.contains("Config::default()") || code.contains("Config::load"));
+    }
+
+    #[test]
+    fn test_error_suggestion_not_found() {
+        let error = GraphRAGError::NotFound {
+            resource: "Document".to_string(),
+            id: "test-123".to_string(),
+        };
+        let suggestion = error.suggestion();
+
+        assert!(suggestion.action.contains("Document"));
+        assert!(suggestion.action.contains("test-123"));
+    }
+
+    #[test]
+    fn test_display_with_suggestion() {
+        let error = GraphRAGError::NotInitialized;
+        let display = error.display_with_suggestion();
+
+        assert!(display.contains("not initialized"));
+        assert!(display.contains("Suggestion:"));
+        assert!(display.contains("```rust"));
     }
 }

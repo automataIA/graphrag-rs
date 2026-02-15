@@ -1,0 +1,82 @@
+# GraphRAG Configuration Template: Legal Documents
+# =================================================
+# Best for: Contracts, legal agreements, court documents, regulatory filings
+#
+# Optimized for:
+# - Extracting parties, dates, clauses, obligations
+# - Precise entity boundaries
+# - High confidence thresholds for legal accuracy
+#
+# Usage:
+#   cp templates/legal.toml ./graphrag.toml
+#   # or: graphrag init --template legal
+
+output_dir = "./graphrag-legal"
+approach = "semantic"  # LLM-based for better clause understanding
+
+# Smaller chunks for precise legal clause extraction
+chunk_size = 500
+chunk_overlap = 100
+
+top_k_results = 15
+similarity_threshold = 0.8  # Higher threshold for legal precision
+
+[embeddings]
+backend = "ollama"  # Use LLM embeddings for better semantic understanding
+dimension = 384
+model = "nomic-embed-text"
+fallback_to_hash = true
+batch_size = 16
+
+[entities]
+# Legal-specific entity types
+min_confidence = 0.8  # Higher confidence for legal documents
+entity_types = [
+    "PARTY",           # Contracting parties
+    "PERSON",          # Named individuals
+    "ORGANIZATION",    # Companies, agencies
+    "DATE",            # Effective dates, deadlines
+    "MONETARY_VALUE",  # Amounts, payments
+    "JURISDICTION",    # Courts, governing law
+    "CLAUSE_TYPE",     # Indemnification, termination, etc.
+    "OBLIGATION",      # Must, shall, required
+    "RIGHT",           # May, entitled, permitted
+    "TERM",            # Legal terms and definitions
+]
+use_gleaning = true  # Use LLM refinement for better extraction
+max_gleaning_rounds = 4
+
+[graph]
+max_connections = 15
+similarity_threshold = 0.85  # Stricter for legal relationships
+extract_relationships = true
+relationship_confidence_threshold = 0.7
+
+[graph.traversal]
+max_depth = 4  # Deeper traversal for complex legal structures
+max_paths = 15
+use_edge_weights = true
+min_relationship_strength = 0.5
+
+[retrieval]
+top_k = 15
+search_algorithm = "cosine"
+
+[parallel]
+enabled = true
+num_threads = 0
+min_batch_size = 8
+
+[ollama]
+enabled = true
+host = "localhost"
+port = 11434
+chat_model = "llama3.2:3b"  # Or "mistral" for better legal reasoning
+embedding_model = "nomic-embed-text"
+timeout_seconds = 60  # Longer timeout for complex extractions
+enable_caching = true
+
+[auto_save]
+enabled = true  # Auto-save for important legal work
+interval_seconds = 180
+max_versions = 10

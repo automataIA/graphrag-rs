@@ -20,6 +20,7 @@ pub mod store;
 /// LanceDB vector store implementation
 pub mod lancedb;
 
+#[cfg(feature = "qdrant")]
 /// Qdrant vector store implementation
 pub mod qdrant;
 

@@ -685,8 +685,8 @@ rag = PyGraphRAG.default_local()
 
 ### Getting Help
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/graphrag-rs/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/graphrag-rs/discussions)
+- **Issues**: [GitHub Issues](https://github.com/automataIA/graphrag-rs/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/automataIA/graphrag-rs/discussions)
 - **Documentation**: See `IMPLEMENTATION_SUMMARY.md` for technical details
 
 ## 🚄 Performance
@@ -793,8 +793,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **Documentation**: You're reading it! 📖
 - **Examples**: Check the `examples/` directory
-- **Issues**: [Report bugs](https://github.com/yourusername/graphrag-rs/issues)
-- **Discussions**: [Ask questions](https://github.com/yourusername/graphrag-rs/discussions)
+- **Issues**: [Report bugs](https://github.com/automataIA/graphrag-rs/issues)
+- **Discussions**: [Ask questions](https://github.com/automataIA/graphrag-rs/discussions)
 
 ---
 

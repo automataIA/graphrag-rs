@@ -647,7 +647,7 @@ MIT
 - **Qdrant** - https://qdrant.tech/
 - **Actix-web** - https://actix.rs/
 - **Apistos** - https://github.com/netwo-io/apistos (OpenAPI 3.0.3 documentation)
-- **GraphRAG** - https://github.com/yourusername/graphrag-rs
+- **GraphRAG** - https://github.com/automataIA/graphrag-rs
 
 ## Backend Comparison
 

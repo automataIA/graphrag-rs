@@ -18,6 +18,89 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, BTreeMap};
 
+/// Time range for temporal validity
+///
+/// Represents when an entity exists or a relationship is valid in the real world.
+/// Uses Unix timestamps (seconds since epoch). Special values:
+/// - i64::MIN represents unknown/unspecified start
+/// - i64::MAX represents ongoing/current (no end)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TemporalRange {
+    /// Start of validity (Unix timestamp)
+    pub start: i64,
+    /// End of validity (Unix timestamp)
+    pub end: i64,
+}
+
+impl TemporalRange {
+    /// Create a new temporal range
+    pub fn new(start: i64, end: i64) -> Self {
+        Self { start, end }
+    }
+
+    /// Check if a timestamp falls within this range
+    pub fn contains(&self, timestamp: i64) -> bool {
+        timestamp >= self.start && timestamp <= self.end
+    }
+
+    /// Check if this range overlaps with another
+    pub fn overlaps(&self, other: &TemporalRange) -> bool {
+        self.start <= other.end && self.end >= other.start
+    }
+
+    /// Get the duration of this range in seconds
+    pub fn duration(&self) -> i64 {
+        self.end.saturating_sub(self.start)
+    }
+}
+
+/// Type of temporal relationship between entities
+///
+/// Defines how entities are related in time, including causal relationships.
+/// Based on Allen's Interval Algebra and causal reasoning.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TemporalRelationType {
+    /// A occurred before B (temporal precedence)
+    Before,
+    /// A occurred during B (temporal containment)
+    During,
+    /// A occurred after B (temporal succession)
+    After,
+    /// A and B occurred simultaneously
+    SimultaneousWith,
+    /// A directly caused B (strong causal link)
+    Caused,
+    /// A enabled or facilitated B (weak causal link)
+    Enabled,
+    /// A prevented or inhibited B (negative causal link)
+    Prevented,
+    /// A and B mutually influenced each other
+    Correlated,
+}
+
+impl TemporalRelationType {
+    /// Check if this is a causal relationship type
+    pub fn is_causal(&self) -> bool {
+        matches!(
+            self,
+            TemporalRelationType::Caused
+                | TemporalRelationType::Enabled
+                | TemporalRelationType::Prevented
+        )
+    }
+
+    /// Get the strength weight for this relationship type
+    pub fn default_strength(&self) -> f32 {
+        match self {
+            TemporalRelationType::Caused => 0.9,
+            TemporalRelationType::Enabled => 0.6,
+            TemporalRelationType::Prevented => 0.7,
+            TemporalRelationType::Correlated => 0.5,
+            _ => 0.3, // Temporal-only relationships have lower default strength
+        }
+    }
+}
+
 /// Temporal edge with timestamp
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemporalEdge {
@@ -591,5 +674,90 @@ mod tests {
         assert!(edge.is_active_in_range(90, 110));
         assert!(edge.is_active_in_range(150, 250));
         assert!(!edge.is_active_in_range(50, 90));
+    }
+
+    // Phase 1.2: Temporal Fields Tests
+    #[test]
+    fn test_temporal_range_creation() {
+        let range = TemporalRange::new(100, 200);
+        assert_eq!(range.start, 100);
+        assert_eq!(range.end, 200);
+    }
+
+    #[test]
+    fn test_temporal_range_contains() {
+        let range = TemporalRange::new(100, 200);
+
+        assert!(range.contains(100));
+        assert!(range.contains(150));
+        assert!(range.contains(200));
+        assert!(!range.contains(50));
+        assert!(!range.contains(250));
+    }
+
+    #[test]
+    fn test_temporal_range_overlaps() {
+        let range1 = TemporalRange::new(100, 200);
+        let range2 = TemporalRange::new(150, 250);
+        let range3 = TemporalRange::new(250, 300);
+
+        assert!(range1.overlaps(&range2));
+        assert!(range2.overlaps(&range1));
+        assert!(!range1.overlaps(&range3));
+        assert!(!range3.overlaps(&range1));
+    }
+
+    #[test]
+    fn test_temporal_range_duration() {
+        let range = TemporalRange::new(100, 200);
+        assert_eq!(range.duration(), 100);
+
+        let instant = TemporalRange::new(100, 100);
+        assert_eq!(instant.duration(), 0);
+    }
+
+    #[test]
+    fn test_temporal_range_serialization() {
+        let range = TemporalRange::new(100, 200);
+        let json = serde_json::to_string(&range).unwrap();
+        assert!(json.contains("100"));
+        assert!(json.contains("200"));
+
+        let deserialized: TemporalRange = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.start, 100);
+        assert_eq!(deserialized.end, 200);
+    }
+
+    #[test]
+    fn test_temporal_relation_type_is_causal() {
+        assert!(TemporalRelationType::Caused.is_causal());
+        assert!(TemporalRelationType::Enabled.is_causal());
+        assert!(TemporalRelationType::Prevented.is_causal());
+
+        assert!(!TemporalRelationType::Before.is_causal());
+        assert!(!TemporalRelationType::During.is_causal());
+        assert!(!TemporalRelationType::After.is_causal());
+        assert!(!TemporalRelationType::SimultaneousWith.is_causal());
+    }
+
+    #[test]
+    fn test_temporal_relation_type_default_strength() {
+        assert_eq!(TemporalRelationType::Caused.default_strength(), 0.9);
+        assert_eq!(TemporalRelationType::Enabled.default_strength(), 0.6);
+        assert_eq!(TemporalRelationType::Prevented.default_strength(), 0.7);
+        assert_eq!(TemporalRelationType::Correlated.default_strength(), 0.5);
+
+        // Non-causal should have lower strength
+        assert!(TemporalRelationType::Before.default_strength() < 0.5);
+    }
+
+    #[test]
+    fn test_temporal_relation_type_serialization() {
+        let rel_type = TemporalRelationType::Caused;
+        let json = serde_json::to_string(&rel_type).unwrap();
+        assert!(json.contains("Caused"));
+
+        let deserialized: TemporalRelationType = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, TemporalRelationType::Caused);
     }
 }

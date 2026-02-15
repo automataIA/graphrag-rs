@@ -1,0 +1,70 @@
+# GraphRAG Configuration Template: General Purpose
+# ================================================
+# Best for: General documents, articles, reports, mixed content
+#
+# Usage:
+#   cp templates/general.toml ./graphrag.toml
+#   # or: graphrag init --template general
+
+# Output directory for graph data and embeddings
+output_dir = "./graphrag-output"
+
+# Pipeline approach: "semantic" (LLM-based), "algorithmic" (pattern-based), "hybrid"
+approach = "hybrid"
+
+# Text chunking settings
+chunk_size = 1000
+chunk_overlap = 200
+
+# Retrieval settings
+top_k_results = 10
+similarity_threshold = 0.7
+
+[embeddings]
+# Embedding backend: "hash" (fast, offline), "ollama" (local LLM), "candle" (neural)
+backend = "hash"
+dimension = 384
+fallback_to_hash = true
+batch_size = 32
+
+[entities]
+# Entity extraction settings
+min_confidence = 0.7
+entity_types = ["PERSON", "ORGANIZATION", "LOCATION", "DATE", "EVENT"]
+use_gleaning = false
+max_gleaning_rounds = 3
+
+[graph]
+max_connections = 10
+similarity_threshold = 0.8
+extract_relationships = true
+relationship_confidence_threshold = 0.5
+
+[graph.traversal]
+max_depth = 3
+max_paths = 10
+use_edge_weights = true
+min_relationship_strength = 0.3
+
+[retrieval]
+top_k = 10
+search_algorithm = "cosine"
+
+[parallel]
+enabled = true
+num_threads = 0  # 0 = auto-detect
+min_batch_size = 10
+
+[ollama]
+enabled = false
+host = "localhost"
+port = 11434
+chat_model = "llama3.2:3b"
+embedding_model = "nomic-embed-text"
+timeout_seconds = 30
+enable_caching = true
+
+[auto_save]
+enabled = false
+interval_seconds = 300
+max_versions = 5

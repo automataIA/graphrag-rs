@@ -1,19 +1,28 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/yourusername/graphrag-rs/graphrag-config.schema.json",
+  "$id": "https://github.com/automataIA/graphrag-rs/graphrag-config.schema.json",
   "title": "GraphRAG Configuration",
   "description": "GraphRAG configuration schema aligned with TOML structure",
   "type": "object",
-  "required": ["mode", "general"],
+  "required": [
+    "mode",
+    "general"
+  ],
   "properties": {
     "mode": {
       "type": "object",
       "description": "Pipeline approach selection",
-      "required": ["approach"],
+      "required": [
+        "approach"
+      ],
       "properties": {
         "approach": {
           "type": "string",
-          "enum": ["semantic", "algorithmic", "hybrid"],
+          "enum": [
+            "semantic",
+            "algorithmic",
+            "hybrid"
+          ],
           "description": "Pipeline approach: semantic (LLM-based), algorithmic (pattern-based), or hybrid (combined)"
         }
       }
@@ -21,7 +30,10 @@
     "general": {
       "type": "object",
       "description": "General configuration",
-      "required": ["input_document_path", "output_dir"],
+      "required": [
+        "input_document_path",
+        "output_dir"
+      ],
       "properties": {
         "input_document_path": {
           "type": "string",
@@ -33,7 +45,13 @@
         },
         "log_level": {
           "type": "string",
-          "enum": ["trace", "debug", "info", "warn", "error"],
+          "enum": [
+            "trace",
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
           "default": "info"
         },
         "max_threads": {
@@ -56,9 +74,19 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["extract_text", "extract_entities", "build_graph", "detect_communities"]
+            "enum": [
+              "extract_text",
+              "extract_entities",
+              "build_graph",
+              "detect_communities"
+            ]
           },
-          "default": ["extract_text", "extract_entities", "build_graph", "detect_communities"]
+          "default": [
+            "extract_text",
+            "extract_entities",
+            "build_graph",
+            "detect_communities"
+          ]
         },
         "parallel_execution": {
           "type": "boolean",
@@ -163,7 +191,11 @@
           "properties": {
             "relation_scorer": {
               "type": "string",
-              "enum": ["cosine_similarity", "jaccard", "euclidean"],
+              "enum": [
+                "cosine_similarity",
+                "jaccard",
+                "euclidean"
+              ],
               "default": "cosine_similarity"
             },
             "min_relation_score": {
@@ -189,7 +221,11 @@
           "properties": {
             "algorithm": {
               "type": "string",
-              "enum": ["leiden", "louvain", "label_propagation"],
+              "enum": [
+                "leiden",
+                "louvain",
+                "label_propagation"
+              ],
               "default": "leiden"
             },
             "resolution": {

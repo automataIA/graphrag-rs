@@ -25,11 +25,11 @@
 //! # Browser: http://localhost:8080/swagger
 //! ```
 
+use actix_cors::Cors;
 use actix_web::{
     web::{self, Data, Json, Path as WebPath},
     App, HttpServer, Responder,
 };
-use actix_cors::Cors;
 use apistos::{
     api_operation,
     app::OpenApiWrapper,
@@ -38,8 +38,8 @@ use apistos::{
     web::{delete, get, post, resource, scope},
 };
 use serde_json::json;
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing_subscriber;
 
@@ -49,7 +49,7 @@ use models::*;
 #[cfg(feature = "qdrant")]
 mod qdrant_store;
 #[cfg(feature = "qdrant")]
-use qdrant_store::{QdrantStore, DocumentMetadata};
+use qdrant_store::{DocumentMetadata, QdrantStore};
 
 #[cfg(feature = "auth")]
 mod auth;
@@ -57,10 +57,12 @@ mod auth;
 use auth::AuthState;
 
 mod embeddings;
-use embeddings::{EmbeddingService, EmbeddingConfig};
+use embeddings::{EmbeddingConfig, EmbeddingService};
 
 mod validation;
-use validation::{validate_query, validate_title, validate_content, validate_top_k, sanitize_string};
+use validation::{
+    sanitize_string, validate_content, validate_query, validate_title, validate_top_k,
+};
 
 mod config_handler;
 use config_handler::ConfigManager;
@@ -98,8 +100,8 @@ struct AppState {
 impl AppState {
     async fn new() -> Self {
         // Initialize embedding service
-        let embedding_backend = std::env::var("EMBEDDING_BACKEND")
-            .unwrap_or_else(|_| "hash".to_string()); // Default to hash fallback
+        let embedding_backend =
+            std::env::var("EMBEDDING_BACKEND").unwrap_or_else(|_| "hash".to_string()); // Default to hash fallback
         let embedding_dim: usize = std::env::var("EMBEDDING_DIM")
             .unwrap_or_else(|_| "384".to_string())
             .parse()
@@ -117,22 +119,28 @@ impl AppState {
 
         let embeddings = match EmbeddingService::new(embedding_config).await {
             Ok(service) => {
-                tracing::info!("✅ Embedding service initialized: {}", service.backend_name());
+                tracing::info!(
+                    "✅ Embedding service initialized: {}",
+                    service.backend_name()
+                );
                 Arc::new(service)
-            }
+            },
             Err(e) => {
-                tracing::error!("❌ Failed to initialize embedding service: {}. Server may not work correctly.", e);
+                tracing::error!(
+                    "❌ Failed to initialize embedding service: {}. Server may not work correctly.",
+                    e
+                );
                 std::process::exit(1);
-            }
+            },
         };
 
         #[cfg(feature = "qdrant")]
         {
             // Try to connect to Qdrant
-            let qdrant_url = std::env::var("QDRANT_URL")
-                .unwrap_or_else(|_| "http://localhost:6334".to_string());
-            let collection_name = std::env::var("COLLECTION_NAME")
-                .unwrap_or_else(|_| "graphrag".to_string());
+            let qdrant_url =
+                std::env::var("QDRANT_URL").unwrap_or_else(|_| "http://localhost:6334".to_string());
+            let collection_name =
+                std::env::var("COLLECTION_NAME").unwrap_or_else(|_| "graphrag".to_string());
 
             match QdrantStore::new(&qdrant_url, &collection_name).await {
                 Ok(store) => {
@@ -141,13 +149,16 @@ impl AppState {
                         match store.create_collection(embedding_dim as u64).await {
                             Ok(_) => {
                                 tracing::info!("✅ Created Qdrant collection: {}", collection_name);
-                            }
+                            },
                             Err(e) => {
                                 tracing::warn!("⚠️  Could not create collection: {}", e);
-                            }
+                            },
                         }
                     } else {
-                        tracing::info!("✅ Connected to existing Qdrant collection: {}", collection_name);
+                        tracing::info!(
+                            "✅ Connected to existing Qdrant collection: {}",
+                            collection_name
+                        );
                     }
 
                     tracing::info!("🗄️  Using Qdrant at: {}", qdrant_url);
@@ -158,32 +169,33 @@ impl AppState {
                         graphrag: Arc::new(RwLock::new(None)),
                         config_manager: Arc::new(ConfigManager::new()),
                         #[cfg(feature = "auth")]
-                        auth: Arc::new(AuthState::new(
-                            std::env::var("JWT_SECRET")
-                                .unwrap_or_else(|_| "graphrag_secret_key_change_in_production_32chars".to_string())
-                        )),
+                        auth: Arc::new(AuthState::new(std::env::var("JWT_SECRET").unwrap_or_else(
+                            |_| "graphrag_secret_key_change_in_production_32chars".to_string(),
+                        ))),
                         documents: Arc::new(RwLock::new(Vec::new())),
                         graph_built: Arc::new(RwLock::new(false)),
                         query_count: Arc::new(RwLock::new(0)),
                     }
-                }
+                },
                 Err(e) => {
-                    tracing::warn!("⚠️  Could not connect to Qdrant: {}. Using in-memory storage.", e);
+                    tracing::warn!(
+                        "⚠️  Could not connect to Qdrant: {}. Using in-memory storage.",
+                        e
+                    );
                     Self {
                         qdrant: None,
                         embeddings,
                         graphrag: Arc::new(RwLock::new(None)),
                         config_manager: Arc::new(ConfigManager::new()),
                         #[cfg(feature = "auth")]
-                        auth: Arc::new(AuthState::new(
-                            std::env::var("JWT_SECRET")
-                                .unwrap_or_else(|_| "graphrag_secret_key_change_in_production_32chars".to_string())
-                        )),
+                        auth: Arc::new(AuthState::new(std::env::var("JWT_SECRET").unwrap_or_else(
+                            |_| "graphrag_secret_key_change_in_production_32chars".to_string(),
+                        ))),
                         documents: Arc::new(RwLock::new(Vec::new())),
                         graph_built: Arc::new(RwLock::new(false)),
                         query_count: Arc::new(RwLock::new(0)),
                     }
-                }
+                },
             }
         }
 
@@ -195,10 +207,9 @@ impl AppState {
                 graphrag: Arc::new(RwLock::new(None)),
                 config_manager: Arc::new(ConfigManager::new()),
                 #[cfg(feature = "auth")]
-                auth: Arc::new(AuthState::new(
-                    std::env::var("JWT_SECRET")
-                        .unwrap_or_else(|_| "graphrag_secret_key_change_in_production_32chars".to_string())
-                )),
+                auth: Arc::new(AuthState::new(std::env::var("JWT_SECRET").unwrap_or_else(
+                    |_| "graphrag_secret_key_change_in_production_32chars".to_string(),
+                ))),
                 documents: Arc::new(RwLock::new(Vec::new())),
                 graph_built: Arc::new(RwLock::new(false)),
                 query_count: Arc::new(RwLock::new(0)),
@@ -278,11 +289,11 @@ async fn health(state: Data<AppState>) -> Result<Json<HealthResponse>, ApiError>
             Ok((count, _)) => {
                 doc_count = count;
                 graph_built = count > 0;
-            }
+            },
             Err(_) => {
                 doc_count = 0;
                 graph_built = false;
-            }
+            },
         }
     } else {
         doc_count = state.documents.read().await.len();
@@ -301,7 +312,11 @@ async fn health(state: Data<AppState>) -> Result<Json<HealthResponse>, ApiError>
         document_count: doc_count,
         graph_built,
         total_queries: query_count,
-        backend: if state.has_qdrant() { "qdrant".to_string() } else { "memory".to_string() },
+        backend: if state.has_qdrant() {
+            "qdrant".to_string()
+        } else {
+            "memory".to_string()
+        },
     }))
 }
 
@@ -340,8 +355,11 @@ async fn query(
             Ok(embedding) => embedding,
             Err(e) => {
                 tracing::error!("Failed to generate query embedding: {}", e);
-                return Err(ApiError::InternalError(format!("Failed to generate embedding: {}", e)));
-            }
+                return Err(ApiError::InternalError(format!(
+                    "Failed to generate embedding: {}",
+                    e
+                )));
+            },
         };
 
         match qdrant.search(query_embedding, body.top_k, None).await {
@@ -368,10 +386,13 @@ async fn query(
                     processing_time_ms: processing_time,
                     backend: "qdrant".to_string(),
                 }));
-            }
+            },
             Err(e) => {
-                return Err(ApiError::InternalError(format!("Qdrant search failed: {}", e)));
-            }
+                return Err(ApiError::InternalError(format!(
+                    "Qdrant search failed: {}",
+                    e
+                )));
+            },
         }
     }
 
@@ -379,7 +400,9 @@ async fn query(
     let documents = state.documents.read().await;
 
     if documents.is_empty() {
-        return Err(ApiError::BadRequest("No documents available. Add documents first.".to_string()));
+        return Err(ApiError::BadRequest(
+            "No documents available. Add documents first.".to_string(),
+        ));
     }
 
     // Simple keyword matching for demonstration
@@ -390,11 +413,12 @@ async fn query(
             let content_lower = doc.content.to_lowercase();
             let title_lower = doc.title.to_lowercase();
 
-            let similarity = if content_lower.contains(&query_lower) || title_lower.contains(&query_lower) {
-                0.85
-            } else {
-                0.1
-            };
+            let similarity =
+                if content_lower.contains(&query_lower) || title_lower.contains(&query_lower) {
+                    0.85
+                } else {
+                    0.1
+                };
 
             let excerpt = if doc.content.len() > 200 {
                 format!("{}...", &doc.content[..200])
@@ -424,8 +448,6 @@ async fn query(
         backend: "memory".to_string(),
     }))
 }
-
-// Continua nel prossimo messaggio per lunghezza...
 
 /// Add a document to the knowledge graph
 #[api_operation(
@@ -464,8 +486,11 @@ async fn add_document(
             Ok(emb) => emb,
             Err(e) => {
                 tracing::error!("Failed to generate document embedding: {}", e);
-                return Err(ApiError::InternalError(format!("Failed to generate embedding: {}", e)));
-            }
+                return Err(ApiError::InternalError(format!(
+                    "Failed to generate embedding: {}",
+                    e
+                )));
+            },
         };
 
         let metadata = DocumentMetadata {
@@ -489,18 +514,21 @@ async fn add_document(
                     message: "Document added to Qdrant successfully".to_string(),
                     backend: "qdrant".to_string(),
                 }));
-            }
+            },
             Err(e) => {
-                return Err(ApiError::InternalError(format!("Failed to add document to Qdrant: {}", e)));
-            }
+                return Err(ApiError::InternalError(format!(
+                    "Failed to add document to Qdrant: {}",
+                    e
+                )));
+            },
         }
     }
 
     // Fallback: in-memory storage
     let document = Document {
         id: id.clone(),
-        title: title,
-        content: content,
+        title,
+        content,
         added_at: timestamp,
     };
 
@@ -534,10 +562,10 @@ async fn list_documents(state: Data<AppState>) -> Json<ListDocumentsResponse> {
                     backend: "qdrant".to_string(),
                     note: Some("Full document listing from Qdrant not implemented yet".to_string()),
                 });
-            }
+            },
             Err(e) => {
                 tracing::error!("Failed to get Qdrant stats: {}", e);
-            }
+            },
         }
     }
 
@@ -587,10 +615,13 @@ async fn delete_document(
                     message: format!("Document {} deleted from Qdrant", doc_id),
                     backend: "qdrant".to_string(),
                 }));
-            }
+            },
             Err(e) => {
-                return Err(ApiError::InternalError(format!("Failed to delete from Qdrant: {}", e)));
-            }
+                return Err(ApiError::InternalError(format!(
+                    "Failed to delete from Qdrant: {}",
+                    e
+                )));
+            },
         }
     }
 
@@ -600,7 +631,10 @@ async fn delete_document(
     documents.retain(|doc| doc.id != doc_id);
 
     if documents.len() == original_len {
-        return Err(ApiError::NotFound(format!("Document with id '{}' not found", doc_id)));
+        return Err(ApiError::NotFound(format!(
+            "Document with id '{}' not found",
+            doc_id
+        )));
     }
 
     *state.graph_built.write().await = false;
@@ -625,20 +659,64 @@ async fn delete_document(
 async fn build_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>, ApiError> {
     let start = std::time::Instant::now();
 
+    // Try the real GraphRAG pipeline first
+    {
+        let mut graphrag_guard = state.graphrag.write().await;
+        if let Some(ref mut graphrag) = *graphrag_guard {
+            // Use actual pipeline to build graph
+            match graphrag.build_graph().await {
+                Ok(_) => {
+                    let processing_time = start.elapsed().as_millis() as u64;
+                    let (entities, relationships) = graphrag
+                        .knowledge_graph()
+                        .map(|kg| (kg.entities().count(), kg.relationships().count()))
+                        .unwrap_or((0, 0));
+
+                    *state.graph_built.write().await = true;
+
+                    tracing::info!(
+                        "Built knowledge graph via pipeline in {}ms ({} entities, {} relationships)",
+                        processing_time, entities, relationships
+                    );
+
+                    return Ok(Json(BuildGraphResponse {
+                        success: true,
+                        document_count: state.documents.read().await.len(),
+                        processing_time_ms: processing_time,
+                        message: format!(
+                            "Knowledge graph built: {} entities, {} relationships",
+                            entities, relationships
+                        ),
+                        backend: "graphrag-pipeline".to_string(),
+                    }));
+                },
+                Err(e) => {
+                    tracing::warn!("GraphRAG pipeline build failed, trying fallback: {}", e);
+                    // Fall through to lower-priority backends
+                },
+            }
+        }
+    }
+
     #[cfg(feature = "qdrant")]
     if let Some(qdrant) = &state.qdrant {
         match qdrant.stats().await {
             Ok((count, _)) => {
                 if count == 0 {
-                    return Err(ApiError::BadRequest("No documents in Qdrant. Add documents first.".to_string()));
+                    return Err(ApiError::BadRequest(
+                        "No documents in Qdrant. Add documents first.".to_string(),
+                    ));
                 }
-
-                // Simulate graph building
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
                 let processing_time = start.elapsed().as_millis() as u64;
 
-                tracing::info!("Built knowledge graph from {} Qdrant documents in {}ms", count, processing_time);
+                tracing::info!(
+                    "Built knowledge graph from {} Qdrant documents in {}ms",
+                    count,
+                    processing_time
+                );
+
+                *state.graph_built.write().await = true;
 
                 return Ok(Json(BuildGraphResponse {
                     success: true,
@@ -647,10 +725,13 @@ async fn build_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>, 
                     message: "Knowledge graph built from Qdrant successfully".to_string(),
                     backend: "qdrant".to_string(),
                 }));
-            }
+            },
             Err(e) => {
-                return Err(ApiError::InternalError(format!("Failed to access Qdrant: {}", e)));
-            }
+                return Err(ApiError::InternalError(format!(
+                    "Failed to access Qdrant: {}",
+                    e
+                )));
+            },
         }
     }
 
@@ -658,15 +739,19 @@ async fn build_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>, 
     let doc_count = state.documents.read().await.len();
 
     if doc_count == 0 {
-        return Err(ApiError::BadRequest("No documents to build graph from. Add documents first.".to_string()));
+        return Err(ApiError::BadRequest(
+            "No documents to build graph from. Add documents first.".to_string(),
+        ));
     }
 
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     *state.graph_built.write().await = true;
-
     let processing_time = start.elapsed().as_millis() as u64;
 
-    tracing::info!("Built knowledge graph from {} memory documents in {}ms", doc_count, processing_time);
+    tracing::info!(
+        "Built knowledge graph from {} memory documents in {}ms",
+        doc_count,
+        processing_time
+    );
 
     Ok(Json(BuildGraphResponse {
         success: true,
@@ -684,22 +769,44 @@ async fn build_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>, 
     description = "Retrieve statistics about the knowledge graph, including document count, entity count, and relationship count"
 )]
 async fn graph_stats(state: Data<AppState>) -> Json<GraphStatsResponse> {
+    // Try real GraphRAG pipeline stats first
+    {
+        let graphrag_guard = state.graphrag.read().await;
+        if let Some(ref graphrag) = *graphrag_guard {
+            if let Some(kg) = graphrag.knowledge_graph() {
+                let entity_count = kg.entities().count();
+                let relationship_count = kg.relationships().count();
+                let doc_count = kg.documents().count();
+                let chunk_count = kg.chunks().count();
+
+                return Json(GraphStatsResponse {
+                    document_count: doc_count,
+                    entity_count,
+                    relationship_count,
+                    vector_count: chunk_count,
+                    graph_built: true,
+                    backend: "graphrag-pipeline".to_string(),
+                });
+            }
+        }
+    }
+
     #[cfg(feature = "qdrant")]
     if let Some(qdrant) = &state.qdrant {
         match qdrant.stats().await {
             Ok((count, vectors)) => {
                 return Json(GraphStatsResponse {
                     document_count: count,
-                    entity_count: count * 10, // Estimated
-                    relationship_count: count * 15, // Estimated
+                    entity_count: 0,
+                    relationship_count: 0,
                     vector_count: vectors,
                     graph_built: count > 0,
                     backend: "qdrant".to_string(),
                 });
-            }
+            },
             Err(e) => {
                 tracing::error!("Failed to get Qdrant stats: {}", e);
-            }
+            },
         }
     }
 
@@ -707,15 +814,11 @@ async fn graph_stats(state: Data<AppState>) -> Json<GraphStatsResponse> {
     let doc_count = state.documents.read().await.len();
     let graph_built = *state.graph_built.read().await;
 
-    let entity_count = if graph_built { doc_count * 10 } else { 0 };
-    let relationship_count = if graph_built { doc_count * 15 } else { 0 };
-    let vector_count = if graph_built { doc_count * 20 } else { 0 };
-
     Json(GraphStatsResponse {
         document_count: doc_count,
-        entity_count,
-        relationship_count,
-        vector_count,
+        entity_count: 0,
+        relationship_count: 0,
+        vector_count: 0,
         graph_built,
         backend: "memory".to_string(),
     })
@@ -749,7 +852,11 @@ async fn login(
 
     match state.auth.generate_token(&body.username, role.clone(), 24) {
         Ok(token) => {
-            tracing::info!("✅ Generated JWT token for user: {} (role: {:?})", body.username, role);
+            tracing::info!(
+                "✅ Generated JWT token for user: {} (role: {:?})",
+                body.username,
+                role
+            );
             Ok(Json(LoginResponse {
                 success: true,
                 token,
@@ -758,11 +865,14 @@ async fn login(
                 expires_in_hours: 24,
                 usage: "Add header: Authorization: Bearer <token>".to_string(),
             }))
-        }
+        },
         Err(e) => {
             tracing::error!("❌ Failed to generate token: {}", e);
-            Err(ApiError::InternalError(format!("Token generation failed: {}", e)))
-        }
+            Err(ApiError::InternalError(format!(
+                "Token generation failed: {}",
+                e
+            )))
+        },
     }
 }
 
@@ -777,16 +887,26 @@ async fn create_api_key(
     state: Data<AppState>,
     body: Json<ApiKeyRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let role = body.role.as_deref()
+    let role = body
+        .role
+        .as_deref()
         .and_then(|r| match r {
             "Admin" => Some(auth::UserRole::Admin),
             _ => Some(auth::UserRole::User),
         })
         .unwrap_or(auth::UserRole::User);
 
-    match state.auth.create_api_key(&body.user_id, role.clone(), None).await {
+    match state
+        .auth
+        .create_api_key(&body.user_id, role.clone(), None)
+        .await
+    {
         Ok(api_key) => {
-            tracing::info!("✅ Created API key for user: {} (role: {:?})", body.user_id, role);
+            tracing::info!(
+                "✅ Created API key for user: {} (role: {:?})",
+                body.user_id,
+                role
+            );
             Ok(Json(json!({
                 "success": true,
                 "api_key": api_key,
@@ -798,14 +918,16 @@ async fn create_api_key(
                     "window_seconds": 3600
                 }
             })))
-        }
+        },
         Err(e) => {
             tracing::error!("❌ Failed to create API key: {}", e);
-            Err(ApiError::InternalError(format!("API key creation failed: {}", e)))
-        }
+            Err(ApiError::InternalError(format!(
+                "API key creation failed: {}",
+                e
+            )))
+        },
     }
 }
-
 
 // ============================================================================
 // Main Server Configuration
@@ -846,11 +968,26 @@ async fn main() -> std::io::Result<()> {
         ..Default::default()
     };
 
+    // JWT secret warning (item 3.4)
+    #[cfg(feature = "auth")]
+    if std::env::var("JWT_SECRET").is_err() {
+        tracing::warn!(
+            "⚠️  JWT_SECRET not set! Using insecure default. Set JWT_SECRET env var in production."
+        );
+    }
+
     tracing::info!("🚀 GraphRAG Server starting...");
     tracing::info!("📡 Listening on http://0.0.0.0:8080");
     tracing::info!("📚 Swagger UI: http://0.0.0.0:8080/swagger");
     tracing::info!("📄 OpenAPI spec: http://0.0.0.0:8080/openapi.json");
-    tracing::info!("🗄️  Backend: {}", if state.has_qdrant() { "Qdrant" } else { "In-memory" });
+    tracing::info!(
+        "🗄️  Backend: {}",
+        if state.has_qdrant() {
+            "Qdrant"
+        } else {
+            "In-memory"
+        }
+    );
 
     HttpServer::new(move || {
         // Configure CORS for each app instance
@@ -910,10 +1047,14 @@ async fn main() -> std::io::Result<()> {
             //         .service(resource("/api-key").route(post().to(create_api_key)))
             // )
 
+            // Config endpoints (item 3.3): registered via plain Actix-web routes.
+            // NOTE: To include them in OpenAPI spec, add #[api_operation] macros to
+            //       each handler in config_endpoints.rs, then register via Apistos scope/resource.
+
             // Build OpenAPI spec endpoint
             .build("/openapi.json")
 
-            // Config endpoints (plain Actix-web routing - added after .build() - not in OpenAPI doc)
+            // Config endpoints (plain Actix-web routing — no #[api_operation] yet)
             .service(
                 web::scope("/api/config")
                     .route("", web::get().to(config_endpoints::get_config))

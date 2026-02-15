@@ -374,6 +374,10 @@ impl LLMEntityExtractor {
                     relation_type: rel_item.description.clone(),
                     confidence: rel_item.strength as f32,
                     context: vec![], // No context chunks for this relationship
+                    embedding: None,
+                    temporal_type: None,
+                    temporal_range: None,
+                    causal_strength: None,
                 };
 
                 relationships.push(relationship);

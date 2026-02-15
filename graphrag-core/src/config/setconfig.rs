@@ -1813,6 +1813,7 @@ impl SetConfig {
             fallback_to_hash: self.ollama.fallback_to_hash,
             max_tokens: self.ollama.max_tokens,
             temperature: self.ollama.temperature,
+            enable_caching: true, // Default to enabled
         };
 
         // Map auto-save configuration

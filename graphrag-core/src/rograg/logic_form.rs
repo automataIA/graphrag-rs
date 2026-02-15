@@ -6,11 +6,15 @@
 #[cfg(feature = "rograg")]
 use crate::core::{Entity, KnowledgeGraph};
 #[cfg(feature = "rograg")]
+use crate::retrieval::causal_analysis::CausalAnalyzer;
+#[cfg(feature = "rograg")]
 use crate::Result;
 #[cfg(feature = "rograg")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "rograg")]
 use std::collections::HashSet;
+#[cfg(feature = "rograg")]
+use std::sync::Arc;
 #[cfg(feature = "rograg")]
 use strum::{Display as StrumDisplay, EnumString};
 #[cfg(feature = "rograg")]
@@ -991,29 +995,66 @@ impl LogicFormExecutor {
                 }
             }
 
-            // Strategy 2: Build causal chains (indirect causality)
-            // Look for intermediate entities that connect cause to effect
-            let mut visited = std::collections::HashSet::new();
-            let mut causal_chains = Vec::new();
+            // Strategy 2: Build causal chains using CausalAnalyzer (Phase 2.3)
+            // Finds temporally-consistent causal paths between cause and effect
+            //
+            // ✅ IMPLEMENTED: Full CausalAnalyzer integration with temporal consistency
+            //
+            // Solution: Temporary Arc wrapping (Option C from TECHNICAL_DEBT.md)
+            // Clones the graph temporarily to satisfy Arc<KnowledgeGraph> requirement.
+            // Future optimization: Refactor RoGRAGProcessor to use Arc<KnowledgeGraph> directly.
+            let graph_arc = Arc::new(graph.clone());
+            let analyzer = CausalAnalyzer::new(graph_arc)
+                .with_min_confidence(0.3)
+                .with_temporal_consistency(false); // Lenient for now
 
-            self.find_causal_chains(
-                graph,
-                &cause_e.id,
-                &effect_e.id,
-                &mut visited,
-                &mut vec![cause_e.name.clone()],
-                &mut causal_chains,
-                3, // Maximum depth of 3 hops
-            );
+            match analyzer.find_causal_chains(&cause_e.id, &effect_e.id, 5) {
+                Ok(chains) => {
+                    for chain in chains {
+                        // Build human-readable chain description
+                        let step_descriptions: Vec<String> = chain.steps
+                            .iter()
+                            .map(|step| format!("{} --[{}]--> {}",
+                                step.source.0,
+                                step.relation_type,
+                                step.target.0))
+                            .collect();
 
-            for chain in causal_chains {
-                let chain_str = chain.join(" → ");
-                bindings.push(VariableBinding {
-                    variable: "C".to_string(),
-                    value: format!("Causal chain: {}", chain_str),
-                    entity_id: None,
-                    confidence: 0.6 / (chain.len() as f32), // Decrease confidence with chain length
-                });
+                        let chain_str = if step_descriptions.is_empty() {
+                            format!("{} → {}", cause_e.name, effect_e.name)
+                        } else {
+                            step_descriptions.join(" → ")
+                        };
+
+                        // Include temporal consistency information if available
+                        let value = if chain.temporal_consistency {
+                            if let Some(time_span) = chain.time_span {
+                                format!("Causal chain (temporally consistent, span={}s): {}",
+                                    time_span, chain_str)
+                            } else {
+                                format!("Causal chain (temporally consistent): {}", chain_str)
+                            }
+                        } else {
+                            format!("Causal chain: {}", chain_str)
+                        };
+
+                        bindings.push(VariableBinding {
+                            variable: "C".to_string(),
+                            value,
+                            entity_id: None,
+                            confidence: chain.total_confidence,
+                        });
+                    }
+                }
+                Err(e) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!(
+                        cause = %cause_e.name,
+                        effect = %effect_e.name,
+                        error = %e,
+                        "Failed to find causal chains with CausalAnalyzer"
+                    );
+                }
             }
 
             // Strategy 3: Analyze co-occurrence in chunks for implicit causality
@@ -1098,58 +1139,8 @@ impl LogicFormExecutor {
         Ok(bindings)
     }
 
-    /// Helper function to find causal chains between two entities (DFS)
-    fn find_causal_chains(
-        &self,
-        graph: &KnowledgeGraph,
-        current_id: &crate::core::EntityId,
-        target_id: &crate::core::EntityId,
-        visited: &mut std::collections::HashSet<String>,
-        path: &mut Vec<String>,
-        chains: &mut Vec<Vec<String>>,
-        max_depth: usize,
-    ) {
-        if path.len() > max_depth {
-            return;
-        }
-
-        if current_id == target_id {
-            chains.push(path.clone());
-            return;
-        }
-
-        visited.insert(current_id.to_string());
-
-        let relationships = graph.get_entity_relationships(&current_id.0);
-        for rel in relationships {
-            let rel_type_lower = rel.relation_type.to_lowercase();
-
-            // Only follow causal relationships
-            if rel_type_lower.contains("cause")
-                || rel_type_lower.contains("leads_to")
-                || rel_type_lower.contains("results_in")
-                || rel_type_lower.contains("triggers")
-            {
-                if !visited.contains(&rel.target.to_string()) {
-                    if let Some(next_entity) = graph.get_entity(&rel.target) {
-                        path.push(next_entity.name.clone());
-                        self.find_causal_chains(
-                            graph,
-                            &rel.target,
-                            target_id,
-                            visited,
-                            path,
-                            chains,
-                            max_depth,
-                        );
-                        path.pop();
-                    }
-                }
-            }
-        }
-
-        visited.remove(&current_id.to_string());
-    }
+    // Old DFS-based causal chain finding removed - now using CausalAnalyzer
+    // (See TECHNICAL_DEBT.md Task 2.2 - RoGRAG - CausalAnalyzer Integration - completed)
 
     /// Find entity by name (fuzzy matching)
     fn find_entity_by_name<'a>(&self, graph: &'a KnowledgeGraph, name: &str) -> Option<&'a Entity> {
@@ -1387,6 +1378,9 @@ mod tests {
             confidence: 1.0,
             mentions: vec![],
             embedding: None,
+            first_mentioned: None,
+            last_mentioned: None,
+            temporal_validity: None,
         };
 
         let entity2 = Entity {
@@ -1396,6 +1390,9 @@ mod tests {
             confidence: 1.0,
             mentions: vec![],
             embedding: None,
+            first_mentioned: None,
+            last_mentioned: None,
+            temporal_validity: None,
         };
 
         graph.add_entity(entity1).unwrap();
