@@ -10,7 +10,65 @@ keywords = ["graphrag", "knowledge-graph", "rag", "llm", "ai"]
 categories = ["algorithms", "science", "text-processing"]
 
 [features]
-default = ["memory-storage", "basic-retrieval", "parallel-processing", "async", "ureq"]
+default = [
+    "memory-storage",
+    "basic-retrieval",
+    "parallel-processing",
+    "async",
+    "ureq",
+]
+
+# =============================================================================
+# FEATURE BUNDLES - Simplified feature selection for common use cases
+# =============================================================================
+# Use these bundles instead of manually selecting individual features:
+#   cargo add graphrag-core --features starter    # Quick start for new users
+#   cargo add graphrag-core --features full       # Production-ready setup
+#   cargo add graphrag-core --features wasm       # Browser/WASM deployment
+#   cargo add graphrag-core --features research   # Advanced research features
+
+## Starter Bundle - Minimal setup for getting started quickly
+## Includes: async runtime, Ollama LLM, memory storage, basic retrieval
+## Hello World: `GraphRAG::quick_start("text").await`
+starter = ["async", "ollama", "memory-storage", "basic-retrieval", "ureq"]
+
+## Full Bundle - Production-ready with all common features
+## Includes: starter + PageRank, LightRAG, caching, parallel processing, Leiden
+## Best for: Production deployments with optimal performance
+full = [
+    "starter",
+    "pagerank",
+    "lightrag",
+    "caching",
+    "parallel-processing",
+    "leiden",
+    "vector-hnsw",
+    "json5-support",
+    "hierarchical-config",
+    "qdrant",
+]
+
+## WASM Bundle - Browser-safe features only (no async runtime, no system calls)
+## Includes: memory storage, basic retrieval, Leiden community detection
+## Best for: Client-side browser deployments
+wasm-bundle = ["memory-storage", "basic-retrieval", "leiden"]
+
+## Research Bundle - Advanced features for GraphRAG research
+## Includes: full + ROGRAG, cross-encoder, incremental updates
+## Best for: Experiments, benchmarking, academic research
+research = [
+    "full",
+    "rograg",
+    "cross-encoder",
+    "incremental",
+    "monitoring",
+    "benchmarking",
+    "qdrant",
+]
+
+# =============================================================================
+# INDIVIDUAL FEATURES - For fine-grained control (power users)
+# =============================================================================
 
 # Async support (enabled by default, disabled for WASM)
 async = ["tokio", "futures", "tracing"]
@@ -20,8 +78,13 @@ ureq = ["dep:ureq"]
 
 # Storage backends
 memory-storage = []
-persistent-storage = ["arrow", "parquet"]  # Apache Parquet persistence
-lancedb = ["dep:lancedb", "arrow", "arrow-array", "arrow-schema"]  # LanceDB vector storage
+persistent-storage = ["arrow", "parquet"] # Apache Parquet persistence
+lancedb = [
+    "dep:lancedb",
+    "arrow",
+    "arrow-array",
+    "arrow-schema",
+] # LanceDB vector storage
 
 # Retrieval methods
 basic-retrieval = []
@@ -35,6 +98,7 @@ function-calling = []
 
 # Vector stores
 vector-hnsw = ["instant-distance"]
+vector-memory = []                 # Enable MemoryVectorStore integration in Registry
 
 # Monitoring and benchmarking
 monitoring = []
@@ -42,13 +106,13 @@ benchmarking = []
 
 # Serialization formats
 yaml-support = ["serde_yaml"]
-toml-support = []  # TOML is always available as core dependency
-serde_json = []    # serde_json is always available as core dependency
-json5-support = ["json5", "jsonschema"]  # JSON5 + schema validation
+toml-support = []                       # TOML is always available as core dependency
+serde_json = []                         # serde_json is always available as core dependency
+json5-support = ["json5", "jsonschema"] # JSON5 + schema validation
 
 # Graph import formats
 graphml-import = ["quick-xml"]  # GraphML format support
-rdf-import = ["oxrdf", "oxttl"]  # RDF/Turtle format support
+rdf-import = ["oxrdf", "oxttl"] # RDF/Turtle format support
 
 # Caching features
 caching = ["moka", "tracing"]
@@ -89,6 +153,9 @@ leiden = []
 # Cross-encoder reranking feature
 cross-encoder = []
 
+# Qdrant vector database integration
+qdrant = ["qdrant-client"]
+
 # Structured code chunking using tree-sitter
 code-chunking = ["tree-sitter", "tree-sitter-rust"]
 
@@ -99,15 +166,31 @@ neural-embeddings = ["dirs", "candle-core", "candle-nn", "candle-transformers"]
 huggingface-hub = ["hf-hub", "dirs"]
 
 # Multi-document processing and corpus analysis
-corpus-processing = ["tracing", "async"]  # Requires tracing for logging and async for operations
+corpus-processing = [
+    "tracing",
+    "async",
+] # Requires tracing for logging and async for operations
 
 # LLM integrations
-ollama = ["ollama-rs", "async"]        # Ollama LLM support (requires async)
+ollama = ["ollama-rs", "async"] # Ollama LLM support (requires async)
+
+# Hierarchical configuration with figment
+# Enables: defaults -> ~/.graphrag/config.toml -> ./graphrag.toml -> ENV vars -> builder
+hierarchical-config = ["figment", "dirs"]
 
 # Platform-specific features
-wasm = ["wasm-bindgen", "web-sys", "js-sys", "serde-wasm-bindgen", "getrandom"] # Browser WASM compatibility
+wasm = [
+    "wasm-bindgen",
+    "web-sys",
+    "js-sys",
+    "serde-wasm-bindgen",
+    "getrandom",
+] # Browser WASM compatibility
 cuda = ["neural-embeddings", "candle-core/cuda"] # NVIDIA GPU acceleration
-metal = ["neural-embeddings", "candle-core/metal"] # Apple Silicon GPU (only on macOS)
+metal = [
+    "neural-embeddings",
+    "candle-core/metal",
+] # Apple Silicon GPU (only on macOS)
 # webgpu = [] # WebGPU acceleration (WASM) - DISABLED due to Metal/objc build issues
 
 [dependencies]
@@ -116,14 +199,14 @@ petgraph = { workspace = true }
 indexmap = { workspace = true }
 text_analysis = "0.3"
 regex = { workspace = true }
-ureq = { workspace = true, optional = true }  # HTTP client (not needed for WASM)
+ureq = { workspace = true, optional = true } # HTTP client (not needed for WASM)
 json = { workspace = true }
 serde = { workspace = true }
 chrono = { workspace = true }
 log = "0.4"
 
 # Text processing enhancements
-text-splitter = { version = "0.18", optional = true, default-features = false }  # Semantic text chunking
+text-splitter = { version = "0.18", optional = true, default-features = false } # Semantic text chunking
 
 # === FEATURE-GATED DEPENDENCIES ===
 # Vector similarity search
@@ -143,30 +226,43 @@ lru = { workspace = true, optional = true }
 # Serialization (core functionality)
 serde_json = { workspace = true }
 serde_yaml = { workspace = true, optional = true }
-toml = { workspace = true }  # Core config parsing
-json5 = { version = "0.4", optional = true }  # JSON5 parsing (JSON with comments)
-jsonschema = { version = "0.18", optional = true, default-features = false }  # JSON Schema validation
-csv = { version = "1.3" }  # CSV parsing for data import
+toml = { workspace = true }                                                  # Core config parsing
+json5 = { version = "0.4", optional = true }                                 # JSON5 parsing (JSON with comments)
+jsonschema = { version = "0.18", optional = true, default-features = false } # JSON Schema validation
+csv = { version = "1.3" }                                                    # CSV parsing for data import
+
+# Hierarchical configuration (optional)
+figment = { version = "0.10", optional = true, features = [
+    "toml",
+    "env",
+] } # Multi-source config
 
 # Graph format parsing (optional)
-quick-xml = { version = "0.36", optional = true }  # GraphML XML parsing
-oxrdf = { version = "0.2", optional = true }  # RDF data model
-oxttl = { version = "0.1", optional = true }  # Turtle RDF parser
+quick-xml = { version = "0.36", optional = true } # GraphML XML parsing
+oxrdf = { version = "0.2", optional = true }      # RDF data model
+oxttl = { version = "0.1", optional = true }      # Turtle RDF parser
 
 # Persistence storage (optional)
-arrow = { workspace = true, optional = true, default-features = false, features = ["ipc"] }  # Apache Arrow
-parquet = { version = "57", optional = true, default-features = false, features = ["arrow", "snap"] }  # Parquet format
+arrow = { workspace = true, optional = true, default-features = false, features = [
+    "ipc",
+] } # Apache Arrow
+parquet = { version = "57", optional = true, default-features = false, features = [
+    "arrow",
+    "snap",
+] } # Parquet format
 # lancedb = { version = "0.15", optional = true }  # LanceDB vector storage (disabled due to version conflict)
 
 # Random number generation
 # For WASM: rand internally uses getrandom, and we need the js feature enabled
-rand = { version = "0.8", features = ["getrandom"] }  # For graph embeddings random walks
+rand = { version = "0.8", features = [
+    "getrandom",
+] } # For graph embeddings random walks
 
 # Async (optional for non-WASM targets)
 # Note: We override workspace to avoid pulling tokio for WASM (it doesn't work there)
 tokio = { version = "1.0", features = ["full"], optional = true }
 futures = { workspace = true, optional = true }
-async-trait = { workspace = true }  # Required for embedding traits (even without async runtime)
+async-trait = { workspace = true }                                # Required for embedding traits (even without async runtime)
 
 # Web frameworks (optional for API module)
 axum = { workspace = true, optional = true }
@@ -179,7 +275,7 @@ tracing-subscriber = { workspace = true, optional = true }
 
 # LLM integrations
 ollama-rs = { workspace = true, optional = true }
-jsonfixer = { workspace = true }  # JSON repair for LLM output (always available for entity extraction)
+jsonfixer = { workspace = true }                  # JSON repair for LLM output (always available for entity extraction)
 
 # Caching dependencies
 moka = { workspace = true, optional = true }
@@ -187,7 +283,7 @@ redis = { workspace = true, optional = true }
 bincode = { workspace = true, optional = true }
 sha2 = { workspace = true }
 flate2 = { workspace = true }
-indicatif = "0.17"  # Progress bars for long-running operations
+indicatif = "0.17"                              # Progress bars for long-running operations
 
 # Incremental updates dependencies
 uuid = { workspace = true, features = ["js"] }
@@ -216,7 +312,10 @@ candle-transformers = { workspace = true, optional = true }
 dirs = { version = "5.0", optional = true }
 
 # Hugging Face Hub client
-hf-hub = { version = "0.3", optional = true, default-features = false, features = ["tokio", "online"] }
+hf-hub = { version = "0.3", optional = true, default-features = false, features = [
+    "tokio",
+    "online",
+] }
 
 # Code parsing for structured chunking
 tree-sitter = { version = "0.22", optional = true }
@@ -230,7 +329,7 @@ js-sys = { workspace = true, optional = true }
 lancedb = { workspace = true, optional = true, features = ["remote"] }
 arrow-array = { workspace = true, optional = true }
 arrow-schema = { workspace = true, optional = true }
-qdrant-client = { workspace = true }
+qdrant-client = { workspace = true, optional = true }
 
 # Force getrandom 0.2 to use js feature for WASM targets
 # This overrides the dependency resolution for transitive dependencies (rand, ureq)
@@ -254,9 +353,9 @@ proptest = "1.4"
 tempfile = "3.8"
 
 [lib]
-crate-type = ["rlib", "cdylib"]  # rlib for Rust, cdylib for WASM/FFI
+crate-type = ["rlib", "cdylib"] # rlib for Rust, cdylib for WASM/FFI
 
 # Benchmarks
 [[bench]]
 name = "incremental_benchmark"
-harness = false  # Use criterion's harness
+harness = false                # Use criterion's harness

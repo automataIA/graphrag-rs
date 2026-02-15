@@ -10,64 +10,286 @@ The core library for GraphRAG-rs, providing portable functionality for both nati
 - **Entity Extraction**: TRUE LLM-based gleaning extraction with multi-round refinement (Microsoft GraphRAG-style)
 - **Graph Construction**: Incremental updates, PageRank, community detection
 - **Retrieval Strategies**: Vector, BM25, PageRank, hybrid, adaptive
-- **Configuration System**: Comprehensive TOML-based configuration
+- **Configuration System**: Hierarchical TOML-based configuration with environment variable overrides
 - **Cross-Platform**: Works on native (Linux, macOS, Windows) and WASM
 
-## Quick Start
+## Quick Start (5 Lines!)
 
-### Installation
+```rust
+use graphrag_core::prelude::*;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let mut graphrag = GraphRAG::quick_start("Your document text here").await?;
+    let answer = graphrag.ask("What is the main topic?").await?;
+    println!("{}", answer);
+    Ok(())
+}
+```
+
+**Or with detailed explanations:**
+
+```rust
+let explained = graphrag.ask_explained("What is the main topic?").await?;
+println!("Answer: {}", explained.answer);
+println!("Confidence: {:.0}%", explained.confidence * 100.0);
+for step in &explained.reasoning_steps {
+    println!("Step {}: {}", step.step_number, step.description);
+}
+```
+
+## Installation
 
 Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-graphrag-core = { path = "../graphrag-core", features = ["huggingface-hub", "ureq"] }
+# Choose a feature bundle:
+graphrag-core = { version = "0.1", features = ["starter"] }  # Basic setup
+# OR
+graphrag-core = { version = "0.1", features = ["full"] }     # Production-ready
+# OR
+graphrag-core = { version = "0.1", features = ["research"] } # Advanced features
 ```
 
-### Basic Usage
+### Feature Bundles
+
+| Bundle | Description | Includes |
+|--------|-------------|----------|
+| **`starter`** | Minimal setup to get started | async, ollama, memory-storage, basic-retrieval |
+| **`full`** | Production-ready with common features | starter + pagerank, lightrag, caching, parallel-processing, leiden |
+| **`wasm-bundle`** | Browser-safe features only | memory-storage, basic-retrieval, leiden |
+| **`research`** | Advanced experimental features | full + rograg, cross-encoder, incremental, monitoring |
+
+## Three Ways to Configure
+
+### 1. TypedBuilder (Compile-Time Safety)
 
 ```rust
-use graphrag_core::embeddings::huggingface::HuggingFaceEmbeddings;
-use graphrag_core::embeddings::EmbeddingProvider;
+use graphrag_core::prelude::*;
+
+// Build won't compile until required fields are set!
+let graphrag = TypedBuilder::new()
+    .with_output_dir("./output")    // Required
+    .with_ollama()                   // Required: choose LLM backend
+    .with_chunk_size(512)            // Optional
+    .with_top_k(10)                  // Optional
+    .build()?;
+```
+
+**Available LLM backends:**
+- `.with_ollama()` - Local Ollama (recommended)
+- `.with_ollama_custom("host", 8080, "model")` - Custom Ollama config
+- `.with_hash_embeddings()` - Offline, no LLM needed
+- `.with_candle_embeddings()` - Local neural embeddings
+
+### 2. Hierarchical Config (with figment)
+
+Enable with the `hierarchical-config` feature:
+
+```rust
+// Loads configuration from 5 sources (in priority order):
+// 1. Code defaults (lowest priority)
+// 2. ~/.graphrag/config.toml (user config)
+// 3. ./graphrag.toml (project config)
+// 4. Environment variables (GRAPHRAG_*)
+// 5. Builder overrides (highest priority)
+
+let config = Config::load()?;  // Automatically merges all sources
+let graphrag = GraphRAG::new(config)?;
+```
+
+**Environment variable overrides:**
+```bash
+export GRAPHRAG_OLLAMA_HOST=my-server
+export GRAPHRAG_OLLAMA_PORT=8080
+export GRAPHRAG_CHUNK_SIZE=1000
+```
+
+### 3. TOML Configuration File
+
+```toml
+# graphrag.toml
+output_dir = "./output"
+approach = "hybrid"  # semantic, algorithmic, or hybrid
+chunk_size = 1000
+chunk_overlap = 200
+
+[embeddings]
+backend = "ollama"
+dimension = 768
+model = "nomic-embed-text:latest"
+
+[ollama]
+enabled = true
+host = "localhost"
+port = 11434
+chat_model = "llama3.2:3b"
+
+[entities]
+min_confidence = 0.7
+use_gleaning = true
+max_gleaning_rounds = 3
+entity_types = ["PERSON", "ORGANIZATION", "LOCATION", "DATE", "EVENT"]
+```
+
+Load with:
+```rust
+let config = Config::from_toml_file("graphrag.toml")?;
+let graphrag = GraphRAG::new(config)?;
+```
+
+## Sectoral Templates
+
+Pre-configured templates for specific domains:
+
+| Template | Best For | Entity Types |
+|----------|----------|--------------|
+| `general.toml` | Mixed documents | PERSON, ORGANIZATION, LOCATION, DATE, EVENT |
+| `legal.toml` | Contracts, agreements | PARTY, JURISDICTION, CLAUSE_TYPE, OBLIGATION |
+| `medical.toml` | Clinical notes | PATIENT, DIAGNOSIS, MEDICATION, SYMPTOM |
+| `financial.toml` | Reports, filings | COMPANY, TICKER, MONETARY_VALUE, METRIC |
+| `technical.toml` | API docs, code | FUNCTION, CLASS, MODULE, API_ENDPOINT |
+
+**Using templates:**
+```rust
+let config = Config::from_toml_file("templates/legal.toml")?;
+```
+
+**Or via CLI:**
+```bash
+graphrag-cli setup --template legal
+```
+
+## Explained Answers
+
+Get transparency into how answers are generated:
+
+```rust
+let explained = graphrag.ask_explained("Who founded the company?").await?;
+
+// Access detailed information:
+println!("Answer: {}", explained.answer);
+println!("Confidence: {:.0}%", explained.confidence * 100.0);
+
+// Reasoning trace
+for step in &explained.reasoning_steps {
+    println!("{}. {} (confidence: {:.0}%)",
+        step.step_number,
+        step.description,
+        step.confidence * 100.0
+    );
+}
+
+// Source references
+for source in &explained.sources {
+    println!("Source: {} ({:?})", source.id, source.source_type);
+    println!("  Excerpt: {}", source.excerpt);
+}
+
+// Or get formatted output
+println!("{}", explained.format_display());
+```
+
+**Output:**
+```
+**Answer:** John Smith founded Acme Corp in 2015.
+
+**Confidence:** 85%
+
+**Reasoning:**
+1. Analyzed query: "Who founded the company?" (confidence: 95%)
+2. Found 3 relevant entities (confidence: 85%)
+3. Retrieved 5 relevant text chunks (confidence: 85%)
+4. Synthesized answer from retrieved information (confidence: 85%)
+
+**Sources:**
+1. [TextChunk] chunk_123 (relevance: 92%)
+2. [Entity] john_smith (relevance: 88%)
+```
+
+## Error Messages with Suggestions
+
+Errors include actionable suggestions:
+
+```rust
+match graphrag.ask("question").await {
+    Ok(answer) => println!("{}", answer),
+    Err(e) => {
+        // Get structured suggestion
+        let suggestion = e.suggestion();
+        println!("Error: {}", e);
+        println!("Suggestion: {}", suggestion.action);
+
+        if let Some(code) = suggestion.code_example {
+            println!("Example:\n{}", code);
+        }
+
+        // Or use formatted output
+        println!("{}", e.display_with_suggestion());
+    }
+}
+```
+
+## CLI Setup Wizard
+
+Interactive configuration wizard:
+
+```bash
+graphrag-cli setup
+
+# With template:
+graphrag-cli setup --template legal
+
+# Custom output:
+graphrag-cli setup --output ./my-config.toml
+```
+
+**Wizard prompts:**
+1. Select use case (General, Legal, Medical, Financial, Technical)
+2. Choose LLM provider (Ollama or pattern-based)
+3. Configure Ollama settings (if selected)
+4. Set output directory
+
+## Full Usage Example
+
+```rust
+use graphrag_core::prelude::*;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create embedding provider
-    let mut embeddings = HuggingFaceEmbeddings::new(
-        "sentence-transformers/all-MiniLM-L6-v2",
-        None,
-    );
+async fn main() -> Result<()> {
+    // Option 1: Quick start (simplest)
+    let mut graphrag = GraphRAG::quick_start("Your document text").await?;
 
-    // Initialize (downloads model if needed)
-    embeddings.initialize().await?;
+    // Option 2: TypedBuilder (compile-time safe)
+    let mut graphrag = TypedBuilder::new()
+        .with_output_dir("./output")
+        .with_ollama()
+        .with_chunk_size(512)
+        .build_and_init()?;
 
-    // Generate embedding
-    let embedding = embeddings.embed("Your text here").await?;
-    println!("Generated {} dimensions", embedding.len());
+    // Add documents
+    graphrag.add_document_from_text("Document content here")?;
+    graphrag.add_document_from_file("path/to/document.txt")?;
+
+    // Build knowledge graph
+    graphrag.build_graph().await?;
+
+    // Query
+    let answer = graphrag.ask("What are the main topics?").await?;
+    println!("{}", answer);
+
+    // Or with explanations
+    let explained = graphrag.ask_explained("What are the main topics?").await?;
+    println!("{}", explained.format_display());
 
     Ok(())
 }
 ```
 
-## Features
+## Embedding Providers
 
-### Embedding Providers
-
-GraphRAG Core supports 8 embedding backends via feature flags:
-
-```toml
-[features]
-# Free, offline embedding models
-huggingface-hub = ["hf-hub", "dirs"]
-
-# API-based embedding providers
-ureq = ["dep:ureq"]  # Enables OpenAI, Voyage, Cohere, Jina, Mistral, Together
-
-# Local inference (coming soon)
-neural-embeddings = ["candle-core"]
-```
-
-**Supported Providers:**
+GraphRAG Core supports 8 embedding backends:
 
 | Provider | Cost | Quality | Feature Flag | Use Case |
 |----------|------|---------|--------------|----------|
@@ -78,164 +300,11 @@ neural-embeddings = ["candle-core"]
 | **Jina AI** | $0.02/1M | ★★★★ | `ureq` | Cost-optimized |
 | **Mistral** | $0.10/1M | ★★★★ | `ureq` | RAG-optimized |
 | **Together AI** | $0.008/1M | ★★★★ | `ureq` | Cheapest |
-| **Ollama** | Free | ★★★★ | (via config) | Local GPU |
-
-See [EMBEDDINGS_CONFIG.md](EMBEDDINGS_CONFIG.md) for detailed configuration.
-
-### Configuration System
-
-GraphRAG Core uses TOML for configuration:
-
-```toml
-# config.toml
-
-[embeddings]
-backend = "huggingface"
-model = "sentence-transformers/all-MiniLM-L6-v2"
-dimension = 384
-batch_size = 32
-cache_dir = "~/.cache/huggingface"
-
-[graph]
-max_connections = 10
-similarity_threshold = 0.8
-
-[retrieval]
-top_k = 10
-search_algorithm = "cosine"
-```
-
-Load configuration:
-
-```rust
-use graphrag_core::config::Config;
-
-let config = Config::from_toml_file("config.toml")?;
-```
-
-## Examples
-
-### Embedding Providers
-
-```bash
-# Demo all providers
-cargo run --example embeddings_demo --features "huggingface-hub,ureq"
-
-# Config-based usage
-cargo run --example embeddings_from_config --features "huggingface-hub,ureq"
-
-# With API keys
-OPENAI_API_KEY=sk-... \
-cargo run --example embeddings_demo --features ureq
-```
-
-### Entity Extraction (Real LLM-Based Gleaning)
-
-GraphRAG Core implements TRUE LLM-based entity extraction with iterative refinement:
-
-```rust
-use graphrag_core::entity::gleaning_extractor::GleaningEntityExtractor;
-use graphrag_core::entity::GleaningConfig;
-use graphrag_core::ollama::OllamaClient;
-
-// Create Ollama client
-let ollama_client = OllamaClient::new(ollama_config);
-
-// Configure gleaning (Microsoft GraphRAG-style)
-let gleaning_config = GleaningConfig {
-    max_gleaning_rounds: 4,  // Default: 4 rounds like Microsoft GraphRAG
-    completion_threshold: 0.8,
-    entity_confidence_threshold: 0.7,
-    use_llm_completion_check: true,  // LLM judges completion
-    entity_types: vec!["PERSON".to_string(), "ORGANIZATION".to_string(), "LOCATION".to_string()],
-    temperature: 0.1,
-    max_tokens: 1500,
-};
-
-// Create extractor
-let extractor = GleaningEntityExtractor::new(ollama_client, gleaning_config);
-
-// Extract with real LLM calls (takes 15-30 seconds per chunk per round)
-let (entities, relationships) = extractor.extract_with_gleaning(chunk).await?;
-```
-
-**Performance Expectations**:
-- **Small document** (5-10 pages): 5-15 minutes
-- **Medium document** (50-100 pages): 30-60 minutes
-- **Large document** (500-1000 pages): 2-4 hours
-
-This is REAL LLM processing with actual API calls, not pattern matching!
-
-### Graph Construction
-
-```rust
-use graphrag_core::graph::incremental::IncrementalGraph;
-
-let mut graph = IncrementalGraph::new();
-graph.add_document("document1", entities1)?;
-graph.add_document("document2", entities2)?;  // Automatic deduplication!
-```
-
-## Module Structure
-
-```
-graphrag-core/
-├── src/
-│   ├── embeddings/          # Embedding generation
-│   │   ├── mod.rs           # EmbeddingProvider trait
-│   │   ├── huggingface.rs   # HuggingFace Hub integration
-│   │   ├── api_providers.rs # 6 API providers
-│   │   ├── config.rs        # TOML configuration
-│   │   └── README.md        # Technical documentation
-│   ├── entity/              # Entity extraction
-│   │   ├── mod.rs           # Entity types and base traits
-│   │   ├── prompts.rs       # Microsoft GraphRAG-style LLM prompts
-│   │   ├── llm_extractor.rs # Real LLM entity extraction with Ollama
-│   │   ├── gleaning_extractor.rs  # Multi-round gleaning orchestrator
-│   │   └── semantic_merging.rs    # Entity deduplication
-│   ├── graph/               # Knowledge graph
-│   │   ├── mod.rs           # Graph construction
-│   │   ├── incremental.rs   # Incremental updates
-│   │   └── pagerank.rs      # Fast-GraphRAG retrieval
-│   ├── retrieval/           # Search strategies
-│   │   ├── mod.rs           # Vector similarity
-│   │   ├── bm25.rs          # Keyword search
-│   │   ├── hybrid.rs        # Multi-strategy fusion
-│   │   └── pagerank_retrieval.rs  # Graph-based search
-│   ├── config/              # Configuration system
-│   │   ├── mod.rs           # Main Config struct
-│   │   └── toml_config.rs   # TOML parsing
-│   └── core/                # Core traits and types
-│       ├── error.rs         # Error types
-│       ├── traits.rs        # Pluggable abstractions
-│       └── registry.rs      # Component registry
-└── examples/
-    ├── embeddings_demo.rs           # Test all providers
-    ├── embeddings_from_config.rs    # Config-based usage
-    └── embeddings.toml              # Example configuration
-```
-
-## Performance
-
-### Embedding Speed
-
-| Provider | Latency | Throughput | GPU Support |
-|----------|---------|------------|-------------|
-| HuggingFace (local) | 50-100ms | 10-20 chunks/s | ❌ |
-| ONNX Runtime Web | 3-8ms | 125-333 chunks/s | ✅ WebGPU |
-| Ollama | 100-200ms | 5-10 chunks/s | ✅ CUDA/Metal |
-| API Providers | 50-200ms | Varies | ☁️ Cloud |
-
-### Memory Usage
-
-- HuggingFace models: ~100-500MB (cached on disk)
-- Graph (10K entities): ~50MB
-- Embeddings cache: Configurable (default: 10K vectors)
+| **Ollama** | Free | ★★★★ | `ollama` + `async` | Local GPU + LLM |
 
 ## Advanced Features
 
 ### LightRAG (Dual-Level Retrieval)
-
 ```toml
 [retrieval]
 strategy = "hybrid"
@@ -243,137 +312,159 @@ enable_lightrag = true  # 6000x token reduction!
 ```
 
 ### PageRank (Fast-GraphRAG)
-
 ```toml
 [graph]
 enable_pagerank = true  # 27x performance boost
 ```
 
 ### RoGRAG (Logic Form Reasoning)
-
-Advanced query processing with temporal and causal reasoning:
-
-```toml
-[features]
-rograg = []  # Enable logic form query decomposition
+```rust
+// Enable with feature flag: rograg
+let answer = graphrag.ask_with_reasoning("Why did X cause Y?").await?;
 ```
 
-**Capabilities:**
-- **Query Decomposition**: Break complex queries into logic forms (60%→75% accuracy)
-- **Temporal Reasoning**: Extract event timelines from relationships and metadata
-  - Temporal relationship detection (happened_before, occurred_during)
-  - Date/time extraction from chunk metadata and content
-  - Narrative ordering using document position heuristics
-- **Causal Reasoning**: Discover cause-effect relationships with confidence ranking
-  - Direct causal relationship identification (causes, leads_to, results_in)
-  - Causal chain discovery using DFS traversal (max depth 3)
-  - Co-occurrence analysis with causal keyword detection
-  - Confidence-based ranking of causal explanations
-
-**Supported Query Types:**
-- Identity: "What is X?"
-- Relationships: "How are X and Y related?"
-- Properties: "What does X have?"
-- Temporal: "When did X happen?"
-- Causal: "Why did X cause Y?"
-- Comparison: "Compare X and Y"
-
 ### Intelligent Caching
-
 ```toml
 [generation]
 enable_caching = true  # 80%+ hit rate, 6x cost reduction
 ```
 
-## API Providers Setup
+## Pipeline Architecture
 
-### Environment Variables
+GraphRAG uses a configurable pipeline with different methods for each phase:
 
-```bash
-# API Keys (recommended)
-export OPENAI_API_KEY="sk-..."
-export VOYAGE_API_KEY="pa-..."
-export COHERE_API_KEY="..."
-export JINA_API_KEY="jina_..."
-export MISTRAL_API_KEY="..."
-export TOGETHER_API_KEY="..."
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         build_graph()                                   │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ┌─────────────────┐                                                    │
+│  │    CHUNKING     │  TextProcessor splits document into chunks         │
+│  │  (always runs)  │  Configurable: chunk_size, chunk_overlap           │
+│  └────────┬────────┘                                                    │
+│           │                                                             │
+│           ▼                                                             │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │                    ENTITY EXTRACTION                             │   │
+│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │   │
+│  │  │   Algorithmic   │  │    Semantic     │  │     Hybrid      │  │   │
+│  │  │ (pattern-based) │  │  (LLM-based)    │  │ (both + fusion) │  │   │
+│  │  │    ⚡ Fast      │  │  🎯 Accurate    │  │  ⚖️ Balanced    │  │   │
+│  │  └─────────────────┘  └─────────────────┘  └─────────────────┘  │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│           │                                                             │
+│           ▼                                                             │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │                  RELATIONSHIP EXTRACTION                         │   │
+│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │   │
+│  │  │  Co-occurrence  │  │    LLM-based    │  │    Gleaning     │  │   │
+│  │  │ entity proximity│  │ GraphRAG method │  │ multi-round LLM │  │   │
+│  │  │    ⚡ Fast      │  │  🎯 Semantic    │  │  🔄 Iterative   │  │   │
+│  │  └─────────────────┘  └─────────────────┘  └─────────────────┘  │   │
+│  │  Optional: config.graph.extract_relationships = true/false       │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│           │                                                             │
+│           ▼                                                             │
+│  ┌─────────────────┐                                                    │
+│  │    GRAPH        │  Entities + Relationships → KnowledgeGraph        │
+│  │  CONSTRUCTION   │  Supports: PageRank, Community Detection          │
+│  └─────────────────┘                                                    │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
 
-# HuggingFace cache
-export HF_HOME="~/.cache/huggingface"
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           ask() / query                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│  ┌─────────────────┐                                                    │
+│  │    EMBEDDING    │  Generated on-demand (lazy evaluation)             │
+│  │   GENERATION    │  8 providers: Ollama, OpenAI, HuggingFace, etc.   │
+│  └────────┬────────┘                                                    │
+│           ▼                                                             │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │                     RETRIEVAL STRATEGIES                         │   │
+│  │  Vector │ BM25 │ PageRank │ Hybrid │ Adaptive │ LightRAG         │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│           ▼                                                             │
+│  ┌─────────────────┐                                                    │
+│  │     ANSWER      │  LLM synthesis (if Ollama enabled)                │
+│  │   GENERATION    │  Or: concatenated search results                   │
+│  └─────────────────┘                                                    │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Configuration File
+### Phase Configuration Quick Reference
 
-```toml
-[embeddings]
-backend = "openai"
-model = "text-embedding-3-small"
-# api_key = "sk-..."  # Or use OPENAI_API_KEY env var
-dimension = 1536
-batch_size = 100
+| Phase | Key Parameters | Config |
+|-------|----------------|--------|
+| **1. Chunking** | `chunk_size`, `chunk_overlap` | `chunk_size = 1000` |
+| **2. Entity Extraction** | `approach`, `entity_types`, `use_gleaning` | `approach = "hybrid"` |
+| **3. Relationship Extraction** | `extract_relationships`, `use_gleaning` | `[graph] extract_relationships = true` |
+| **4. Graph Construction** | `enable_pagerank`, `max_connections` | `[graph] enable_pagerank = true` |
+| **5. Embedding** | `backend`, `dimension`, `model` | `[embeddings] backend = "ollama"` |
+| **6. Retrieval** | `strategy`, `top_k` | `[retrieval] strategy = "hybrid"` |
+| **7. Answer Generation** | `chat_model`, `temperature` | `[ollama] enabled = true` |
+
+### Method Selection by Phase
+
+| Phase | Methods Available | Config Setting |
+|-------|-------------------|----------------|
+| **Entity Extraction** | Algorithmic / Semantic / Hybrid | `approach = "algorithmic\|semantic\|hybrid"` |
+| **Relationship Extraction** | Co-occurrence / LLM-based / Gleaning | `entities.use_gleaning = true\|false` |
+| **Embedding** | Ollama / Hash / OpenAI / HuggingFace / 8 providers | `embeddings.backend = "ollama"` |
+| **Retrieval** | Vector / BM25 / PageRank / Hybrid / Adaptive / LightRAG | `retrieval.strategy = "hybrid"` |
+
+### Key Notes
+
+- **Embedding is NOT part of `build_graph()`** - generated lazily during queries
+- **Relationship extraction is optional** - controlled by `config.graph.extract_relationships`
+- **Gleaning extracts entities AND relationships together** in multi-round LLM calls
+- **See [PIPELINE_ARCHITECTURE.md](PIPELINE_ARCHITECTURE.md) for full parameter reference**
+
+## Module Structure
+
+```
+graphrag-core/
+├── src/
+│   ├── builder/         # TypedBuilder with type-state pattern
+│   ├── config/          # Hierarchical configuration (figment)
+│   ├── core/            # Core traits, errors with suggestions
+│   ├── embeddings/      # 8 embedding providers
+│   ├── entity/          # LLM-based gleaning extraction
+│   ├── graph/           # Knowledge graph construction
+│   ├── retrieval/       # ExplainedAnswer, search strategies
+│   └── templates/       # Sectoral configuration templates
+└── examples/
 ```
 
 ## Testing
 
 ```bash
-# Run all tests
+# Quick test with starter features
+cargo test --features starter
+
+# Full test suite
 cargo test --all-features
 
-# Test embeddings
-cargo test --features "huggingface-hub,ureq" embeddings
-
-# Test with model downloads (slow)
-ENABLE_DOWNLOAD_TESTS=1 cargo test --features huggingface-hub
+# Test specific modules
+cargo test --features starter builder::
+cargo test --features starter retrieval::
 ```
 
 ## Documentation
 
-- **[ENTITY_EXTRACTION.md](ENTITY_EXTRACTION.md)** - Complete guide to TRUE LLM-based gleaning extraction
-- **[EMBEDDINGS_CONFIG.md](EMBEDDINGS_CONFIG.md)** - Complete embedding configuration guide
-- **[src/embeddings/README.md](src/embeddings/README.md)** - Technical embedding documentation
-- **[../REAL_LLM_GLEANING_IMPLEMENTATION.md](../REAL_LLM_GLEANING_IMPLEMENTATION.md)** - Implementation details and architecture
-- **[../HOW_IT_WORKS.md](../HOW_IT_WORKS.md)** - Pipeline overview
-- **[../README.md](../README.md)** - Main project documentation
-
-## Feature Flags
-
-```toml
-[features]
-# Embedding providers
-huggingface-hub = ["hf-hub", "dirs"]  # Free, offline models
-ureq = ["dep:ureq"]                   # API providers
-
-# Graph backends
-memory-storage = []                    # In-memory (default)
-persistent-storage = ["lancedb"]       # LanceDB embedded
-
-# Processing
-parallel-processing = ["rayon"]        # Multi-threading
-caching = ["moka"]                     # LLM response cache
-
-# Advanced features
-incremental = []                       # Zero-downtime updates
-pagerank = []                          # Fast-GraphRAG
-lightrag = []                          # Dual-level retrieval
-rograg = []                            # Query decomposition
-
-# LLM integrations
-ollama = []                            # Ollama local models
-function-calling = []                  # Function calling support
-```
+- **[QUICKSTART.md](QUICKSTART.md)** - 5-minute getting started guide
+- **[PIPELINE_ARCHITECTURE.md](PIPELINE_ARCHITECTURE.md)** - Pipeline phases and methods
+- **[templates/README.md](templates/README.md)** - Sectoral template guide
+- **[EMBEDDINGS_CONFIG.md](EMBEDDINGS_CONFIG.md)** - Embedding configuration
+- **[ENTITY_EXTRACTION.md](ENTITY_EXTRACTION.md)** - LLM-based extraction guide
+- **[OLLAMA_INTEGRATION.md](OLLAMA_INTEGRATION.md)** - Ollama setup guide
 
 ## Cross-Platform Support
-
-GraphRAG Core is designed to work across platforms:
 
 - ✅ **Linux** - Full support with all features
 - ✅ **macOS** - Full support with Metal GPU acceleration
 - ✅ **Windows** - Full support with CUDA GPU acceleration
-- ✅ **WASM** - Core functionality (see graphrag-wasm crate)
-
-## Contributing
-
-See [../CONTRIBUTING.md](../CONTRIBUTING.md) for contribution guidelines.
+- ✅ **WASM** - Core functionality (use `wasm-bundle` feature)
 
 ## License
 
@@ -381,4 +472,4 @@ MIT License - see [../LICENSE](../LICENSE) for details.
 
 ---
 
-**Part of the GraphRAG-rs project** | [Main README](../README.md) | [Architecture](../ARCHITECTURE.md) | [How It Works](../HOW_IT_WORKS.md)
+**Part of the GraphRAG-rs project** | [Main README](../README.md) | [Quick Start](QUICKSTART.md)

@@ -647,6 +647,9 @@ mod tests {
                 confidence: 0.9,
                 mentions: vec![],
                 embedding: None,
+                first_mentioned: None,
+                last_mentioned: None,
+                temporal_validity: None,
             },
         ];
 

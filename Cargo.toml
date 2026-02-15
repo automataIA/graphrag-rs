@@ -3,7 +3,8 @@ members = [
     "graphrag-core",
     "graphrag-wasm",
     "graphrag-server",
-    "graphrag-cli", "graphrag_py",
+    "graphrag-cli",
+    "graphrag_py",
 ]
 exclude = ["examples/web-app"]
 resolver = "2"
@@ -11,9 +12,12 @@ resolver = "2"
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.75"
 authors = ["GraphRAG-RS Contributors"]
 license = "MIT"
-repository = "https://github.com/yourusername/graphrag-rs"
+repository = "https://github.com/automataIA/graphrag-rs"
+homepage = "https://github.com/automataIA/graphrag-rs"
+readme = "README.md"
 
 [workspace.dependencies]
 # Core dependencies (shared across crates)
@@ -107,7 +111,7 @@ reedline = "0.37"
 
 # LLM integrations
 ollama-rs = "0.2"
-jsonfixer = "0.1"  # JSON repair for malformed LLM output
+jsonfixer = "0.1" # JSON repair for malformed LLM output
 
 # HTTP client
 ureq = { version = "2.12", features = ["json"] }
@@ -116,7 +120,11 @@ ureq = { version = "2.12", features = ["json"] }
 json = "0.12"
 
 # Other
-chrono = { version = "0.4.38", default-features = false, features = ["serde", "clock", "std"] }  # Compatible with arrow
+chrono = { version = "0.4.38", default-features = false, features = [
+    "serde",
+    "clock",
+    "std",
+] } # Compatible with arrow
 uuid = { version = "1.0", features = ["v4", "serde"] }
 
 # Vector databases (optional, for persistent storage)

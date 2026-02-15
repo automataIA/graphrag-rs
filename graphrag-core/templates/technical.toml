@@ -1,0 +1,83 @@
+# GraphRAG Configuration Template: Technical Documentation
+# =========================================================
+# Best for: API docs, code documentation, technical specs, architecture docs
+#
+# Optimized for:
+# - Extracting functions, classes, modules, APIs
+# - Code relationships and dependencies
+# - Version and compatibility information
+#
+# Usage:
+#   cp templates/technical.toml ./graphrag.toml
+#   # or: graphrag init --template technical
+
+output_dir = "./graphrag-technical"
+approach = "algorithmic"  # Pattern-based works well for structured tech docs
+
+# Smaller chunks to preserve code boundaries
+chunk_size = 600
+chunk_overlap = 100
+
+top_k_results = 12
+similarity_threshold = 0.7
+
+[embeddings]
+backend = "hash"  # Fast and works offline for tech docs
+dimension = 384
+fallback_to_hash = true
+batch_size = 32
+
+[entities]
+min_confidence = 0.7
+entity_types = [
+    "FUNCTION",          # Functions, methods
+    "CLASS",             # Classes, structs
+    "MODULE",            # Modules, packages
+    "API_ENDPOINT",      # REST endpoints, GraphQL
+    "PARAMETER",         # Function parameters
+    "RETURN_TYPE",       # Return types
+    "ERROR_TYPE",        # Exceptions, error codes
+    "VERSION",           # API versions, semver
+    "DEPENDENCY",        # Libraries, crates
+    "CONFIG_KEY",        # Configuration options
+    "ENVIRONMENT_VAR",   # Environment variables
+    "FILE_PATH",         # File references
+    "URL",               # Links, endpoints
+]
+use_gleaning = false  # Pattern-based is often sufficient for tech docs
+max_gleaning_rounds = 2
+
+[graph]
+max_connections = 20  # More connections for dependency graphs
+similarity_threshold = 0.7
+extract_relationships = true
+relationship_confidence_threshold = 0.4
+
+[graph.traversal]
+max_depth = 5  # Deeper for module hierarchies
+max_paths = 20
+use_edge_weights = true
+min_relationship_strength = 0.3
+
+[retrieval]
+top_k = 12
+search_algorithm = "cosine"
+
+[parallel]
+enabled = true
+num_threads = 0
+min_batch_size = 20
+
+[ollama]
+enabled = false  # Often not needed for tech docs
+host = "localhost"
+port = 11434
+chat_model = "llama3.2:3b"
+embedding_model = "nomic-embed-text"
+timeout_seconds = 30
+enable_caching = true
+
+[auto_save]
+enabled = false
+interval_seconds = 300
+max_versions = 3

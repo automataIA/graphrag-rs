@@ -880,7 +880,7 @@ done > commands.txt
 ## 🤝 Contributing
 
 Found a bug or want to contribute? Open an issue or pull request at:
-https://github.com/yourusername/graphrag-rs
+https://github.com/automataIA/graphrag-rs
 
 ---
 

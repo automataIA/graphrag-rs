@@ -19,6 +19,10 @@ pub mod embeddings;
 pub mod temporal;
 pub mod traversal;
 
+// Hierarchical relationship clustering (Phase 3.1)
+#[cfg(feature = "async")]
+pub mod hierarchical_relationships;
+
 // PageRank module is only available when the feature is enabled
 #[cfg(feature = "pagerank")]
 pub mod pagerank;
@@ -58,6 +62,12 @@ pub use pagerank::{MultiModalScores, PageRankConfig, PersonalizedPageRank, Score
 #[cfg(feature = "leiden")]
 pub use leiden::{
     EntityMetadata, HierarchicalCommunities, LeidenConfig, LeidenCommunityDetector,
+};
+
+// Hierarchical relationships exports are only available when async is enabled
+#[cfg(feature = "async")]
+pub use hierarchical_relationships::{
+    HierarchyBuilder, HierarchyLevel, RelationshipCluster, RelationshipHierarchy,
 };
 
 /// Graph builder for constructing knowledge graphs from documents
@@ -134,6 +144,10 @@ impl GraphBuilder {
                         relation_type,
                         confidence: 0.8, // Default confidence for extracted relationships
                         context: vec![chunk.id.clone()],
+                        embedding: None,
+                        temporal_type: None,
+                        temporal_range: None,
+                        causal_strength: None,
                     };
 
                     graph.add_relationship(relationship)?;
@@ -264,6 +278,10 @@ impl GraphBuilder {
                         relation_type: "SEMANTICALLY_SIMILAR".to_string(),
                         confidence: similarity,
                         context: Vec::new(),
+                        embedding: None,
+                        temporal_type: None,
+                        temporal_range: None,
+                        causal_strength: None,
                     };
 
                     graph.add_relationship(relationship)?;

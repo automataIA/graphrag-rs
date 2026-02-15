@@ -99,6 +99,9 @@ pub mod parallel;
 /// LightRAG dual-level retrieval optimization
 pub mod lightrag;
 
+/// Composable pipeline executor for build-graph operations
+pub mod pipeline_executor;
+
 // Utility modules
 /// Reranking utilities for improving search result quality
 pub mod reranking;
@@ -111,6 +114,10 @@ pub mod critic;
 
 /// Evaluation framework for query results and pipeline validation
 pub mod evaluation;
+
+/// Graph optimization (weight optimization, DW-GRPO)
+#[cfg(feature = "async")]
+pub mod optimization;
 
 /// API endpoints and handlers
 #[cfg(feature = "api")]
@@ -157,20 +164,52 @@ pub mod rograg;
 // ================================
 
 /// Prelude module containing the most commonly used types
+///
+/// Import everything you need with a single line:
+/// ```rust
+/// use graphrag_core::prelude::*;
+/// ```
+///
+/// This includes:
+/// - `GraphRAG` - The main orchestrator
+/// - `Config` - Configuration management
+/// - `GraphRAGBuilder` - Fluent configuration builder
+/// - Core types: `Document`, `Entity`, `Relationship`, `TextChunk`
+/// - Error handling: `Result`, `GraphRAGError`
 pub mod prelude {
-    pub use crate::builder::GraphRAGBuilder;
-    pub use crate::config::Config;
-    pub use crate::core::{
-        Document, DocumentId, Entity, EntityId, GraphRAGError, KnowledgeGraph, Result,
-    };
+    // Main entry point
     pub use crate::GraphRAG;
+
+    // Configuration & Builders
+    pub use crate::builder::GraphRAGBuilder;
+    pub use crate::builder::TypedBuilder;
+    pub use crate::config::Config;
+
+    // Error handling
+    pub use crate::core::{GraphRAGError, Result};
+
+    // Core data types
+    pub use crate::core::{
+        ChunkId, Document, DocumentId, Entity, EntityId, EntityMention, KnowledgeGraph,
+        Relationship, TextChunk,
+    };
+
+    // Search results and explained answers
+    pub use crate::retrieval::SearchResult;
+    pub use crate::retrieval::{ExplainedAnswer, ReasoningStep, SourceReference, SourceType};
+
+    // Pipeline executor
+    pub use crate::pipeline_executor::{PipelineExecutor, PipelineReport};
+
+    // Config deserialization helper
+    pub use crate::config::setconfig::SetConfig;
 }
 
 // Re-export core types
 pub use crate::config::Config;
 pub use crate::core::{
     ChunkId, Document, DocumentId, Entity, EntityId, EntityMention, ErrorContext, ErrorSeverity,
-    GraphRAGError, KnowledgeGraph, Relationship, Result, TextChunk,
+    ErrorSuggestion, GraphRAGError, KnowledgeGraph, Relationship, Result, TextChunk,
 };
 
 // Re-export core traits (async feature only)
@@ -441,7 +480,16 @@ impl GraphRAG {
                 };
 
                 // Create gleaning extractor with LLM client
-                let extractor = GleaningEntityExtractor::new(client, gleaning_config);
+                let extractor = GleaningEntityExtractor::new(client.clone(), gleaning_config);
+
+                // Create relationship extractor for triple validation (if enabled)
+                let rel_extractor = if self.config.entities.enable_triple_reflection {
+                    Some(crate::entity::LLMRelationshipExtractor::new(Some(
+                        &self.config.ollama,
+                    ))?)
+                } else {
+                    None
+                };
 
                 // Create progress bar for entity extraction
                 let pb = ProgressBar::new(total_chunks as u64);
@@ -464,22 +512,118 @@ impl GraphRAG {
 
                     let (entities, relationships) = extractor.extract_with_gleaning(chunk).await?;
 
+                    // Build entity ID to name mapping for validation
+                    let entity_map: std::collections::HashMap<_, _> = entities
+                        .iter()
+                        .map(|e| (e.id.clone(), e.name.clone()))
+                        .collect();
+
                     // Add extracted entities
                     for entity in entities {
                         graph.add_entity(entity)?;
                     }
 
-                    // Add extracted relationships
-                    for relationship in relationships {
-                        if let Err(e) = graph.add_relationship(relationship) {
-                            #[cfg(feature = "tracing")]
-                            tracing::warn!(
-                                "Failed to add relationship: {} -> {} ({}). Error: {}",
-                                e.to_string().split("entity ").nth(1).unwrap_or("unknown"),
-                                e.to_string().split("entity ").nth(2).unwrap_or("unknown"),
-                                "relationship",
-                                e
-                            );
+                    // Add extracted relationships with optional triple reflection validation
+                    if let Some(ref validator) = rel_extractor {
+                        #[cfg(feature = "tracing")]
+                        tracing::info!(
+                            "Triple reflection enabled: validating {} relationships",
+                            relationships.len()
+                        );
+
+                        let mut validated_count = 0;
+                        let mut filtered_count = 0;
+
+                        for relationship in relationships {
+                            // Get entity names for validation
+                            let source_name = entity_map
+                                .get(&relationship.source)
+                                .or_else(|| {
+                                    graph
+                                        .entities()
+                                        .find(|e| e.id == relationship.source)
+                                        .map(|e| &e.name)
+                                })
+                                .map(|s| s.as_str())
+                                .unwrap_or(relationship.source.0.as_str());
+                            let target_name = entity_map
+                                .get(&relationship.target)
+                                .or_else(|| {
+                                    graph
+                                        .entities()
+                                        .find(|e| e.id == relationship.target)
+                                        .map(|e| &e.name)
+                                })
+                                .map(|s| s.as_str())
+                                .unwrap_or(relationship.target.0.as_str());
+
+                            // Validate triple with LLM
+                            match validator
+                                .validate_triple(
+                                    source_name,
+                                    &relationship.relation_type,
+                                    target_name,
+                                    &chunk.content,
+                                )
+                                .await
+                            {
+                                Ok(validation) => {
+                                    if validation.is_valid
+                                        && validation.confidence
+                                            >= self.config.entities.validation_min_confidence
+                                    {
+                                        // Valid relationship, add to graph
+                                        if let Err(e) = graph.add_relationship(relationship) {
+                                            #[cfg(feature = "tracing")]
+                                            tracing::debug!(
+                                                "Failed to add validated relationship: {}",
+                                                e
+                                            );
+                                        } else {
+                                            validated_count += 1;
+                                        }
+                                    } else {
+                                        // Invalid or low-confidence, filter out
+                                        filtered_count += 1;
+                                        #[cfg(feature = "tracing")]
+                                        tracing::debug!(
+                                            "Filtered relationship {} --[{}]--> {} (valid={}, conf={:.2}): {}",
+                                            source_name, relationship.relation_type, target_name,
+                                            validation.is_valid, validation.confidence, validation.reason
+                                        );
+                                    }
+                                },
+                                Err(e) => {
+                                    // Validation failed, add anyway with warning
+                                    #[cfg(feature = "tracing")]
+                                    tracing::warn!(
+                                        "Validation error, adding relationship anyway: {}",
+                                        e
+                                    );
+                                    let _ = graph.add_relationship(relationship);
+                                },
+                            }
+                        }
+
+                        #[cfg(feature = "tracing")]
+                        tracing::info!(
+                            "Triple reflection complete: {} validated, {} filtered",
+                            validated_count,
+                            filtered_count
+                        );
+                    } else {
+                        // No validation, add all relationships
+                        for relationship in relationships {
+                            if let Err(e) = graph.add_relationship(relationship) {
+                                #[cfg(feature = "tracing")]
+                                tracing::warn!(
+                                    "Failed to add relationship: {} -> {} ({}). Error: {}",
+                                    e.to_string().split("entity ").nth(1).unwrap_or("unknown"),
+                                    e.to_string().split("entity ").nth(2).unwrap_or("unknown"),
+                                    "relationship",
+                                    e
+                                );
+                            }
                         }
                     }
 
@@ -487,6 +631,91 @@ impl GraphRAG {
                 }
 
                 pb.finish_with_message("Entity extraction complete");
+
+                // Phase 1.3: ATOM Atomic Fact Extraction (if enabled)
+                if self.config.entities.use_atomic_facts {
+                    use crate::entity::AtomicFactExtractor;
+
+                    #[cfg(feature = "tracing")]
+                    tracing::info!("Starting atomic fact extraction (ATOM methodology)");
+
+                    let atomic_extractor = AtomicFactExtractor::new(client.clone())
+                        .with_max_tokens(self.config.entities.max_fact_tokens);
+
+                    // Create progress bar for atomic extraction
+                    let pb_atomic = ProgressBar::new(total_chunks as u64);
+                    pb_atomic.set_style(
+                        ProgressStyle::default_bar()
+                            .template("   [{elapsed_precise}] [{bar:40.magenta/blue}] {pos}/{len} atomic facts ({eta})")
+                            .expect("Invalid progress bar template")
+                            .progress_chars("=>-")
+                    );
+                    pb_atomic.set_message("Extracting atomic facts");
+
+                    let mut total_facts = 0;
+                    let mut total_atomic_entities = 0;
+                    let mut total_atomic_relationships = 0;
+
+                    for (idx, chunk) in chunks.iter().enumerate() {
+                        pb_atomic.set_message(format!(
+                            "Chunk {}/{} (extracting atomic facts)",
+                            idx + 1,
+                            total_chunks
+                        ));
+
+                        match atomic_extractor.extract_atomic_facts(chunk).await {
+                            Ok(facts) => {
+                                total_facts += facts.len();
+
+                                // Convert atomic facts to graph elements
+                                let (atomic_entities, atomic_relationships) =
+                                    atomic_extractor.atomics_to_graph_elements(facts, &chunk.id);
+
+                                total_atomic_entities += atomic_entities.len();
+                                total_atomic_relationships += atomic_relationships.len();
+
+                                // Add atomic entities to graph
+                                for entity in atomic_entities {
+                                    if let Err(e) = graph.add_entity(entity) {
+                                        #[cfg(feature = "tracing")]
+                                        tracing::debug!("Failed to add atomic entity: {}", e);
+                                    }
+                                }
+
+                                // Add atomic relationships to graph
+                                for relationship in atomic_relationships {
+                                    if let Err(e) = graph.add_relationship(relationship) {
+                                        #[cfg(feature = "tracing")]
+                                        tracing::debug!("Failed to add atomic relationship: {}", e);
+                                    }
+                                }
+                            },
+                            Err(e) => {
+                                #[cfg(feature = "tracing")]
+                                tracing::warn!(
+                                    chunk_id = %chunk.id,
+                                    error = %e,
+                                    "Atomic fact extraction failed for chunk"
+                                );
+                            },
+                        }
+
+                        pb_atomic.inc(1);
+                    }
+
+                    pb_atomic.finish_with_message(format!(
+                        "Atomic extraction complete: {} facts → {} entities, {} relationships",
+                        total_facts, total_atomic_entities, total_atomic_relationships
+                    ));
+
+                    #[cfg(feature = "tracing")]
+                    tracing::info!(
+                        facts_extracted = total_facts,
+                        atomic_entities = total_atomic_entities,
+                        atomic_relationships = total_atomic_relationships,
+                        "ATOM atomic fact extraction complete"
+                    );
+                }
             }
         } else {
             // Pattern-based extraction (regex + capitalization)
@@ -571,6 +800,10 @@ impl GraphRAG {
                             relation_type: relation_type.clone(),
                             confidence: self.config.graph.relationship_confidence_threshold,
                             context: vec![chunk.id.clone()],
+                            embedding: None,
+                            temporal_type: None,
+                            temporal_range: None,
+                            causal_strength: None,
                         };
 
                         // Log errors for debugging relationship extraction issues
@@ -830,6 +1063,67 @@ impl GraphRAG {
         Ok(results.join("\n"))
     }
 
+    /// Query the system and return an explained answer with reasoning trace
+    ///
+    /// Unlike `ask()`, this method returns detailed information about:
+    /// - Confidence score
+    /// - Source references
+    /// - Step-by-step reasoning
+    /// - Key entities used
+    ///
+    /// # Example
+    /// ```no_run
+    /// use graphrag_core::prelude::*;
+    ///
+    /// # async fn example() -> graphrag_core::Result<()> {
+    /// let mut graphrag = GraphRAG::quick_start("Your document text").await?;
+    /// let explained = graphrag.ask_explained("What is the main topic?").await?;
+    ///
+    /// println!("Answer: {}", explained.answer);
+    /// println!("Confidence: {:.0}%", explained.confidence * 100.0);
+    ///
+    /// for step in &explained.reasoning_steps {
+    ///     println!("Step {}: {}", step.step_number, step.description);
+    /// }
+    ///
+    /// for source in &explained.sources {
+    ///     println!("Source: {} (relevance: {:.0}%)",
+    ///         source.id, source.relevance_score * 100.0);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[cfg(feature = "async")]
+    pub async fn ask_explained(&mut self, query: &str) -> Result<retrieval::ExplainedAnswer> {
+        self.ensure_initialized()?;
+
+        if self.has_documents() && !self.has_graph() {
+            self.build_graph().await?;
+        }
+
+        // Get search results
+        let search_results = self.query_internal_with_results(query).await?;
+
+        // Generate the answer
+        let answer = if self.config.ollama.enabled {
+            self.generate_semantic_answer_from_results(query, &search_results)
+                .await?
+        } else {
+            // Fallback: concatenate top results
+            search_results
+                .iter()
+                .take(3)
+                .map(|r| r.content.clone())
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+
+        // Build the explained answer
+        let explained = retrieval::ExplainedAnswer::from_results(answer, &search_results, query);
+
+        Ok(explained)
+    }
+
     /// Internal query method (public for CLI access to raw results)
     pub async fn query_internal(&mut self, query: &str) -> Result<Vec<String>> {
         let retrieval = self
@@ -1029,6 +1323,11 @@ impl GraphRAG {
         }
 
         result.trim().to_string()
+    }
+
+    /// Get a reference to the current configuration
+    pub fn config(&self) -> &Config {
+        &self.config
     }
 
     /// Check if system is initialized
@@ -1254,6 +1553,77 @@ impl GraphRAG {
         graphrag.add_document_from_text(&content)?;
 
         // Build graph
+        graphrag.build_graph().await?;
+
+        Ok(graphrag)
+    }
+
+    /// Quick start: Create a ready-to-query GraphRAG instance from text in one call
+    ///
+    /// This is the simplest way to get started with GraphRAG. It:
+    /// 1. Creates a new instance with default or hierarchical configuration
+    /// 2. Initializes all components
+    /// 3. Processes your text document
+    /// 4. Builds the knowledge graph
+    ///
+    /// After this call, you can immediately use `ask()` to query the system.
+    ///
+    /// # Example: Hello World in 5 lines
+    /// ```rust,no_run
+    /// use graphrag_core::prelude::*;
+    ///
+    /// # async fn example() -> graphrag_core::Result<()> {
+    /// let mut graphrag = GraphRAG::quick_start("Your document text here").await?;
+    /// let answer = graphrag.ask("What is this document about?").await?;
+    /// println!("{}", answer);
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Configuration
+    /// - With `hierarchical-config` feature: Uses layered config (defaults → user → project → env)
+    /// - Without: Uses sensible defaults optimized for local Ollama setup
+    #[cfg(feature = "async")]
+    pub async fn quick_start(text: &str) -> Result<Self> {
+        // Load config (hierarchical if available, otherwise defaults)
+        let config = Config::load()?;
+
+        let mut graphrag = Self::new(config)?;
+        graphrag.initialize()?;
+        graphrag.add_document_from_text(text)?;
+        graphrag.build_graph().await?;
+
+        Ok(graphrag)
+    }
+
+    /// Quick start with custom configuration
+    ///
+    /// Like `quick_start()`, but allows you to customize the configuration
+    /// using the builder pattern before processing the document.
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// use graphrag_core::prelude::*;
+    ///
+    /// # async fn example() -> graphrag_core::Result<()> {
+    /// let mut graphrag = GraphRAG::quick_start_with_config(
+    ///     "Your document text",
+    ///     |builder| builder
+    ///         .with_chunk_size(256)
+    ///         .with_ollama_enabled(true)
+    /// ).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[cfg(feature = "async")]
+    pub async fn quick_start_with_config<F>(text: &str, configure: F) -> Result<Self>
+    where
+        F: FnOnce(crate::builder::GraphRAGBuilder) -> crate::builder::GraphRAGBuilder,
+    {
+        let builder = configure(Self::builder());
+        let mut graphrag = builder.build()?;
+        graphrag.initialize()?;
+        graphrag.add_document_from_text(text)?;
         graphrag.build_graph().await?;
 
         Ok(graphrag)

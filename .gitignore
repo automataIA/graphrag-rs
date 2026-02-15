@@ -188,6 +188,15 @@ perf.data.old
 # ============================================
 # Project Specific
 # ============================================
+# Benchmark Raw Results
+tests/e2e/results/
+
+# Python Artifacts
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*$py.class
+
 # Config examples are kept, but instance configs are ignored
 *_local.toml
 *_private.toml
@@ -199,6 +208,9 @@ config_*.json
 # *.txt  # Uncomment if needed
 graphrag-wasm/dist/models/minilm-l6.onnx
 
-# exclude md files except readme
-*.md
-!README.md
+# exclude auto-generated or specific md files if necessary,
+# but keep general .md (article.md, README.md, etc.)
+# !README.md
+
+# exclude files with hidden extensions
+.*.*

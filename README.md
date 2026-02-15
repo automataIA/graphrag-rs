@@ -130,11 +130,33 @@ GraphRAG-rs implements **5 cutting-edge research papers** (2019-2025) for superi
 
 **Combined Result**: **+20% accuracy** with **99% cost savings**! 🚀
 
+### New: Advanced Reasoning & Optimization (2025-2026) 🔬
+
+Building on state-of-the-art foundations, GraphRAG-rs now implements **7 cutting-edge techniques** from recent research:
+
+| Phase | Feature | Impact | Status |
+|-------|---------|--------|--------|
+| **Phase 2** | **Symbolic Anchoring** (CatRAG-style) | Better conceptual queries | ✅ Complete |
+| **Phase 2** | **Dynamic Edge Weighting** | Context-aware ranking | ✅ Complete |
+| **Phase 2** | **Causal Chain Analysis** | Multi-step reasoning | ✅ Complete |
+| **Phase 3** | **Hierarchical Relationship Clustering** | Multi-level organization | ✅ Complete |
+| **Phase 3** | **Graph Weight Optimization** (DW-GRPO) | Adaptive learning | ✅ Complete |
+
+#### Key Capabilities
+
+- **Symbolic Anchoring**: Automatically grounds abstract concepts (like "love" or "justice") to concrete entities for better conceptual query handling
+- **Dynamic Weighting**: Adjusts relationship importance based on query context using semantic, temporal, and causal signals
+- **Causal Reasoning**: Discovers multi-step causal chains with temporal consistency validation
+- **Hierarchical Clustering**: Organizes relationships into multi-level hierarchies using Leiden algorithm with LLM-generated summaries
+- **Weight Optimization**: Learns optimal relationship weights through heuristic optimization for improved retrieval quality
+
+📚 **Full Documentation**: See [graphrag-core/ADVANCED_FEATURES.md](graphrag-core/ADVANCED_FEATURES.md) for implementation details, benchmarks, and research papers.
+
 ### Enable Advanced Features
 
 ```toml
 [dependencies]
-graphrag-core = { path = "../graphrag-core", features = ["lightrag", "leiden", "cross-encoder", "pagerank"] }
+graphrag-core = { path = "../graphrag-core", features = ["lightrag", "leiden", "cross-encoder", "pagerank", "async"] }
 ```
 
 ```toml
@@ -157,9 +179,35 @@ resolution = 1.0
 enabled = true
 model_name = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 top_k = 10                  # +20% accuracy improvement
+
+# Advanced Features (Phases 2-3)
+[advanced_features.symbolic_anchoring]
+min_relevance = 0.3         # Minimum relevance for concept anchors
+max_anchors = 5             # Maximum anchors per query
+
+[advanced_features.dynamic_weighting]
+enable_semantic_boost = true    # Boost relationships similar to query
+enable_temporal_boost = true    # Boost recent/relevant relationships
+enable_causal_boost = true      # Boost strong causal relationships
+
+[advanced_features.causal_analysis]
+min_confidence = 0.3            # Minimum confidence for causal chains
+max_chain_depth = 5             # Maximum chain depth to search
+require_temporal_consistency = true  # Enforce chronological ordering
+
+[advanced_features.hierarchical_clustering]
+num_levels = 3                  # Number of hierarchy levels (2-5)
+generate_summaries = true       # LLM-generated cluster summaries
+
+[advanced_features.weight_optimization]
+learning_rate = 0.05            # Learning rate for optimization
+max_iterations = 20             # Maximum optimization iterations
+use_llm_eval = true             # Use LLM for quality evaluation
 ```
 
-📚 **Documentation**: See [IMPLEMENTATION_COMPLETE_SUMMARY.md](IMPLEMENTATION_COMPLETE_SUMMARY.md) for full details.
+📖 **Quick Start Example**: See [graphrag-core/config-examples/quick-start.toml](graphrag-core/config-examples/quick-start.toml) for a minimal configuration.
+
+📚 **Documentation**: See [HOW_IT_WORKS.md](HOW_IT_WORKS.md) for full details on the pipeline.
 
 ## Installation
 
@@ -178,6 +226,68 @@ cargo build --release
 # Optional: Install globally
 cargo install --path .
 ```
+
+## Quick Start (5 Lines!)
+
+The fastest way to get started with GraphRAG:
+
+```rust
+use graphrag_core::prelude::*;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let mut graphrag = GraphRAG::quick_start("Your document text").await?;
+    let answer = graphrag.ask("What is this about?").await?;
+    println!("{}", answer);
+    Ok(())
+}
+```
+
+### With Compile-Time Safety (TypedBuilder)
+
+```rust
+use graphrag_core::prelude::*;
+
+let graphrag = TypedBuilder::new()
+    .with_output_dir("./output")  // Required - won't compile without
+    .with_ollama()                 // Required - choose your LLM backend
+    .with_chunk_size(512)          // Optional
+    .build_and_init()?;
+```
+
+### Get Explained Answers
+
+```rust
+let explained = graphrag.ask_explained("Who founded the company?").await?;
+println!("Answer: {}", explained.answer);
+println!("Confidence: {:.0}%", explained.confidence * 100.0);
+for source in &explained.sources {
+    println!("Source: {} (relevance: {:.0}%)", source.id, source.relevance_score * 100.0);
+}
+```
+
+### CLI Setup Wizard
+
+```bash
+# Interactive configuration wizard
+graphrag-cli setup
+
+# With domain template
+graphrag-cli setup --template legal
+```
+
+### Feature Bundles
+
+Choose the right features for your use case:
+
+```toml
+[dependencies]
+graphrag-core = { version = "0.1", features = ["starter"] }   # Getting started
+graphrag-core = { version = "0.1", features = ["full"] }      # Production
+graphrag-core = { version = "0.1", features = ["research"] }  # Advanced
+```
+
+📚 **Full Guide**: See [graphrag-core/QUICKSTART.md](graphrag-core/QUICKSTART.md) for detailed quick start documentation.
 
 ## Basic Usage
 
@@ -234,9 +344,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 New to GraphRAG? Start here:
 
 - 📖 **[How It Works](HOW_IT_WORKS.md)** - Complete 7-stage pipeline explanation with diagrams and examples
-- 🏗️ **[Architecture](ARCHITECTURE.md)** - Technical deep dive into implementation details
+- 🏗️ **[Pipeline Architecture](graphrag-core/PIPELINE_ARCHITECTURE.md)** - Technical deep dive into implementation details
 - 💡 **[Examples](examples/)** - Hands-on code examples from basic to advanced
 - 📊 **[Multi-Document Pipeline](examples/MULTI_DOCUMENT_PIPELINE.md)** - Production-ready example with benchmarks
+- ⚙️ **[Pipeline Architecture](graphrag-core/PIPELINE_ARCHITECTURE.md)** - Detailed 7-phase configuration & performance guide
+
+### Complete 7-Stage Pipeline Schema
+
+```text
+INDEXING (build_graph())
+├── Phase 1: CHUNKING          → chunk_size, chunk_overlap
+├── Phase 2: ENTITY EXTRACTION → approach, entity_types, use_gleaning
+├── Phase 3: RELATIONSHIP      → extract_relationships, use_gleaning
+└── Phase 4: GRAPH CONSTRUCTION → enable_pagerank, max_connections
+
+QUERY (ask())
+├── Phase 5: EMBEDDING         → backend, dimension, model
+├── Phase 6: RETRIEVAL         → strategy, top_k
+└── Phase 7: ANSWER GENERATION → chat_model, temperature
+```
+
+### Pipeline Configuration Summary
+
+| Phase | Goal | Key Parameters |
+|-------|------|----------------|
+| **1. Chunking** | Split text | `chunk_size` (300), `chunk_overlap` (30) |
+| **2. Extraction** | Identify entities | `approach` (hybrid), `entity_types` |
+| **3. Relationships** | Connect entities | `extract_relationships` (true) |
+| **4. Graph** | Build network | `max_connections` (50), `enable_pagerank` |
+| **5. Embedding** | Vectorize data | `backend` (openai), `dimension` (1536) |
+| **6. Retrieval** | Find context | `strategy` (hybrid), `top_k` (10) |
+| **7. Generation** | Answer query | `chat_model` (gpt-4o), `temperature` (0.0) |
+
+See **[PIPELINE_ARCHITECTURE.md](graphrag-core/PIPELINE_ARCHITECTURE.md)** for detailed configuration and performance tuning.
 
 ### 4. CLI Usage
 
@@ -573,12 +713,50 @@ GraphRAG-rs implements cutting-edge 2024 research in retrieval-augmented generat
 - **Intelligent Caching**: LLM response cache with 80%+ hit rates and 6x cost reduction
 - **Hybrid Retrieval**: Combines semantic, keyword, BM25, and graph-based search strategies
 - **ROGRAG Decomposition**: Advanced query decomposition with 60%→75% accuracy boost, temporal and causal reasoning
+- **Ollama Advanced Integration**: Complete local LLM support with streaming, custom parameters, automatic caching, and metrics tracking
+
+### Ollama Integration (NEW! ✨)
+
+Complete local LLM and embedding support with production-grade features:
+
+**Core Capabilities**:
+- ✅ **Streaming Responses**: Real-time token generation with tokio channels
+- ✅ **Custom Parameters**: Fine-grained control (temperature, top_p, top_k, stop sequences, repeat penalty)
+- ✅ **Automatic Caching**: DashMap-based response caching with 80%+ hit rate
+- ✅ **Metrics Tracking**: Thread-safe request/success/failure counting with atomic operations
+- ✅ **Service Registry**: Type-safe dependency injection for all Ollama services
+- ✅ **AsyncEmbedder Trait**: Full async/await support for embeddings
+- ✅ **AsyncLanguageModel Trait**: Standardized LLM interface with streaming
+
+**Performance**:
+- Cache hit: <1ms vs 100-1000ms API calls
+- Concurrent request handling with Arc-based sharing
+- Zero-copy streaming with channel-based architecture
+- GPU acceleration via Ollama (CUDA, ROCm, Metal)
+
+**Example**:
+```rust
+use graphrag_core::core::ServiceConfig;
+
+let config = ServiceConfig {
+    ollama_base_url: Some("http://localhost:11434".to_string()),
+    embedding_model: Some("nomic-embed-text:latest".to_string()),
+    language_model: Some("llama3.2:latest".to_string()),
+    vector_dimension: Some(768),
+    ..Default::default()
+};
+
+let registry = config.build_registry().build();
+// All services configured and ready!
+```
+
+See [graphrag-core/OLLAMA_INTEGRATION.md](graphrag-core/OLLAMA_INTEGRATION.md) for complete guide.
 
 ### Architecture & Quality
 - **Modular Workspace**: 4 publishable crates (core, wasm, leptos, server)
 - **Trait-Based Architecture**: 15+ core abstractions with dependency injection
 - **50,000+ Lines**: Production-quality Rust implementation
-- **Comprehensive Testing**: 214+ test cases with 100% pass rate
+- **Comprehensive Testing**: 220+ test cases with 100% pass rate
 - **Production-Grade Logging**: Structured tracing throughout core library
 - **Zero Warnings**: Clean compilation with clippy and cargo check
 - **Feature Gates**: Compile only what you need for minimal binary size
@@ -634,7 +812,8 @@ lightrag = []                                # Dual-level retrieval
 rograg = []                                  # Query decomposition
 
 # LLM integrations
-ollama = []                                  # Ollama local models
+ollama = []                                  # Ollama local models with streaming
+dashmap = ["dep:dashmap"]                    # Response caching (used with ollama)
 neural-embeddings = ["candle-core"]          # Candle ML framework ⚠️ Mutually exclusive with persistent-storage
 function-calling = []                        # Function calling support
 
@@ -658,9 +837,9 @@ web-api = []                                 # REST API server
   - **For ML experiments with neural nets**: Use `neural-embeddings` (Candle + qdrant)
   - **For development**: Use neither (minimal dependencies)
 
-See [DEPENDENCY_RESOLUTION.md](DEPENDENCY_RESOLUTION.md) for technical details.
+See the feature flags section above for technical details on dependency selection.
 
-For detailed architecture, see [ARCHITECTURE.md](ARCHITECTURE.md).
+For detailed architecture, see [HOW_IT_WORKS.md](HOW_IT_WORKS.md).
 
 ## API Reference
 

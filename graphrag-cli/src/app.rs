@@ -95,8 +95,7 @@ impl App {
         } else {
             self.action_tx.send(Action::SetStatus(
                 StatusType::Warning,
-                "No config loaded. Use /config <file> to load configuration"
-                    .to_string(),
+                "No config loaded. Use /config <file> to load configuration".to_string(),
             ))?;
         }
 
@@ -182,16 +181,16 @@ impl App {
                 if let crossterm::event::Event::Key(key) = crossterm_event {
                     self.handle_key_event(key)?;
                 }
-            }
+            },
             Event::Tick => {
                 // Periodic update
-            }
+            },
             Event::Render => {
                 // Render is handled in main loop
-            }
+            },
             Event::Resize(w, h) => {
                 self.action_tx.send(Action::Resize(w, h))?;
-            }
+            },
         }
 
         Ok(())
@@ -210,16 +209,16 @@ impl App {
         // Global shortcuts (check these first, before passing to input)
         match (key.code, key.modifiers) {
             // Quit
-            (KeyCode::Char('q'), KeyModifiers::CONTROL) |
-            (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
+            (KeyCode::Char('q'), KeyModifiers::CONTROL)
+            | (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
                 self.action_tx.send(Action::Quit)?;
                 return Ok(());
-            }
+            },
             // Help
             (KeyCode::Char('?'), KeyModifiers::SHIFT) => {
                 self.action_tx.send(Action::ToggleHelp)?;
                 return Ok(());
-            }
+            },
             // Focus switching with F1-F3
             (KeyCode::F(1), KeyModifiers::NONE) => {
                 // Focus Results Viewer (LLM answer) - unfocus input
@@ -229,7 +228,7 @@ impl App {
                 self.info_panel.set_focused(false);
                 self.action_tx.send(Action::FocusResultsViewer)?;
                 return Ok(());
-            }
+            },
             (KeyCode::F(2), KeyModifiers::NONE) => {
                 // Focus Raw Results Viewer - unfocus input
                 self.query_input.set_focused(false);
@@ -238,7 +237,7 @@ impl App {
                 self.info_panel.set_focused(false);
                 self.action_tx.send(Action::FocusRawResultsViewer)?;
                 return Ok(());
-            }
+            },
             (KeyCode::F(3), KeyModifiers::NONE) => {
                 // Focus Info Panel - unfocus input
                 self.query_input.set_focused(false);
@@ -247,7 +246,7 @@ impl App {
                 self.info_panel.set_focused(true);
                 self.action_tx.send(Action::FocusInfoPanel)?;
                 return Ok(());
-            }
+            },
             (KeyCode::Esc, KeyModifiers::NONE) => {
                 // Escape: return focus to input
                 self.query_input.set_focused(true);
@@ -256,8 +255,8 @@ impl App {
                 self.info_panel.set_focused(false);
                 self.action_tx.send(Action::FocusQueryInput)?;
                 return Ok(());
-            }
-            _ => {}
+            },
+            _ => {},
         }
 
         // Pass input to query input component first (it has priority for typing)
@@ -271,25 +270,25 @@ impl App {
             // Scrolling with j/k (vim-style) - only when not typing in input
             (KeyCode::Char('j'), KeyModifiers::NONE) => {
                 self.action_tx.send(Action::ScrollDown)?;
-            }
+            },
             (KeyCode::Char('k'), KeyModifiers::NONE) => {
                 self.action_tx.send(Action::ScrollUp)?;
-            }
+            },
             // Scrolling with Ctrl+D / Ctrl+U (page up/down)
             (KeyCode::Char('d'), KeyModifiers::CONTROL) => {
                 self.action_tx.send(Action::ScrollPageDown)?;
-            }
+            },
             (KeyCode::Char('u'), KeyModifiers::CONTROL) => {
                 self.action_tx.send(Action::ScrollPageUp)?;
-            }
+            },
             // Scrolling with Home/End
             (KeyCode::Home, KeyModifiers::NONE) => {
                 self.action_tx.send(Action::ScrollToTop)?;
-            }
+            },
             (KeyCode::End, KeyModifiers::NONE) => {
                 self.action_tx.send(Action::ScrollToBottom)?;
-            }
-            _ => {}
+            },
+            _ => {},
         }
 
         Ok(())
@@ -311,17 +310,17 @@ impl App {
         match action {
             Action::Quit => {
                 self.should_quit = true;
-            }
+            },
             Action::LoadConfig(path) => {
                 self.handle_load_config(path).await?;
-            }
+            },
             Action::ExecuteQuery(query) => {
                 self.handle_execute_query(query).await?;
-            }
+            },
             Action::ExecuteSlashCommand(cmd) => {
                 self.handle_slash_command(cmd).await?;
-            }
-            _ => {}
+            },
+            _ => {},
         }
 
         Ok(())
@@ -329,8 +328,9 @@ impl App {
 
     /// Handle loading configuration
     async fn handle_load_config(&mut self, path: PathBuf) -> Result<()> {
-        self.action_tx
-            .send(Action::StartProgress("Loading configuration...".to_string()))?;
+        self.action_tx.send(Action::StartProgress(
+            "Loading configuration...".to_string(),
+        ))?;
 
         match crate::config::load_config(&path).await {
             Ok(config) => {
@@ -349,16 +349,18 @@ impl App {
 
                 // Update stats
                 self.update_stats().await;
-            }
+            },
             Err(e) => {
                 self.action_tx.send(Action::StopProgress)?;
-                self.action_tx
-                    .send(Action::ConfigLoadError(format!("Failed to load config: {}", e)))?;
+                self.action_tx.send(Action::ConfigLoadError(format!(
+                    "Failed to load config: {}",
+                    e
+                )))?;
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
                     format!("Config load failed: {}", e),
                 ))?;
-            }
+            },
         }
 
         Ok(())
@@ -408,11 +410,8 @@ impl App {
                 self.query_history.add_entry(entry.clone());
 
                 // Update info panel with query history
-                self.info_panel.add_query(
-                    entry.query,
-                    entry.duration_ms,
-                    entry.results_count,
-                );
+                self.info_panel
+                    .add_query(entry.query, entry.duration_ms, entry.results_count);
 
                 // Update raw results viewer with search results
                 let mut raw_display = vec![
@@ -429,7 +428,7 @@ impl App {
                     StatusType::Success,
                     format!("Query completed in {}ms", duration.as_millis()),
                 ))?;
-            }
+            },
             Err(e) => {
                 self.action_tx.send(Action::StopProgress)?;
                 self.action_tx
@@ -438,7 +437,7 @@ impl App {
                     StatusType::Error,
                     format!("Query error: {}", e),
                 ))?;
-            }
+            },
         }
 
         Ok(())
@@ -451,92 +450,58 @@ impl App {
                 SlashCommand::Config(path) => {
                     let expanded = FileOperations::expand_tilde(&path);
                     self.action_tx.send(Action::LoadConfig(expanded))?;
-                }
+                },
                 SlashCommand::Load(path, rebuild) => {
-                    self.handle_load_document_with_rebuild(path, rebuild).await?;
-                }
+                    self.handle_load_document_with_rebuild(path, rebuild)
+                        .await?;
+                },
                 SlashCommand::Clear => {
                     self.handle_clear_graph().await?;
-                }
+                },
                 SlashCommand::Rebuild => {
                     self.handle_rebuild_graph().await?;
-                }
+                },
                 SlashCommand::Stats => {
                     self.handle_show_stats().await?;
-                }
+                },
                 SlashCommand::Entities(filter) => {
                     self.handle_list_entities(filter).await?;
-                }
+                },
                 SlashCommand::Workspace(name) => {
                     self.handle_load_workspace(name).await?;
-                }
+                },
                 SlashCommand::WorkspaceList => {
                     self.handle_list_workspaces().await?;
-                }
+                },
                 SlashCommand::WorkspaceSave(name) => {
                     self.handle_save_workspace(name).await?;
-                }
+                },
                 SlashCommand::WorkspaceDelete(name) => {
                     self.handle_delete_workspace(name).await?;
-                }
+                },
                 SlashCommand::Help => {
                     let help_text = SlashCommand::help_text();
-                    self.results_viewer.set_content(
-                        help_text.lines().map(|s| s.to_string()).collect(),
-                    );
-                }
+                    self.results_viewer
+                        .set_content(help_text.lines().map(|s| s.to_string()).collect());
+                },
             },
             Err(e) => {
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
                     format!("Command error: {}", e),
                 ))?;
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Handle loading a document
-    async fn handle_load_document(&mut self, path: PathBuf) -> Result<()> {
-        if !self.graphrag.is_initialized().await {
-            self.action_tx.send(Action::SetStatus(
-                StatusType::Error,
-                "GraphRAG not initialized. Load a config first".to_string(),
-            ))?;
-            return Ok(());
-        }
-
-        let expanded = FileOperations::expand_tilde(&path);
-
-        self.action_tx.send(Action::StartProgress(format!(
-            "Loading document: {}",
-            expanded.display()
-        )))?;
-
-        match self.graphrag.load_document(&expanded).await {
-            Ok(message) => {
-                self.action_tx.send(Action::StopProgress)?;
-                self.action_tx.send(Action::DocumentLoaded(message.clone()))?;
-                self.action_tx
-                    .send(Action::SetStatus(StatusType::Success, message))?;
-
-                self.update_stats().await;
-            }
-            Err(e) => {
-                self.action_tx.send(Action::StopProgress)?;
-                self.action_tx.send(Action::SetStatus(
-                    StatusType::Error,
-                    format!("Failed to load document: {}", e),
-                ))?;
-            }
+            },
         }
 
         Ok(())
     }
 
     /// Handle loading a document with rebuild option
-    async fn handle_load_document_with_rebuild(&mut self, path: PathBuf, rebuild: bool) -> Result<()> {
+    async fn handle_load_document_with_rebuild(
+        &mut self,
+        path: PathBuf,
+        rebuild: bool,
+    ) -> Result<()> {
         if !self.graphrag.is_initialized().await {
             self.action_tx.send(Action::SetStatus(
                 StatusType::Error,
@@ -555,22 +520,27 @@ impl App {
 
         self.action_tx.send(Action::StartProgress(progress_msg))?;
 
-        match self.graphrag.load_document_with_options(&expanded, rebuild).await {
+        match self
+            .graphrag
+            .load_document_with_options(&expanded, rebuild)
+            .await
+        {
             Ok(message) => {
                 self.action_tx.send(Action::StopProgress)?;
-                self.action_tx.send(Action::DocumentLoaded(message.clone()))?;
+                self.action_tx
+                    .send(Action::DocumentLoaded(message.clone()))?;
                 self.action_tx
                     .send(Action::SetStatus(StatusType::Success, message))?;
 
                 self.update_stats().await;
-            }
+            },
             Err(e) => {
                 self.action_tx.send(Action::StopProgress)?;
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
                     format!("Failed to load document: {}", e),
                 ))?;
-            }
+            },
         }
 
         Ok(())
@@ -586,7 +556,9 @@ impl App {
             return Ok(());
         }
 
-        self.action_tx.send(Action::StartProgress("Clearing knowledge graph...".to_string()))?;
+        self.action_tx.send(Action::StartProgress(
+            "Clearing knowledge graph...".to_string(),
+        ))?;
 
         match self.graphrag.clear_graph().await {
             Ok(message) => {
@@ -610,14 +582,14 @@ impl App {
                 ]);
 
                 self.update_stats().await;
-            }
+            },
             Err(e) => {
                 self.action_tx.send(Action::StopProgress)?;
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
                     format!("Failed to clear graph: {}", e),
                 ))?;
-            }
+            },
         }
 
         Ok(())
@@ -633,7 +605,9 @@ impl App {
             return Ok(());
         }
 
-        self.action_tx.send(Action::StartProgress("Rebuilding knowledge graph...".to_string()))?;
+        self.action_tx.send(Action::StartProgress(
+            "Rebuilding knowledge graph...".to_string(),
+        ))?;
 
         match self.graphrag.rebuild_graph().await {
             Ok(message) => {
@@ -655,14 +629,14 @@ impl App {
                 ]);
 
                 self.update_stats().await;
-            }
+            },
             Err(e) => {
                 self.action_tx.send(Action::StopProgress)?;
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
                     format!("Failed to rebuild graph: {}", e),
                 ))?;
-            }
+            },
         }
 
         Ok(())
@@ -683,8 +657,10 @@ impl App {
             ];
 
             self.results_viewer.set_content(lines);
-            self.action_tx
-                .send(Action::SetStatus(StatusType::Info, "Stats displayed".to_string()))?;
+            self.action_tx.send(Action::SetStatus(
+                StatusType::Info,
+                "Stats displayed".to_string(),
+            ))?;
         } else {
             self.action_tx.send(Action::SetStatus(
                 StatusType::Warning,
@@ -700,7 +676,14 @@ impl App {
         match self.graphrag.get_entities(filter.as_deref()).await {
             Ok(entities) => {
                 let mut lines = vec![
-                    format!("🔍 Entities{}", if filter.is_some() { format!(" (filtered by '{}')", filter.unwrap()) } else { String::new() }),
+                    format!(
+                        "🔍 Entities{}",
+                        if filter.is_some() {
+                            format!(" (filtered by '{}')", filter.unwrap())
+                        } else {
+                            String::new()
+                        }
+                    ),
                     "━".repeat(50),
                 ];
 
@@ -727,13 +710,13 @@ impl App {
                     StatusType::Info,
                     format!("Found {} entities", entities.len()),
                 ))?;
-            }
+            },
             Err(e) => {
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
                     format!("Failed to list entities: {}", e),
                 ))?;
-            }
+            },
         }
 
         Ok(())
@@ -750,7 +733,8 @@ impl App {
         }
 
         self.action_tx.send(Action::StartProgress(format!(
-            "Loading workspace '{}'...", name
+            "Loading workspace '{}'...",
+            name
         )))?;
 
         // Get workspace directory from workspace_manager (default: ~/.graphrag/workspaces)
@@ -758,7 +742,11 @@ impl App {
             .map(|p| p.join("graphrag").join("workspaces"))
             .unwrap_or_else(|| std::path::PathBuf::from("./workspaces"));
 
-        match self.graphrag.load_workspace(workspace_dir.to_str().unwrap(), &name).await {
+        match self
+            .graphrag
+            .load_workspace(workspace_dir.to_str().unwrap(), &name)
+            .await
+        {
             Ok(message) => {
                 self.action_tx.send(Action::StopProgress)?;
 
@@ -779,14 +767,14 @@ impl App {
                 ))?;
 
                 self.update_stats().await;
-            }
+            },
             Err(e) => {
                 self.action_tx.send(Action::StopProgress)?;
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
                     format!("Failed to load workspace: {}", e),
                 ))?;
-            }
+            },
         }
 
         Ok(())
@@ -798,22 +786,25 @@ impl App {
             .map(|p| p.join("graphrag").join("workspaces"))
             .unwrap_or_else(|| std::path::PathBuf::from("./workspaces"));
 
-        match self.graphrag.list_workspaces(workspace_dir.to_str().unwrap()).await {
+        match self
+            .graphrag
+            .list_workspaces(workspace_dir.to_str().unwrap())
+            .await
+        {
             Ok(list_output) => {
-                self.results_viewer.set_content(
-                    list_output.lines().map(|s| s.to_string()).collect(),
-                );
+                self.results_viewer
+                    .set_content(list_output.lines().map(|s| s.to_string()).collect());
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Info,
                     "Workspace list displayed".to_string(),
                 ))?;
-            }
+            },
             Err(e) => {
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
                     format!("Failed to list workspaces: {}", e),
                 ))?;
-            }
+            },
         }
 
         Ok(())
@@ -830,14 +821,19 @@ impl App {
         }
 
         self.action_tx.send(Action::StartProgress(format!(
-            "Saving workspace '{}'...", name
+            "Saving workspace '{}'...",
+            name
         )))?;
 
         let workspace_dir = dirs::data_dir()
             .map(|p| p.join("graphrag").join("workspaces"))
             .unwrap_or_else(|| std::path::PathBuf::from("./workspaces"));
 
-        match self.graphrag.save_workspace(workspace_dir.to_str().unwrap(), &name).await {
+        match self
+            .graphrag
+            .save_workspace(workspace_dir.to_str().unwrap(), &name)
+            .await
+        {
             Ok(message) => {
                 self.action_tx.send(Action::StopProgress)?;
 
@@ -858,14 +854,14 @@ impl App {
                     StatusType::Success,
                     format!("Workspace '{}' saved", name),
                 ))?;
-            }
+            },
             Err(e) => {
                 self.action_tx.send(Action::StopProgress)?;
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
                     format!("Failed to save workspace: {}", e),
                 ))?;
-            }
+            },
         }
 
         Ok(())
@@ -874,14 +870,19 @@ impl App {
     /// Handle deleting workspace
     async fn handle_delete_workspace(&mut self, name: String) -> Result<()> {
         self.action_tx.send(Action::StartProgress(format!(
-            "Deleting workspace '{}'...", name
+            "Deleting workspace '{}'...",
+            name
         )))?;
 
         let workspace_dir = dirs::data_dir()
             .map(|p| p.join("graphrag").join("workspaces"))
             .unwrap_or_else(|| std::path::PathBuf::from("./workspaces"));
 
-        match self.graphrag.delete_workspace(workspace_dir.to_str().unwrap(), &name).await {
+        match self
+            .graphrag
+            .delete_workspace(workspace_dir.to_str().unwrap(), &name)
+            .await
+        {
             Ok(message) => {
                 self.action_tx.send(Action::StopProgress)?;
 
@@ -899,14 +900,14 @@ impl App {
                     StatusType::Success,
                     format!("Workspace '{}' deleted", name),
                 ))?;
-            }
+            },
             Err(e) => {
                 self.action_tx.send(Action::StopProgress)?;
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
                     format!("Failed to delete workspace: {}", e),
                 ))?;
-            }
+            },
         }
 
         Ok(())
@@ -918,5 +919,4 @@ impl App {
             self.info_panel.set_stats(stats);
         }
     }
-
 }

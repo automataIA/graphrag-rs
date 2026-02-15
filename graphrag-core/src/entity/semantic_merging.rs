@@ -372,6 +372,9 @@ impl SemanticEntityMerger {
             confidence: avg_confidence.max(decision.confidence as f32),
             mentions: all_mentions,
             embedding: entities[0].embedding.clone(), // Take first embedding
+            first_mentioned: None,
+            last_mentioned: None,
+            temporal_validity: None,
         };
 
         Ok(merged_entity)

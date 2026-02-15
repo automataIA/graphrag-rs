@@ -533,7 +533,7 @@ impl DataImporter {
     }
 
     /// Import RDF/Turtle file
-    fn import_rdf(&self, path: &Path) -> Result<ImportResult, ImportError> {
+    fn import_rdf(&self, _path: &Path) -> Result<ImportResult, ImportError> {
         #[cfg(not(feature = "rdf-import"))]
         {
             return Err(ImportError::UnsupportedFormat(
@@ -650,7 +650,7 @@ impl DataImporter {
     }
 
     /// Import GraphML file
-    fn import_graphml(&self, path: &Path) -> Result<ImportResult, ImportError> {
+    fn import_graphml(&self, _path: &Path) -> Result<ImportResult, ImportError> {
         #[cfg(not(feature = "graphml-import"))]
         {
             return Err(ImportError::UnsupportedFormat(

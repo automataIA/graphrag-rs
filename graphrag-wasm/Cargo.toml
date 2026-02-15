@@ -20,8 +20,8 @@ required-features = ["hydrate"]
 
 [features]
 default = ["voy"]
-voy = [] # Voy vector search for WASM
-# webgpu = [] # GPU acceleration via WebGPU - DISABLED due to Metal/objc build issues
+voy = []                     # Voy vector search for WASM
+webgpu = []                  # GPU acceleration via WebGPU
 hydrate = ["leptos/hydrate"]
 ssr = ["leptos/ssr"]
 
@@ -29,11 +29,16 @@ ssr = ["leptos/ssr"]
 # GraphRAG core library with WASM support (no async, no parallel-processing, no ollama)
 # Note: pagerank feature requires rayon which doesn't work in WASM
 # Added: leiden for hierarchical community detection
-graphrag-core = { path = "../graphrag-core", features = ["wasm", "memory-storage", "basic-retrieval", "leiden"], default-features = false }
+graphrag-core = { path = "../graphrag-core", features = [
+    "wasm",
+    "memory-storage",
+    "basic-retrieval",
+    "leiden",
+], default-features = false }
 
 # Leptos framework (merged from graphrag-leptos)
 leptos = { workspace = true }
-leptos-lucide-rs = "0.1" # Icon library
+leptos-lucide-rs = "0.1"      # Icon library
 
 # WASM bindings
 wasm-bindgen = { workspace = true }
@@ -89,13 +94,15 @@ serde-wasm-bindgen = "0.6"
 # candle-nn = { workspace = true }
 
 # Tokenizers for embeddings (HuggingFace with WASM support)
-tokenizers = { version = "0.20", default-features = false, features = ["unstable_wasm"] }
+tokenizers = { version = "0.20", default-features = false, features = [
+    "unstable_wasm",
+] }
 
 # Utilities
 console_error_panic_hook = "0.1"
 wasm-logger = "0.2"
 gloo-timers = { version = "0.3", features = ["futures"] }
-gloo-net = "0.6" # HTTP fetching for vocab.txt
+gloo-net = "0.6"                                          # HTTP fetching for vocab.txt
 
 # Graph algorithms (for building graph from entities/relationships)
 petgraph = { workspace = true }
@@ -107,7 +114,9 @@ petgraph = { workspace = true }
 # burn-wgpu = { workspace = true, optional = true }
 # Fix getrandom for WASM (override transitive deps)
 # Note: 0.3+ uses 'wasm_js' feature instead of 'js'
-getrandom = { version = "0.3", features = ["wasm_js"], default-features = false }
+getrandom = { version = "0.3", features = [
+    "wasm_js",
+], default-features = false }
 # Override uuid to use js feature for WASM (fixes getrandom 0.3 issue from leptos)
 uuid = { workspace = true, features = ["js", "v4"] }
 
