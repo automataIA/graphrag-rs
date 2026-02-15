@@ -1,3 +1,5 @@
+/// ATOM atomic fact extraction module (Phase 1.3)
+pub mod atomic_fact_extractor;
 /// Bidirectional entity-chunk index for fast lookups
 pub mod bidirectional_index;
 /// Gleaning-based entity extraction module
@@ -13,11 +15,12 @@ pub mod semantic_merging;
 /// String similarity-based entity linking module
 pub mod string_similarity_linker;
 
+pub use atomic_fact_extractor::{AtomicFact, AtomicFactExtractor};
 pub use bidirectional_index::{BidirectionalIndex, IndexStatistics};
 pub use gleaning_extractor::{ExtractionCompletionStatus, GleaningConfig, GleaningEntityExtractor};
 pub use llm_extractor::LLMEntityExtractor;
 pub use llm_relationship_extractor::{
-    ExtractedEntity, ExtractedRelationship, ExtractionResult, LLMRelationshipExtractor,
+    ExtractedEntity, ExtractedRelationship, ExtractionResult, LLMRelationshipExtractor, TripleValidation,
 };
 pub use semantic_merging::{EntityMergeDecision, MergingStatistics, SemanticEntityMerger};
 pub use string_similarity_linker::{EntityLinkingConfig, StringSimilarityLinker};

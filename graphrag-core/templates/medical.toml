@@ -1,0 +1,86 @@
+# GraphRAG Configuration Template: Medical Documents
+# ===================================================
+# Best for: Medical records, clinical notes, research papers, patient data
+#
+# Optimized for:
+# - Extracting diagnoses, medications, procedures
+# - Temporal relationships (onset, duration, treatment timeline)
+# - High precision for medical entities
+#
+# IMPORTANT: Ensure HIPAA/privacy compliance when processing patient data
+#
+# Usage:
+#   cp templates/medical.toml ./graphrag.toml
+#   # or: graphrag init --template medical
+
+output_dir = "./graphrag-medical"
+approach = "semantic"  # LLM for medical terminology understanding
+
+# Medium chunks for clinical notes and reports
+chunk_size = 750
+chunk_overlap = 150
+
+top_k_results = 12
+similarity_threshold = 0.75
+
+[embeddings]
+backend = "ollama"
+dimension = 384
+model = "nomic-embed-text"  # Consider medical-specific models if available
+fallback_to_hash = true
+batch_size = 16
+
+[entities]
+min_confidence = 0.8  # High confidence for medical accuracy
+entity_types = [
+    "PATIENT",           # Patient references
+    "DIAGNOSIS",         # ICD codes, conditions
+    "MEDICATION",        # Drug names, dosages
+    "PROCEDURE",         # Surgeries, treatments
+    "SYMPTOM",           # Clinical symptoms
+    "LAB_VALUE",         # Test results
+    "VITAL_SIGN",        # BP, heart rate, etc.
+    "ANATOMICAL_SITE",   # Body parts, organs
+    "PROVIDER",          # Doctors, nurses
+    "DATE",              # Visit dates, onset dates
+    "DURATION",          # Treatment length
+    "DOSAGE",            # Medication amounts
+    "FREQUENCY",         # Dosing frequency
+]
+use_gleaning = true
+max_gleaning_rounds = 4
+
+[graph]
+max_connections = 12
+similarity_threshold = 0.8
+extract_relationships = true
+relationship_confidence_threshold = 0.6
+
+[graph.traversal]
+max_depth = 4
+max_paths = 12
+use_edge_weights = true
+min_relationship_strength = 0.4
+
+[retrieval]
+top_k = 12
+search_algorithm = "cosine"
+
+[parallel]
+enabled = true
+num_threads = 0
+min_batch_size = 8
+
+[ollama]
+enabled = true
+host = "localhost"
+port = 11434
+chat_model = "llama3.2:3b"  # Consider medically-tuned models
+embedding_model = "nomic-embed-text"
+timeout_seconds = 45
+enable_caching = true
+
+[auto_save]
+enabled = true
+interval_seconds = 120  # Frequent saves for patient data
+max_versions = 10

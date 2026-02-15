@@ -1,0 +1,84 @@
+# GraphRAG Configuration Template: Financial Documents
+# =====================================================
+# Best for: Financial reports, earnings calls, SEC filings, market analysis
+#
+# Optimized for:
+# - Extracting companies, metrics, financial figures
+# - Temporal analysis (quarters, fiscal years)
+# - Relationship mapping (acquisitions, partnerships)
+#
+# Usage:
+#   cp templates/financial.toml ./graphrag.toml
+#   # or: graphrag init --template financial
+
+output_dir = "./graphrag-financial"
+approach = "hybrid"  # Combine algorithmic (numbers) with semantic (context)
+
+# Larger chunks for financial narratives
+chunk_size = 1200
+chunk_overlap = 250
+
+top_k_results = 15
+similarity_threshold = 0.7
+
+[embeddings]
+backend = "ollama"
+dimension = 384
+model = "nomic-embed-text"
+fallback_to_hash = true
+batch_size = 24
+
+[entities]
+min_confidence = 0.75
+entity_types = [
+    "COMPANY",           # Public/private companies
+    "TICKER",            # Stock symbols
+    "PERSON",            # Executives, analysts
+    "MONETARY_VALUE",    # Revenue, earnings, prices
+    "PERCENTAGE",        # Growth rates, margins
+    "DATE",              # Report dates, fiscal periods
+    "FISCAL_PERIOD",     # Q1, FY2024, etc.
+    "METRIC",            # EPS, P/E, EBITDA
+    "INDUSTRY",          # Sectors, verticals
+    "LOCATION",          # HQ, markets
+    "PRODUCT",           # Products, services
+    "EVENT",             # IPO, merger, earnings call
+    "REGULATORY_BODY",   # SEC, FINRA, etc.
+]
+use_gleaning = true
+max_gleaning_rounds = 3
+
+[graph]
+max_connections = 15
+similarity_threshold = 0.75
+extract_relationships = true
+relationship_confidence_threshold = 0.5
+
+[graph.traversal]
+max_depth = 4
+max_paths = 15
+use_edge_weights = true
+min_relationship_strength = 0.35
+
+[retrieval]
+top_k = 15
+search_algorithm = "cosine"
+
+[parallel]
+enabled = true
+num_threads = 0
+min_batch_size = 12
+
+[ollama]
+enabled = true
+host = "localhost"
+port = 11434
+chat_model = "llama3.2:3b"
+embedding_model = "nomic-embed-text"
+timeout_seconds = 45
+enable_caching = true
+
+[auto_save]
+enabled = true
+interval_seconds = 300
+max_versions = 5

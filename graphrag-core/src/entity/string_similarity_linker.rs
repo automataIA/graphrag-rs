@@ -544,22 +544,18 @@ mod tests {
         let linker = StringSimilarityLinker::new(config);
 
         let candidates = vec![
-            Entity {
-                id: EntityId::new("e1".to_string()),
-                name: "John Smith".to_string(),
-                entity_type: "PERSON".to_string(),
-                confidence: 0.9,
-                mentions: vec![],
-                embedding: None,
-            },
-            Entity {
-                id: EntityId::new("e2".to_string()),
-                name: "Acme Corp".to_string(),
-                entity_type: "ORG".to_string(),
-                confidence: 0.85,
-                mentions: vec![],
-                embedding: None,
-            },
+            Entity::new(
+                EntityId::new("e1".to_string()),
+                "John Smith".to_string(),
+                "PERSON".to_string(),
+                0.9,
+            ),
+            Entity::new(
+                EntityId::new("e2".to_string()),
+                "Acme Corp".to_string(),
+                "ORG".to_string(),
+                0.85,
+            ),
         ];
 
         // Should match John Smith
@@ -599,6 +595,9 @@ mod tests {
                 confidence: 0.9,
             }],
             embedding: None,
+            first_mentioned: None,
+            last_mentioned: None,
+            temporal_validity: None,
         });
 
         let _ = graph.add_entity(Entity {
@@ -613,6 +612,9 @@ mod tests {
                 confidence: 0.85,
             }],
             embedding: None,
+            first_mentioned: None,
+            last_mentioned: None,
+            temporal_validity: None,
         });
 
         let links = linker.link_entities(&graph).unwrap();

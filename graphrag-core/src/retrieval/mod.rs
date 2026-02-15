@@ -9,6 +9,10 @@ pub mod hipporag_ppr;
 /// Hybrid retrieval combining multiple search strategies
 pub mod hybrid;
 pub mod pagerank_retrieval;
+/// Symbolic anchoring for conceptual queries (Phase 2.1 - CatRAG)
+pub mod symbolic_anchoring;
+/// Causal chain analysis for discovering cause-effect paths (Phase 2.3)
+pub mod causal_analysis;
 
 #[cfg(feature = "parallel-processing")]
 use crate::parallel::ParallelProcessor;
@@ -154,6 +158,260 @@ pub enum ResultType {
     /// Result from combining multiple retrieval strategies
     Hybrid,
 }
+
+// ============================================================================
+// EXPLAINED ANSWER - Structured answer with reasoning trace
+// ============================================================================
+
+/// An answer with detailed explanation of the reasoning process
+///
+/// This struct provides transparency into how the GraphRAG system
+/// arrived at its answer, including confidence scores, source references,
+/// and step-by-step reasoning.
+///
+/// # Example
+/// ```no_run
+/// use graphrag_core::prelude::*;
+///
+/// # async fn example() -> graphrag_core::Result<()> {
+/// let mut graphrag = GraphRAG::quick_start("Your document").await?;
+/// let explained = graphrag.ask_explained("What is the main topic?").await?;
+///
+/// println!("Answer: {}", explained.answer);
+/// println!("Confidence: {:.0}%", explained.confidence * 100.0);
+///
+/// for step in &explained.reasoning_steps {
+///     println!("Step {}: {} (confidence: {:.0}%)",
+///         step.step_number, step.description, step.confidence * 100.0);
+/// }
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug, Clone)]
+pub struct ExplainedAnswer {
+    /// The answer text
+    pub answer: String,
+    /// Confidence score (0.0 to 1.0)
+    pub confidence: f32,
+    /// Sources used to generate the answer
+    pub sources: Vec<SourceReference>,
+    /// Step-by-step reasoning trace
+    pub reasoning_steps: Vec<ReasoningStep>,
+    /// Entities that were key to the answer
+    pub key_entities: Vec<String>,
+    /// Query analysis that guided retrieval
+    pub query_analysis: Option<QueryAnalysis>,
+}
+
+/// Reference to a source document or chunk used in the answer
+#[derive(Debug, Clone)]
+pub struct SourceReference {
+    /// Identifier of the source (chunk ID, document ID, or entity ID)
+    pub id: String,
+    /// Type of source
+    pub source_type: SourceType,
+    /// Relevant excerpt from the source
+    pub excerpt: String,
+    /// Relevance score to the query
+    pub relevance_score: f32,
+}
+
+/// Type of source reference
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SourceType {
+    /// A text chunk from a document
+    TextChunk,
+    /// An entity in the knowledge graph
+    Entity,
+    /// A relationship between entities
+    Relationship,
+    /// A document-level summary
+    Summary,
+}
+
+/// A single step in the reasoning process
+#[derive(Debug, Clone)]
+pub struct ReasoningStep {
+    /// Step number (1-indexed)
+    pub step_number: u8,
+    /// Description of what was done in this step
+    pub description: String,
+    /// IDs of entities involved in this step
+    pub entities_used: Vec<String>,
+    /// Evidence snippet that supports this step
+    pub evidence_snippet: Option<String>,
+    /// Confidence for this specific step
+    pub confidence: f32,
+}
+
+impl ExplainedAnswer {
+    /// Create a new explained answer from search results
+    pub fn from_results(
+        answer: String,
+        search_results: &[SearchResult],
+        query: &str,
+    ) -> Self {
+        // Calculate overall confidence from result scores
+        let confidence = if search_results.is_empty() {
+            0.0
+        } else {
+            let total_score: f32 = search_results.iter().map(|r| r.score).sum();
+            let avg_score = total_score / search_results.len() as f32;
+            // Normalize to 0-1 range (assuming scores are already somewhat normalized)
+            (avg_score * 0.7 + 0.3).min(1.0).max(0.0)
+        };
+
+        // Build source references
+        let sources: Vec<SourceReference> = search_results
+            .iter()
+            .take(5) // Top 5 sources
+            .map(|r| SourceReference {
+                id: r.id.clone(),
+                source_type: match r.result_type {
+                    ResultType::Entity => SourceType::Entity,
+                    ResultType::Chunk => SourceType::TextChunk,
+                    ResultType::GraphPath => SourceType::Relationship,
+                    ResultType::HierarchicalSummary => SourceType::Summary,
+                    ResultType::Hybrid => SourceType::TextChunk,
+                },
+                excerpt: if r.content.len() > 200 {
+                    format!("{}...", &r.content[..200])
+                } else {
+                    r.content.clone()
+                },
+                relevance_score: r.score,
+            })
+            .collect();
+
+        // Build reasoning steps
+        let mut reasoning_steps = Vec::new();
+        let mut step_num = 1u8;
+
+        // Step 1: Query analysis
+        reasoning_steps.push(ReasoningStep {
+            step_number: step_num,
+            description: format!("Analyzed query: \"{}\"", query),
+            entities_used: vec![],
+            evidence_snippet: None,
+            confidence: 0.95,
+        });
+        step_num += 1;
+
+        // Step 2: Entity retrieval
+        let unique_entities: HashSet<_> = search_results
+            .iter()
+            .flat_map(|r| r.entities.iter().cloned())
+            .collect();
+        if !unique_entities.is_empty() {
+            reasoning_steps.push(ReasoningStep {
+                step_number: step_num,
+                description: format!("Found {} relevant entities", unique_entities.len()),
+                entities_used: unique_entities.iter().take(5).cloned().collect(),
+                evidence_snippet: None,
+                confidence: 0.85,
+            });
+            step_num += 1;
+        }
+
+        // Step 3: Chunk retrieval
+        let chunk_count = search_results
+            .iter()
+            .filter(|r| r.result_type == ResultType::Chunk || r.result_type == ResultType::Hybrid)
+            .count();
+        if chunk_count > 0 {
+            reasoning_steps.push(ReasoningStep {
+                step_number: step_num,
+                description: format!("Retrieved {} relevant text chunks", chunk_count),
+                entities_used: vec![],
+                evidence_snippet: search_results.first().map(|r| {
+                    if r.content.len() > 100 {
+                        format!("{}...", &r.content[..100])
+                    } else {
+                        r.content.clone()
+                    }
+                }),
+                confidence: confidence,
+            });
+            step_num += 1;
+        }
+
+        // Step 4: Answer synthesis
+        reasoning_steps.push(ReasoningStep {
+            step_number: step_num,
+            description: "Synthesized answer from retrieved information".to_string(),
+            entities_used: unique_entities.into_iter().take(3).collect(),
+            evidence_snippet: None,
+            confidence,
+        });
+
+        // Collect key entities
+        let key_entities: Vec<String> = search_results
+            .iter()
+            .flat_map(|r| r.entities.iter().cloned())
+            .take(10)
+            .collect();
+
+        Self {
+            answer,
+            confidence,
+            sources,
+            reasoning_steps,
+            key_entities,
+            query_analysis: None,
+        }
+    }
+
+    /// Format the explained answer for display
+    pub fn format_display(&self) -> String {
+        let mut output = String::new();
+
+        // Answer
+        output.push_str(&format!("**Answer:** {}\n\n", self.answer));
+
+        // Confidence
+        output.push_str(&format!(
+            "**Confidence:** {:.0}%\n\n",
+            self.confidence * 100.0
+        ));
+
+        // Reasoning steps
+        if !self.reasoning_steps.is_empty() {
+            output.push_str("**Reasoning:**\n");
+            for step in &self.reasoning_steps {
+                output.push_str(&format!(
+                    "{}. {} (confidence: {:.0}%)\n",
+                    step.step_number,
+                    step.description,
+                    step.confidence * 100.0
+                ));
+                if let Some(evidence) = &step.evidence_snippet {
+                    output.push_str(&format!("   Evidence: \"{}\"\n", evidence));
+                }
+            }
+            output.push('\n');
+        }
+
+        // Sources
+        if !self.sources.is_empty() {
+            output.push_str("**Sources:**\n");
+            for (i, source) in self.sources.iter().enumerate() {
+                output.push_str(&format!(
+                    "{}. [{:?}] {} (relevance: {:.0}%)\n",
+                    i + 1,
+                    source.source_type,
+                    source.id,
+                    source.relevance_score * 100.0
+                ));
+            }
+        }
+
+        output
+    }
+}
+
+// ============================================================================
+// QUERY ANALYSIS - Adaptive retrieval strategy
+// ============================================================================
 
 /// Query analysis results to determine optimal retrieval strategy
 #[derive(Debug, Clone)]
@@ -1698,5 +1956,146 @@ mod tests {
 
         let result = retrieval.index_graph(&graph).await;
         assert!(result.is_ok());
+    }
+
+    // ============================================================================
+    // ExplainedAnswer Tests
+    // ============================================================================
+
+    #[test]
+    fn test_explained_answer_creation() {
+        let search_results = vec![
+            SearchResult {
+                id: "chunk_1".to_string(),
+                content: "This is the first relevant chunk about climate change.".to_string(),
+                score: 0.85,
+                result_type: ResultType::Chunk,
+                entities: vec!["climate".to_string(), "environment".to_string()],
+                source_chunks: vec!["doc1_chunk1".to_string()],
+            },
+            SearchResult {
+                id: "chunk_2".to_string(),
+                content: "Another chunk discussing environmental policies.".to_string(),
+                score: 0.72,
+                result_type: ResultType::Chunk,
+                entities: vec!["policy".to_string(), "environment".to_string()],
+                source_chunks: vec!["doc1_chunk2".to_string()],
+            },
+        ];
+
+        let explained = ExplainedAnswer::from_results(
+            "Climate change is a major environmental concern.".to_string(),
+            &search_results,
+            "What is climate change?",
+        );
+
+        assert!(!explained.answer.is_empty());
+        assert!(explained.confidence > 0.0 && explained.confidence <= 1.0);
+        assert!(!explained.sources.is_empty());
+        assert!(!explained.reasoning_steps.is_empty());
+    }
+
+    #[test]
+    fn test_explained_answer_empty_results() {
+        let explained = ExplainedAnswer::from_results(
+            "No relevant information found.".to_string(),
+            &[],
+            "What is something unknown?",
+        );
+
+        assert_eq!(explained.confidence, 0.0);
+        assert!(explained.sources.is_empty());
+        assert!(!explained.reasoning_steps.is_empty()); // Should still have query analysis step
+    }
+
+    #[test]
+    fn test_explained_answer_format_display() {
+        let search_results = vec![SearchResult {
+            id: "test_chunk".to_string(),
+            content: "Test content about technology.".to_string(),
+            score: 0.9,
+            result_type: ResultType::Chunk,
+            entities: vec!["technology".to_string()],
+            source_chunks: vec!["doc1_chunk1".to_string()],
+        }];
+
+        let explained = ExplainedAnswer::from_results(
+            "Technology is important.".to_string(),
+            &search_results,
+            "Why is technology important?",
+        );
+
+        let formatted = explained.format_display();
+
+        assert!(formatted.contains("**Answer:**"));
+        assert!(formatted.contains("**Confidence:**"));
+        assert!(formatted.contains("**Reasoning:**"));
+        assert!(formatted.contains("**Sources:**"));
+    }
+
+    #[test]
+    fn test_reasoning_steps_structure() {
+        let search_results = vec![SearchResult {
+            id: "entity_1".to_string(),
+            content: "Entity description".to_string(),
+            score: 0.8,
+            result_type: ResultType::Entity,
+            entities: vec!["person".to_string(), "organization".to_string()],
+            source_chunks: vec![],
+        }];
+
+        let explained = ExplainedAnswer::from_results(
+            "Answer text".to_string(),
+            &search_results,
+            "Who are the key people?",
+        );
+
+        // Check reasoning steps are numbered correctly
+        for (i, step) in explained.reasoning_steps.iter().enumerate() {
+            assert_eq!(step.step_number as usize, i + 1);
+            assert!(!step.description.is_empty());
+            assert!(step.confidence >= 0.0 && step.confidence <= 1.0);
+        }
+    }
+
+    #[test]
+    fn test_source_reference_types() {
+        let search_results = vec![
+            SearchResult {
+                id: "chunk".to_string(),
+                content: "Chunk content".to_string(),
+                score: 0.7,
+                result_type: ResultType::Chunk,
+                entities: vec![],
+                source_chunks: vec![],
+            },
+            SearchResult {
+                id: "entity".to_string(),
+                content: "Entity content".to_string(),
+                score: 0.6,
+                result_type: ResultType::Entity,
+                entities: vec![],
+                source_chunks: vec![],
+            },
+            SearchResult {
+                id: "path".to_string(),
+                content: "Graph path content".to_string(),
+                score: 0.5,
+                result_type: ResultType::GraphPath,
+                entities: vec![],
+                source_chunks: vec![],
+            },
+        ];
+
+        let explained = ExplainedAnswer::from_results(
+            "Answer".to_string(),
+            &search_results,
+            "Query",
+        );
+
+        let source_types: Vec<_> = explained.sources.iter().map(|s| &s.source_type).collect();
+        assert!(source_types.contains(&&SourceType::TextChunk));
+        assert!(source_types.contains(&&SourceType::Entity));
+        assert!(source_types.contains(&&SourceType::Relationship));
     }
 }

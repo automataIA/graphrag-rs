@@ -399,6 +399,10 @@ impl GleaningEntityExtractor {
                     relation_type: rel_item.description.clone(),
                     confidence: rel_item.strength as f32,
                     context: vec![],
+                    embedding: None,
+                    temporal_type: None,
+                    temporal_range: None,
+                    causal_strength: None,
                 };
 
                 relationships.push(relationship);
@@ -584,27 +588,24 @@ mod tests {
         let extractor = GleaningEntityExtractor::new(ollama_client, config);
 
         let relationships = vec![
-            Relationship {
-                source: crate::core::EntityId::new("person_tom".to_string()),
-                target: crate::core::EntityId::new("person_huck".to_string()),
-                relation_type: "FRIENDS_WITH".to_string(),
-                confidence: 0.9,
-                context: vec![],
-            },
-            Relationship {
-                source: crate::core::EntityId::new("person_tom".to_string()),
-                target: crate::core::EntityId::new("person_huck".to_string()),
-                relation_type: "FRIENDS_WITH".to_string(), // Duplicate
-                confidence: 0.85,
-                context: vec![],
-            },
-            Relationship {
-                source: crate::core::EntityId::new("person_tom".to_string()),
-                target: crate::core::EntityId::new("location_stpetersburg".to_string()),
-                relation_type: "LIVES_IN".to_string(),
-                confidence: 0.8,
-                context: vec![],
-            },
+            Relationship::new(
+                crate::core::EntityId::new("person_tom".to_string()),
+                crate::core::EntityId::new("person_huck".to_string()),
+                "FRIENDS_WITH".to_string(),
+                0.9,
+            ),
+            Relationship::new(
+                crate::core::EntityId::new("person_tom".to_string()),
+                crate::core::EntityId::new("person_huck".to_string()),
+                "FRIENDS_WITH".to_string(), // Duplicate
+                0.85,
+            ),
+            Relationship::new(
+                crate::core::EntityId::new("person_tom".to_string()),
+                crate::core::EntityId::new("location_stpetersburg".to_string()),
+                "LIVES_IN".to_string(),
+                0.8,
+            ),
         ];
 
         let deduplicated = extractor.deduplicate_relationships(relationships);

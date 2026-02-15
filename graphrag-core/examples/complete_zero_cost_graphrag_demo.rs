@@ -194,6 +194,8 @@ fn create_pure_algorithmic_config() -> Config {
             entity_types: vec!["PERSON".to_string(), "ORG".to_string(), "CONCEPT".to_string()],
             use_gleaning: false,
             max_gleaning_rounds: 3,
+            enable_triple_reflection: false,
+            validation_min_confidence: 0.7,
         },
         retrieval: graphrag_core::config::RetrievalConfig {
             top_k: 10,

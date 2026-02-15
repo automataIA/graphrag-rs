@@ -405,6 +405,170 @@ impl PageRankRetrievalSystem {
 
         Ok(batch_results)
     }
+
+    /// Execute search using dynamic edge weighting based on query context (Phase 2.2)
+    ///
+    /// This method applies dynamic weights to relationships based on:
+    /// - Semantic similarity between relationship and query
+    /// - Temporal relevance of relationships
+    /// - Conceptual matching with query concepts
+    /// - Causal strength for causal relationships
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - The search query
+    /// * `graph` - Reference to the knowledge graph
+    /// * `query_embedding` - Optional embedding vector for the query
+    /// * `max_results` - Optional maximum number of results
+    ///
+    /// # Returns
+    ///
+    /// Scored results with dynamically weighted relationships
+    pub fn search_with_dynamic_weights(
+        &self,
+        query: &str,
+        graph: &KnowledgeGraph,
+        query_embedding: Option<&[f32]>,
+        max_results: Option<usize>,
+    ) -> Result<Vec<ScoredResult>> {
+        let max_results = max_results.unwrap_or(self.max_results);
+
+        #[cfg(feature = "tracing")]
+        tracing::debug!(
+            query = %query,
+            has_embedding = query_embedding.is_some(),
+            "Starting dynamic weight search"
+        );
+
+        // Extract concepts from query
+        let query_concepts = extract_query_concepts(query);
+
+        #[cfg(feature = "tracing")]
+        tracing::debug!(
+            concepts = ?query_concepts,
+            "Extracted query concepts"
+        );
+
+        // Step 1: Perform initial vector similarity search
+        let vector_scores = self.vector_similarity_search(query, graph)?;
+
+        if vector_scores.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Step 2: Calculate dynamic weights for all relationships
+        // This creates a modified view of the graph with context-aware weights
+        let mut weighted_edges: HashMap<(EntityId, EntityId), f32> = HashMap::new();
+
+        for rel in graph.get_all_relationships() {
+            let dynamic_weight = graph.dynamic_weight(
+                rel,
+                query_embedding,
+                &query_concepts,
+            );
+
+            weighted_edges.insert((rel.source.clone(), rel.target.clone()), dynamic_weight);
+
+            #[cfg(feature = "tracing")]
+            if dynamic_weight > rel.confidence * 1.5 {
+                tracing::trace!(
+                    source = %rel.source.0,
+                    target = %rel.target.0,
+                    original_weight = rel.confidence,
+                    dynamic_weight = dynamic_weight,
+                    "Applied significant boost"
+                );
+            }
+        }
+
+        // Step 3: Build PageRank calculator (using base graph structure)
+        let pagerank_calculator = graph.build_pagerank_calculator()?;
+
+        // Step 4: Compute personalized PageRank with vector scores as reset probabilities
+        let pagerank_scores =
+            self.compute_personalized_pagerank(&vector_scores, &pagerank_calculator)?;
+
+        // Step 5: Apply additional boost based on dynamic weights
+        // Entities connected via high-weight edges get extra score
+        let mut boosted_scores = pagerank_scores.clone();
+        for ((source_id, target_id), weight) in &weighted_edges {
+            if let Some(target_score) = boosted_scores.get_mut(target_id) {
+                if let Some(&source_pr) = pagerank_scores.get(source_id) {
+                    // Propagate score along high-weight edges
+                    let boost = source_pr * (*weight as f64 - 1.0).max(0.0) * 0.1;
+                    *target_score += boost;
+                }
+            }
+        }
+
+        // Step 6: Combine scores
+        let mut multi_scores = MultiModalScores::new();
+        multi_scores.vector_scores = vector_scores;
+        multi_scores.pagerank_scores = boosted_scores;
+
+        let combined_scores = multi_scores.combine_scores(&self.score_weights);
+
+        // Step 7: Create scored results
+        let mut scored_results = Vec::new();
+        for (entity_id, combined_score) in combined_scores {
+            if combined_score < self.min_score_threshold {
+                continue;
+            }
+
+            // Find related chunks for this entity
+            for chunk in graph.chunks() {
+                if chunk.entities.contains(&entity_id) {
+                    let vector_score = multi_scores.vector_scores.get(&entity_id).unwrap_or(&0.0);
+                    let pagerank_score =
+                        multi_scores.pagerank_scores.get(&entity_id).unwrap_or(&0.0);
+
+                    let result = ScoredResult {
+                        entity_id: entity_id.clone(),
+                        chunk_id: chunk.id.clone(),
+                        content: chunk.content.clone(),
+                        score: combined_score,
+                        vector_score: *vector_score,
+                        pagerank_score: *pagerank_score,
+                        combined_score,
+                    };
+
+                    scored_results.push(result);
+                }
+            }
+        }
+
+        // Step 8: Sort by combined score and limit results
+        scored_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        scored_results.truncate(max_results);
+
+        #[cfg(feature = "tracing")]
+        tracing::info!(
+            results_count = scored_results.len(),
+            "Dynamic weight search completed"
+        );
+
+        Ok(scored_results)
+    }
+}
+
+/// Extract conceptual keywords from a query for dynamic weighting
+///
+/// Simple heuristic that extracts meaningful words (>3 chars, not stopwords)
+fn extract_query_concepts(query: &str) -> Vec<String> {
+    let stopwords = ["what", "when", "where", "who", "which", "how", "does", "the", "a", "an", "is", "are", "was", "were", "been", "be"];
+
+    query
+        .to_lowercase()
+        .split_whitespace()
+        .filter(|word| {
+            word.len() > 3 && !stopwords.contains(word)
+        })
+        .map(|word| {
+            // Remove punctuation
+            word.trim_matches(|c: char| !c.is_alphanumeric()).to_string()
+        })
+        .filter(|word| !word.is_empty())
+        .collect()
 }
 
 /// Implementation of the Retriever trait for PageRankRetrievalSystem
@@ -541,6 +705,10 @@ mod tests {
             relation_type: "PRODUCES".to_string(),
             confidence: 0.8,
             context: vec![],
+            embedding: None,
+            temporal_type: None,
+            temporal_range: None,
+            causal_strength: None,
         };
         graph.add_relationship(relationship).unwrap();
 

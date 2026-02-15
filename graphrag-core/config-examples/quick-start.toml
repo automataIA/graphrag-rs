@@ -1,0 +1,76 @@
+# GraphRAG Quick Start Configuration
+# Minimal configuration to get started with advanced features
+
+output_dir = "output"
+chunk_size = 400
+chunk_overlap = 50
+approach = "semantic"
+
+# ============================================================================
+# ENABLE KEY ADVANCED FEATURES
+# ============================================================================
+
+[entities]
+min_confidence = 0.5
+use_gleaning = true
+enable_triple_reflection = true   # Validate relationships for quality
+
+[advanced_features.symbolic_anchoring]
+# Auto-enabled for conceptual queries - no config needed
+
+[advanced_features.dynamic_weighting]
+# All boosting enabled by default for better retrieval
+enable_semantic_boost = true
+enable_temporal_boost = true
+enable_concept_boost = true
+enable_causal_boost = true
+
+[advanced_features.causal_analysis]
+# Enable multi-step causal reasoning
+min_confidence = 0.3
+max_chain_depth = 5
+require_temporal_consistency = true
+
+# ============================================================================
+# BASIC CONFIGURATION
+# ============================================================================
+
+[embeddings]
+model = "nomic-embed-text"
+dimension = 768
+api_endpoint = "http://localhost:11434"
+
+[graph]
+max_connections = 10
+similarity_threshold = 0.7
+extract_relationships = true
+
+[retrieval]
+top_k = 10
+search_algorithm = "hybrid"
+
+[ollama]
+host = "http://localhost:11434"
+model = "llama3.2"
+embedding_model = "nomic-embed-text"
+
+[parallel]
+enabled = true
+num_threads = 4
+
+# ============================================================================
+# NEXT STEPS
+# ============================================================================
+
+# 1. For hierarchical clustering, call:
+#    graph.build_relationship_hierarchy(3)?;
+#
+# 2. For weight optimization, use:
+#    let optimizer = GraphWeightOptimizer::new(config);
+#    optimizer.optimize_weights(&mut graph, &test_queries)?;
+#
+# 3. For atomic fact extraction, add:
+#    [entities]
+#    use_atomic_facts = true
+#
+# 4. See advanced-features.toml for full configuration options

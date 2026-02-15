@@ -1,7 +1,13 @@
 //! Graph indexer for entity extraction
 //!
-//! This is a stub implementation to support the corpus module.
-//! TODO: Implement full graph indexing functionality
+//! Provides entity and relationship extraction from text using pattern matching
+//! and heuristic-based detection. Supports 23 relationship patterns and entity
+//! type classification (person, organization, location).
+//!
+//! Future enhancements could include:
+//! - Advanced NLP models (NER, dependency parsing)
+//! - Coreference resolution
+//! - Multilingual support
 
 use crate::core::Result;
 

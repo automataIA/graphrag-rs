@@ -1,0 +1,218 @@
+# GraphRAG Advanced Features Configuration Example
+# This file demonstrates all advanced features from Phases 2-3
+# Copy and modify this file to enable state-of-the-art GraphRAG capabilities
+
+# ============================================================================
+# BASIC CONFIGURATION
+# ============================================================================
+
+output_dir = "output"
+chunk_size = 400
+chunk_overlap = 50
+approach = "semantic"  # or "algorithmic" or "hybrid"
+
+# ============================================================================
+# PHASE 1 FEATURES (Foundation)
+# ============================================================================
+
+[entities]
+min_confidence = 0.5
+use_gleaning = true
+max_gleaning_rounds = 2
+
+# Phase 1.1: Triple Reflection - Validate extracted relationships
+enable_triple_reflection = true
+validation_min_confidence = 0.7  # Minimum confidence to keep a triple (0.0-1.0)
+
+# Phase 1.2: Temporal Fields - Enable temporal reasoning
+# Temporal fields are automatically extracted when present in text
+# No additional configuration needed
+
+# Phase 1.3: ATOM Atomic Fact Extraction (Simplified)
+use_atomic_facts = false  # Set to true for fine-grained fact extraction
+max_fact_tokens = 400     # Maximum tokens per atomic fact
+
+# ============================================================================
+# PHASE 2 FEATURES (Retrieval Enhancements)
+# ============================================================================
+
+[advanced_features]
+
+# Phase 2.1: Symbolic Anchoring (CatRAG-style)
+# Automatically applied for conceptual queries (e.g., "What is love?")
+[advanced_features.symbolic_anchoring]
+min_relevance = 0.3              # Minimum relevance score for anchors (0.0-1.0)
+max_anchors = 5                  # Maximum anchors to extract per query
+max_entities_per_anchor = 10     # Maximum entities grounded per anchor
+
+# Phase 2.2: Dynamic Edge Weighting
+# Query-aware relationship weight adjustment
+[advanced_features.dynamic_weighting]
+enable_semantic_boost = true     # Boost relationships semantically similar to query
+enable_temporal_boost = true     # Boost recent/relevant temporal relationships
+enable_concept_boost = true      # Boost relationships matching query concepts
+enable_causal_boost = true       # Boost strong causal relationships
+
+# Phase 2.3: Causal Chain Analysis
+# Multi-step causal reasoning (e.g., "What caused X to lead to Y?")
+[advanced_features.causal_analysis]
+min_confidence = 0.3             # Minimum confidence for causal chains (0.0-1.0)
+min_causal_strength = 0.5        # Minimum causal strength to consider (0.0-1.0)
+max_chain_depth = 5              # Maximum chain depth to search
+require_temporal_consistency = true  # Require chronological ordering in chains
+
+# ============================================================================
+# PHASE 3 FEATURES (Advanced Optimizations)
+# ============================================================================
+
+# Phase 3.1: Hierarchical Relationship Clustering
+# Multi-level relationship organization using Leiden algorithm
+[advanced_features.hierarchical_clustering]
+num_levels = 3                   # Number of hierarchy levels (2-5)
+resolutions = [0.8, 1.0, 1.5]    # Resolution parameters (higher = more clusters)
+min_cluster_size = 3             # Minimum relationships per cluster
+generate_summaries = true        # Generate LLM summaries for clusters (requires Ollama)
+
+# Phase 3.2: Graph Weight Optimization (DW-GRPO)
+# Heuristic optimization of relationship weights based on query performance
+[advanced_features.weight_optimization]
+learning_rate = 0.05             # Learning rate for weight adjustments (0.01-0.5)
+max_iterations = 20              # Maximum optimization iterations
+slope_window = 5                 # Window size for slope calculation
+stagnation_threshold = 0.01      # Minimum slope to avoid stagnation
+use_llm_eval = true              # Use LLM for quality evaluation (requires Ollama)
+
+# Objective weights (must sum to ~1.0)
+[advanced_features.weight_optimization.objective_weights]
+relevance = 0.4                  # Weight for relevance objective
+faithfulness = 0.4               # Weight for faithfulness objective
+conciseness = 0.2                # Weight for conciseness objective
+
+# ============================================================================
+# EMBEDDINGS CONFIGURATION
+# ============================================================================
+
+[embeddings]
+model = "nomic-embed-text"       # Ollama embedding model
+dimension = 768
+api_endpoint = "http://localhost:11434"
+batch_size = 32
+
+# ============================================================================
+# GRAPH CONFIGURATION
+# ============================================================================
+
+[graph]
+max_connections = 10
+similarity_threshold = 0.7
+extract_relationships = true
+relationship_confidence_threshold = 0.6
+
+[graph.traversal]
+max_depth = 3
+strategy = "bfs"                 # or "dfs"
+max_results = 50
+
+# ============================================================================
+# RETRIEVAL CONFIGURATION
+# ============================================================================
+
+[retrieval]
+top_k = 10
+search_algorithm = "hybrid"      # "vector", "graph", or "hybrid"
+
+# ============================================================================
+# OLLAMA CONFIGURATION
+# ============================================================================
+
+[ollama]
+host = "http://localhost:11434"
+model = "llama3.2"               # Model for relationship extraction and summaries
+embedding_model = "nomic-embed-text"
+timeout_seconds = 300
+max_retries = 3
+
+# ============================================================================
+# PARALLEL PROCESSING
+# ============================================================================
+
+[parallel]
+enabled = true
+num_threads = 4
+min_batch_size = 10
+chunk_batch_size = 4
+parallel_embeddings = true
+parallel_graph_ops = true
+parallel_vector_ops = true
+
+# ============================================================================
+# USAGE NOTES
+# ============================================================================
+
+# 1. Triple Reflection: Improves quality by validating relationships against source text
+#    - Best for: High-precision applications where accuracy matters
+#    - Cost: +30-50% processing time
+#    - Enable: entities.enable_triple_reflection = true
+
+# 2. Atomic Fact Extraction: Fine-grained fact extraction (ATOM-style)
+#    - Best for: Scientific texts, detailed analysis
+#    - Cost: +50-100% processing time
+#    - Enable: entities.use_atomic_facts = true
+
+# 3. Symbolic Anchoring: Better conceptual/abstract query handling
+#    - Best for: "What is X?" philosophical/conceptual queries
+#    - Cost: Minimal (only affects retrieval)
+#    - Auto-enabled for conceptual queries
+
+# 4. Dynamic Edge Weighting: Query-aware relationship scoring
+#    - Best for: Complex queries requiring context-aware ranking
+#    - Cost: Minimal (only affects retrieval)
+#    - Enable: advanced_features.dynamic_weighting.*
+
+# 5. Causal Chain Analysis: Multi-step causal reasoning
+#    - Best for: "Why did X cause Y?" causal queries
+#    - Cost: Moderate (only for causal queries)
+#    - Enable: advanced_features.causal_analysis.*
+
+# 6. Hierarchical Clustering: Multi-level relationship organization
+#    - Best for: Large graphs needing structure
+#    - Cost: One-time build cost
+#    - Enable: Call build_relationship_hierarchy() after graph construction
+
+# 7. Weight Optimization: Improve retrieval quality over time
+#    - Best for: Production systems with test queries
+#    - Cost: One-time optimization phase
+#    - Enable: advanced_features.weight_optimization.*
+
+# ============================================================================
+# RECOMMENDED CONFIGURATIONS
+# ============================================================================
+
+# HIGH PRECISION (research, accuracy-critical):
+# - enable_triple_reflection = true
+# - use_atomic_facts = true
+# - validation_min_confidence = 0.8
+# - min_confidence = 0.7
+
+# BALANCED (general purpose):
+# - enable_triple_reflection = true
+# - use_atomic_facts = false
+# - All dynamic weighting enabled
+# - Causal analysis enabled
+
+# HIGH THROUGHPUT (large-scale, performance-critical):
+# - enable_triple_reflection = false
+# - use_atomic_facts = false
+# - generate_summaries = false
+# - use_llm_eval = false
+# - Rely on dynamic weighting only
+
+# CONCEPTUAL/PHILOSOPHICAL QUERIES:
+# - Symbolic anchoring enabled (default)
+# - max_anchors = 10
+# - enable_semantic_boost = true
+
+# CAUSAL REASONING:
+# - require_temporal_consistency = true
+# - min_causal_strength = 0.7
+# - max_chain_depth = 7

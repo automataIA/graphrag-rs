@@ -1,0 +1,166 @@
+{
+  "report_generated": "2026-02-14T20:11:36+01:00",
+  "total_runs": 2,
+  "runs": [
+    {
+      "run_id": "algo_hash_small__symposium",
+      "pipeline": "algo_hash_small",
+      "book": "symposium",
+      "book_path": "/home/dio/graphrag-rs/docs-example/Symposium.txt",
+      "config_file": "/home/dio/graphrag-rs/tests/e2e/configs/algo_hash_small__symposium.json5",
+      "timestamp": "2026-02-14T20:00:46+01:00",
+      "parameters": {
+        "approach": "algorithmic",
+        "embedding_backend": "hash",
+        "embedding_model": "none",
+        "embedding_dim": 384,
+        "chunk_size": 256,
+        "chunk_overlap": 50,
+        "use_gleaning": false,
+        "gleaning_rounds": 0,
+        "llm_model": "none",
+        "llm_temperature": 0.0,
+        "ollama_enabled": false,
+        "lightrag": false,
+        "leiden": false,
+        "cross_encoder": false
+      },
+      "timing": {
+        "init_ms": 0,
+        "build_ms": 62,
+        "total_query_ms": 36,
+        "total_ms": 99
+      },
+      "stats": {
+        "entities": 1862,
+        "relationships": 1669,
+        "chunks": 1276
+      },
+      "questions_and_answers": [
+        {
+          "index": 1,
+          "question": "What is the nature of love according to Socrates?",
+          "answer": "osophy' has\r\nat least a superficial reconcilement. (Rep.)\r\n\r\nAn unknown person who had heard of the discourses in praise of love\r\nspoken by Socrates and others at the banquet of Agathon is desirous of...  (score: 137501088.00)\nSocrates (PERSON) (score: 6464644.00)\nLove (PERSON) (score: 1338.43)\nputed; that is to say, to\r\nthe self-seeking of the governors and the cowardice of the governed; on\r\nthe other hand, the indiscriminate honour which is given to them in some\r\ncountries is attributable to the laziness of those who hold this opinion\r\nof them. (score: 0.08)\nhe\r\nProtagoras, and is alluded to by Aristophanes. Hence he is naturally the\r\nupholder of male loves, which, like all the other affections or\r\nactions of men, he regards as varying according to the manner of their\r\nperformance. (score: 0.08)\n\nPlato, is especially applicable to the Symposium.\r\n\r\nThe power of love is represented in the Symposium as running through all\r\nnature and all being: at one end descending to animals and plants, and\r\nattaining to the highest vision of truth at the other. (score: 0.07)\nlated to him; and so noble did this action of hers appear to the gods,\r\nas well as to men, that among the many who have done virtuously she is\r\none of the very few to whom, in admiration of her noble action, they\r\nhave granted the privilege of returning (score: 0.07)\n man of the Republic (compare also\r\nAlcibiades 1).\r\n\r\nThere is no criterion of the date of the Symposium, except that which\r\nis furnished by the allusion to the division of Arcadia after the\r\ndestruction of Mantinea. This took place in the year B.C. (score: 0.07)",
+          "sources": [],
+          "query_time_ms": 25
+        },
+        {
+          "index": 2,
+          "question": "Who are the main speakers in the Symposium?",
+          "answer": "osophy' has\r\nat least a superficial reconcilement. (Rep.)\r\n\r\nAn unknown person who had heard of the discourses in praise of love\r\nspoken by Socrates and others at the banquet of Agathon is desirous of...  (score: 11.53)\n﻿The Project Gutenberg eBook of Symposium\r\n    \r\nThis ebook is for the use of anyone anywhere in the United States and\r\nmost other parts of the world at no cost and with almost no restrictions\r\nwhat...  (score: 6.11)\nSYMPOSIUM (PERSON) (score: 5.32)\nject Gutenberg™ electronic works. Nearly all the individual\r\nworks in the collection are in the public domain in the United\r\nStates. (score: 0.08)\nor the original woman, or the\r\noriginal man-woman. Those who come from the man-woman are lascivious and\r\nadulterous; those who come from the woman form female attachments; those\r\nwho are a section of the male follow the male and embrace him, and in\r\nhim (score: 0.08)\ns and in many other kinds of knowledge, who in the days of old, when\r\nthe Athenians offered sacrifice before the coming of the plague, delayed\r\nthe disease ten years. (score: 0.07)\ning\r\nolder, there is nothing of wantonness in her. Those who are inspired by\r\nthis love turn to the male, and delight in him who is the more valiant\r\nand intelligent nature; any one may recognise the pure enthusiasts in\r\nthe very character of their (score: 0.07)\nlty which has\r\ntroubled the moderns as well as the ancients in music, and may be\r\nextended to the other applied sciences. That confusion begins in the\r\nconcrete, was the natural feeling of a mind dwelling in the world of\r\nideas. (score: 0.07)",
+          "sources": [],
+          "query_time_ms": 2
+        },
+        {
+          "index": 3,
+          "question": "What is Aristophanes' myth about the origin of love?",
+          "answer": "Love (PERSON) (score: 1338.43)\nAristophanes (PERSON) (score: 24.44)\nosophy' has\r\nat least a superficial reconcilement. (Rep.)\r\n\r\nAn unknown person who had heard of the discourses in praise of love\r\nspoken by Socrates and others at the banquet of Agathon is desirous of...  (score: 11.49)\ns--of penetrating the inmost secret of philosophy. The highest\r\nlove is the love not of a person, but of the highest and purest\r\nabstraction. This abstraction is the far-off heaven on which the eye of\r\nthe mind is fixed in fond amazement. (score: 0.06)\n of the mind; nay, even\r\nknowledge comes and goes. There is no sameness of existence, but the new\r\nmortality is always taking the place of the old. (score: 0.06)\nion of the male and female, and\r\npartakes of both. But the offspring of the heavenly Aphrodite is derived\r\nfrom a mother in whose birth the female has no part,--she is from the\r\nmale only; this is that love which is of youths, and the goddess (score: 0.06)\n the nature of love, can you tell me further,' she said,\r\n'what is the manner of the pursuit? what are they doing who show all\r\nthis eagerness and heat which is called love? and what is the object\r\nwhich they have in view? (score: 0.06)\nrds,' which is the\r\nsame and not the same in both. The ideal beauty of the one is the ideal\r\ngood of the other; regarded not with the eye of knowledge, but of faith\r\nand desire; and they are respectively the source of beauty and the\r\nsource of good in all (score: 0.06)",
+          "sources": [],
+          "query_time_ms": 2
+        },
+        {
+          "index": 4,
+          "question": "How does Diotima describe the ladder of beauty?",
+          "answer": "osophy' has\r\nat least a superficial reconcilement. (Rep.)\r\n\r\nAn unknown person who had heard of the discourses in praise of love\r\nspoken by Socrates and others at the banquet of Agathon is desirous of...  (score: 11.63)\n﻿The Project Gutenberg eBook of Symposium\r\n    \r\nThis ebook is for the use of anyone anywhere in the United States and\r\nmost other parts of the world at no cost and with almost no restrictions\r\nwhat...  (score: 6.07)\nDiotima (PERSON) (score: 2.73)\nthese loves are disgraceful and others honourable. The vulgar love of\r\nthe body which takes wing and flies away when the bloom of youth is\r\nover, is disgraceful, and so is the interested love of power or wealth;\r\nbut the love of the noble mind is lasting. (score: 0.06)\nlishing the end nobly, and therefore does good and evil quite\r\nindiscriminately. The goddess who is his mother is far younger than\r\nthe other, and she was born of the union of the male and female, and\r\npartakes of both. (score: 0.06)\nthe\r\nreal, if half-ironical, approval of Socrates. It is the speech of the\r\ntragic poet and a sort of poem, like tragedy, moving among the gods of\r\nOlympus, and not among the elder or Orphic deities. (score: 0.05)\n, such as poets and other\r\ncreators have invented. And the noblest creations of all are those of\r\nlegislators, in honour of whom temples have been raised. Who would not\r\nsooner have these children of the mind than the ordinary human ones? (score: 0.05)\ne, and\r\ntherefore when the bloom of youth which he was desiring is over, he\r\ntakes wing and flies away, in spite of all his words and promises;\r\nwhereas the love of the noble disposition is life-long, for it becomes\r\none with the everlasting. (score: 0.05)",
+          "sources": [],
+          "query_time_ms": 2
+        },
+        {
+          "index": 5,
+          "question": "What is the relationship between love and wisdom?",
+          "answer": "Love (PERSON) (score: 1338.43)\nAristophanes (PERSON) (score: 24.44)\nosophy' has\r\nat least a superficial reconcilement. (Rep.)\r\n\r\nAn unknown person who had heard of the discourses in praise of love\r\nspoken by Socrates and others at the banquet of Agathon is desirous of...  (score: 11.60)\nr has; for no man desires that which he is or has. And love is of\r\nthe beautiful, and therefore has not the beautiful. And the beautiful\r\nis the good, and therefore, in wanting and desiring the beautiful, love\r\nalso wants and desires the good. (score: 0.07)\nre in a mean between the two; Love is one of them.\r\nFor wisdom is a most beautiful thing, and Love is of the beautiful; and\r\ntherefore Love is also a philosopher or lover of wisdom, and being a\r\nlover of wisdom is in a mean between the wise and the (score: 0.07)\n\r\ndisease are not to be indulged, but discouraged. And this is what the\r\nphysician has to do, and in this the art of medicine consists: for\r\nmedicine may be regarded generally as the knowledge of the loves and\r\ndesires of the body, and how to satisfy them (score: 0.07)\nmour and fancy, which remind us of the\r\nSymposium. But while the Phaedo and Phaedrus look backwards and forwards\r\nto past and future states of existence, in the Symposium there is no\r\nbreak between this world and another; and we rise from one to the (score: 0.07)\nalso in a mean between the wise and the\r\nignorant. Such is the nature of Love, who is not to be confused with the\r\nbeloved.\r\n\r\nBut Love desires the beautiful; and then arises the question, What does\r\nhe desire of the beautiful? (score: 0.07)",
+          "sources": [],
+          "query_time_ms": 3
+        }
+      ]
+    },
+    {
+      "run_id": "mock_future_rag__symposium",
+      "pipeline": "mock_future_rag",
+      "book": "symposium",
+      "book_path": "/home/dio/graphrag-rs/docs-example/Symposium.txt",
+      "config_file": "/home/dio/graphrag-rs/tests/e2e/configs/mock_future_rag__symposium.json5",
+      "timestamp": "2026-02-14T20:11:36+01:00",
+      "parameters": {
+        "approach": "algorithmic",
+        "embedding_backend": "hash",
+        "embedding_model": "none",
+        "embedding_dim": 384,
+        "chunk_size": 256,
+        "chunk_overlap": 50,
+        "use_gleaning": false,
+        "gleaning_rounds": 0,
+        "llm_model": "none",
+        "llm_temperature": 0.0,
+        "ollama_enabled": false,
+        "lightrag": true,
+        "leiden": true,
+        "cross_encoder": false
+      },
+      "timing": {
+        "init_ms": 0,
+        "build_ms": 68,
+        "total_query_ms": 35,
+        "total_ms": 104
+      },
+      "stats": {
+        "entities": 1862,
+        "relationships": 1669,
+        "chunks": 1276
+      },
+      "questions_and_answers": [
+        {
+          "index": 1,
+          "question": "What is the nature of love according to Socrates?",
+          "answer": "osophy' has\r\nat least a superficial reconcilement. (Rep.)\r\n\r\nAn unknown person who had heard of the discourses in praise of love\r\nspoken by Socrates and others at the banquet of Agathon is desirous of...  (score: 144683952.00)\nSocrates (PERSON) (score: 6464644.00)\nLove (PERSON) (score: 1338.43)\nputed; that is to say, to\r\nthe self-seeking of the governors and the cowardice of the governed; on\r\nthe other hand, the indiscriminate honour which is given to them in some\r\ncountries is attributable to the laziness of those who hold this opinion\r\nof them. (score: 0.08)\nhe\r\nProtagoras, and is alluded to by Aristophanes. Hence he is naturally the\r\nupholder of male loves, which, like all the other affections or\r\nactions of men, he regards as varying according to the manner of their\r\nperformance. (score: 0.08)\n\nPlato, is especially applicable to the Symposium.\r\n\r\nThe power of love is represented in the Symposium as running through all\r\nnature and all being: at one end descending to animals and plants, and\r\nattaining to the highest vision of truth at the other. (score: 0.07)\nlated to him; and so noble did this action of hers appear to the gods,\r\nas well as to men, that among the many who have done virtuously she is\r\none of the very few to whom, in admiration of her noble action, they\r\nhave granted the privilege of returning (score: 0.07)\n man of the Republic (compare also\r\nAlcibiades 1).\r\n\r\nThere is no criterion of the date of the Symposium, except that which\r\nis furnished by the allusion to the division of Arcadia after the\r\ndestruction of Mantinea. This took place in the year B.C. (score: 0.07)",
+          "sources": [],
+          "query_time_ms": 24
+        },
+        {
+          "index": 2,
+          "question": "Who are the main speakers in the Symposium?",
+          "answer": "osophy' has\r\nat least a superficial reconcilement. (Rep.)\r\n\r\nAn unknown person who had heard of the discourses in praise of love\r\nspoken by Socrates and others at the banquet of Agathon is desirous of...  (score: 12.13)\n﻿The Project Gutenberg eBook of Symposium\r\n    \r\nThis ebook is for the use of anyone anywhere in the United States and\r\nmost other parts of the world at no cost and with almost no restrictions\r\nwhat...  (score: 6.51)\nSYMPOSIUM (PERSON) (score: 5.32)\nject Gutenberg™ electronic works. Nearly all the individual\r\nworks in the collection are in the public domain in the United\r\nStates. (score: 0.08)\nor the original woman, or the\r\noriginal man-woman. Those who come from the man-woman are lascivious and\r\nadulterous; those who come from the woman form female attachments; those\r\nwho are a section of the male follow the male and embrace him, and in\r\nhim (score: 0.08)\ns and in many other kinds of knowledge, who in the days of old, when\r\nthe Athenians offered sacrifice before the coming of the plague, delayed\r\nthe disease ten years. (score: 0.07)\ning\r\nolder, there is nothing of wantonness in her. Those who are inspired by\r\nthis love turn to the male, and delight in him who is the more valiant\r\nand intelligent nature; any one may recognise the pure enthusiasts in\r\nthe very character of their (score: 0.07)\nlty which has\r\ntroubled the moderns as well as the ancients in music, and may be\r\nextended to the other applied sciences. That confusion begins in the\r\nconcrete, was the natural feeling of a mind dwelling in the world of\r\nideas. (score: 0.07)",
+          "sources": [],
+          "query_time_ms": 2
+        },
+        {
+          "index": 3,
+          "question": "What is Aristophanes' myth about the origin of love?",
+          "answer": "Love (PERSON) (score: 1338.43)\nAristophanes (PERSON) (score: 24.44)\nosophy' has\r\nat least a superficial reconcilement. (Rep.)\r\n\r\nAn unknown person who had heard of the discourses in praise of love\r\nspoken by Socrates and others at the banquet of Agathon is desirous of...  (score: 12.09)\ns--of penetrating the inmost secret of philosophy. The highest\r\nlove is the love not of a person, but of the highest and purest\r\nabstraction. This abstraction is the far-off heaven on which the eye of\r\nthe mind is fixed in fond amazement. (score: 0.06)\n of the mind; nay, even\r\nknowledge comes and goes. There is no sameness of existence, but the new\r\nmortality is always taking the place of the old. (score: 0.06)\nion of the male and female, and\r\npartakes of both. But the offspring of the heavenly Aphrodite is derived\r\nfrom a mother in whose birth the female has no part,--she is from the\r\nmale only; this is that love which is of youths, and the goddess (score: 0.06)\n the nature of love, can you tell me further,' she said,\r\n'what is the manner of the pursuit? what are they doing who show all\r\nthis eagerness and heat which is called love? and what is the object\r\nwhich they have in view? (score: 0.06)\nrds,' which is the\r\nsame and not the same in both. The ideal beauty of the one is the ideal\r\ngood of the other; regarded not with the eye of knowledge, but of faith\r\nand desire; and they are respectively the source of beauty and the\r\nsource of good in all (score: 0.06)",
+          "sources": [],
+          "query_time_ms": 3
+        },
+        {
+          "index": 4,
+          "question": "How does Diotima describe the ladder of beauty?",
+          "answer": "osophy' has\r\nat least a superficial reconcilement. (Rep.)\r\n\r\nAn unknown person who had heard of the discourses in praise of love\r\nspoken by Socrates and others at the banquet of Agathon is desirous of...  (score: 12.23)\n﻿The Project Gutenberg eBook of Symposium\r\n    \r\nThis ebook is for the use of anyone anywhere in the United States and\r\nmost other parts of the world at no cost and with almost no restrictions\r\nwhat...  (score: 6.47)\nDiotima (PERSON) (score: 2.73)\nthese loves are disgraceful and others honourable. The vulgar love of\r\nthe body which takes wing and flies away when the bloom of youth is\r\nover, is disgraceful, and so is the interested love of power or wealth;\r\nbut the love of the noble mind is lasting. (score: 0.06)\nlishing the end nobly, and therefore does good and evil quite\r\nindiscriminately. The goddess who is his mother is far younger than\r\nthe other, and she was born of the union of the male and female, and\r\npartakes of both. (score: 0.06)\nthe\r\nreal, if half-ironical, approval of Socrates. It is the speech of the\r\ntragic poet and a sort of poem, like tragedy, moving among the gods of\r\nOlympus, and not among the elder or Orphic deities. (score: 0.05)\n, such as poets and other\r\ncreators have invented. And the noblest creations of all are those of\r\nlegislators, in honour of whom temples have been raised. Who would not\r\nsooner have these children of the mind than the ordinary human ones? (score: 0.05)\ne, and\r\ntherefore when the bloom of youth which he was desiring is over, he\r\ntakes wing and flies away, in spite of all his words and promises;\r\nwhereas the love of the noble disposition is life-long, for it becomes\r\none with the everlasting. (score: 0.05)",
+          "sources": [],
+          "query_time_ms": 2
+        },
+        {
+          "index": 5,
+          "question": "What is the relationship between love and wisdom?",
+          "answer": "Love (PERSON) (score: 1338.43)\nAristophanes (PERSON) (score: 24.44)\nosophy' has\r\nat least a superficial reconcilement. (Rep.)\r\n\r\nAn unknown person who had heard of the discourses in praise of love\r\nspoken by Socrates and others at the banquet of Agathon is desirous of...  (score: 12.20)\nr has; for no man desires that which he is or has. And love is of\r\nthe beautiful, and therefore has not the beautiful. And the beautiful\r\nis the good, and therefore, in wanting and desiring the beautiful, love\r\nalso wants and desires the good. (score: 0.07)\nre in a mean between the two; Love is one of them.\r\nFor wisdom is a most beautiful thing, and Love is of the beautiful; and\r\ntherefore Love is also a philosopher or lover of wisdom, and being a\r\nlover of wisdom is in a mean between the wise and the (score: 0.07)\n\r\ndisease are not to be indulged, but discouraged. And this is what the\r\nphysician has to do, and in this the art of medicine consists: for\r\nmedicine may be regarded generally as the knowledge of the loves and\r\ndesires of the body, and how to satisfy them (score: 0.07)\nmour and fancy, which remind us of the\r\nSymposium. But while the Phaedo and Phaedrus look backwards and forwards\r\nto past and future states of existence, in the Symposium there is no\r\nbreak between this world and another; and we rise from one to the (score: 0.07)\nalso in a mean between the wise and the\r\nignorant. Such is the nature of Love, who is not to be confused with the\r\nbeloved.\r\n\r\nBut Love desires the beautiful; and then arises the question, What does\r\nhe desire of the beautiful? (score: 0.07)",
+          "sources": [],
+          "query_time_ms": 2
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "pipelines": [
+      "algo_hash_small",
+      "mock_future_rag"
+    ],
+    "books": [
+      "symposium"
+    ],
+    "approaches": [
+      "algorithmic"
+    ],
+    "llm_models": [
+      "none"
+    ],
+    "total_questions_answered": 10
+  }
+}

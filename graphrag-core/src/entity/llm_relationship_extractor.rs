@@ -23,6 +23,22 @@ pub struct ExtractedRelationship {
     pub strength: f32,
 }
 
+/// Triple validation result from LLM reflection
+///
+/// This struct captures the validation of an extracted relationship
+/// against the source text, following DEG-RAG triple reflection methodology.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TripleValidation {
+    /// Whether the relationship is valid according to the source text
+    pub is_valid: bool,
+    /// Confidence score for the validation (0.0-1.0)
+    pub confidence: f32,
+    /// Explanation of why the relationship is valid or invalid
+    pub reason: String,
+    /// Optional suggestion for fixing invalid relationships
+    pub suggested_fix: Option<String>,
+}
+
 /// Combined extraction result from LLM
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtractionResult {
@@ -79,6 +95,7 @@ impl LLMRelationshipExtractor {
                     fallback_to_hash: config.fallback_to_hash,
                     max_tokens: None,
                     temperature: None,
+                    enable_caching: true, // Default to enabled
                 };
 
                 Some(crate::ollama::OllamaClient::new(local_config))
@@ -242,6 +259,152 @@ Return ONLY valid JSON, nothing else."#,
         } else {
             Err(GraphRAGError::Config {
                 message: "Ollama client not configured".to_string(),
+            })
+        }
+    }
+
+    /// Validate a relationship triple against source text (Triple Reflection)
+    ///
+    /// This method implements DEG-RAG's triple reflection methodology by asking
+    /// an LLM to validate whether a relationship is explicitly supported by the text.
+    ///
+    /// # Arguments
+    ///
+    /// * `source` - Source entity name
+    /// * `relation_type` - Type of relationship
+    /// * `target` - Target entity name
+    /// * `source_text` - The original text to validate against
+    ///
+    /// # Returns
+    ///
+    /// Returns a `TripleValidation` containing validity status, confidence, and reasoning.
+    #[cfg(feature = "async")]
+    pub async fn validate_triple(
+        &self,
+        source: &str,
+        relation_type: &str,
+        target: &str,
+        source_text: &str,
+    ) -> Result<TripleValidation> {
+        if let Some(client) = &self.ollama_client {
+            let prompt = format!(
+                r#"You are validating a relationship extracted from text.
+
+Text: "{}"
+
+Extracted Relationship:
+- Source: {}
+- Relationship: {}
+- Target: {}
+
+Does this text EXPLICITLY support this relationship?
+Consider:
+1. Are both entities mentioned in the text?
+2. Is the relationship type accurate?
+3. Is there direct evidence for this connection?
+
+Respond ONLY with valid JSON in this exact format:
+{{
+  "valid": true/false,
+  "confidence": 0.0-1.0,
+  "reason": "brief explanation",
+  "suggested_fix": "optional fix if invalid"
+}}
+
+JSON:"#,
+                source_text, source, relation_type, target
+            );
+
+            #[cfg(feature = "tracing")]
+            tracing::debug!(
+                source = %source,
+                relation = %relation_type,
+                target = %target,
+                "Validating relationship triple"
+            );
+
+            match client.generate(&prompt).await {
+                Ok(response) => {
+                    // Extract JSON from response
+                    let json_str = response.trim();
+                    let json_str = if let Some(start) = json_str.find('{') {
+                        if let Some(end) = json_str.rfind('}') {
+                            &json_str[start..=end]
+                        } else {
+                            json_str
+                        }
+                    } else {
+                        json_str
+                    };
+
+                    // Try to parse JSON response
+                    #[derive(Deserialize)]
+                    struct ValidationJson {
+                        valid: bool,
+                        confidence: f32,
+                        reason: String,
+                        suggested_fix: Option<String>,
+                    }
+
+                    match serde_json::from_str::<ValidationJson>(json_str) {
+                        Ok(val) => {
+                            #[cfg(feature = "tracing")]
+                            tracing::debug!(
+                                source = %source,
+                                target = %target,
+                                valid = val.valid,
+                                confidence = val.confidence,
+                                "Triple validation complete"
+                            );
+
+                            Ok(TripleValidation {
+                                is_valid: val.valid,
+                                confidence: val.confidence.clamp(0.0, 1.0),
+                                reason: val.reason,
+                                suggested_fix: val.suggested_fix,
+                            })
+                        }
+                        Err(_e) => {
+                            #[cfg(feature = "tracing")]
+                            tracing::warn!(
+                                error = %_e,
+                                response = %json_str,
+                                "Failed to parse validation response, assuming valid"
+                            );
+
+                            // On parse error, assume valid with low confidence
+                            Ok(TripleValidation {
+                                is_valid: true,
+                                confidence: 0.5,
+                                reason: "Failed to parse validation response".to_string(),
+                                suggested_fix: None,
+                            })
+                        }
+                    }
+                }
+                Err(e) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::error!(
+                        error = %e,
+                        "Triple validation failed"
+                    );
+
+                    // On LLM error, assume valid with low confidence
+                    Ok(TripleValidation {
+                        is_valid: true,
+                        confidence: 0.5,
+                        reason: format!("Validation LLM call failed: {}", e),
+                        suggested_fix: None,
+                    })
+                }
+            }
+        } else {
+            // No LLM available, assume valid
+            Ok(TripleValidation {
+                is_valid: true,
+                confidence: 1.0,
+                reason: "Ollama client not configured, skipping validation".to_string(),
+                suggested_fix: None,
             })
         }
     }
@@ -487,5 +650,114 @@ mod tests {
 
         // Should extract at least one relationship
         assert!(!relationships.is_empty());
+    }
+
+    #[test]
+    fn test_triple_validation_struct() {
+        // Test TripleValidation struct creation and serialization
+        let validation = TripleValidation {
+            is_valid: true,
+            confidence: 0.85,
+            reason: "The text explicitly states this relationship.".to_string(),
+            suggested_fix: None,
+        };
+
+        assert!(validation.is_valid);
+        assert_eq!(validation.confidence, 0.85);
+        assert!(!validation.reason.is_empty());
+
+        // Test serialization
+        let json = serde_json::to_string(&validation).unwrap();
+        assert!(json.contains("is_valid"));
+        assert!(json.contains("confidence"));
+        assert!(json.contains("reason"));
+    }
+
+    #[test]
+    fn test_triple_validation_deserialization() {
+        // Test deserializing validation from JSON (like LLM response)
+        let json = r#"{
+            "is_valid": true,
+            "confidence": 0.9,
+            "reason": "Explicitly supported",
+            "suggested_fix": null
+        }"#;
+
+        let validation: TripleValidation = serde_json::from_str(json).unwrap();
+        assert!(validation.is_valid);
+        assert_eq!(validation.confidence, 0.9);
+        assert_eq!(validation.reason, "Explicitly supported");
+        assert!(validation.suggested_fix.is_none());
+    }
+
+    #[test]
+    fn test_triple_validation_with_suggested_fix() {
+        let validation = TripleValidation {
+            is_valid: false,
+            confidence: 0.3,
+            reason: "The relationship is implied but not explicit.".to_string(),
+            suggested_fix: Some("Change TAUGHT to INFLUENCED".to_string()),
+        };
+
+        assert!(!validation.is_valid);
+        assert!(validation.confidence < 0.5);
+        assert!(validation.suggested_fix.is_some());
+
+        let fix = validation.suggested_fix.unwrap();
+        assert!(fix.contains("INFLUENCED"));
+    }
+
+    #[test]
+    fn test_validation_confidence_thresholds() {
+        // Test different confidence levels
+        let high_confidence = TripleValidation {
+            is_valid: true,
+            confidence: 0.95,
+            reason: "Strong evidence".to_string(),
+            suggested_fix: None,
+        };
+
+        let medium_confidence = TripleValidation {
+            is_valid: true,
+            confidence: 0.7,
+            reason: "Moderate evidence".to_string(),
+            suggested_fix: None,
+        };
+
+        let low_confidence = TripleValidation {
+            is_valid: false,
+            confidence: 0.3,
+            reason: "Weak evidence".to_string(),
+            suggested_fix: Some("Revise".to_string()),
+        };
+
+        // Test threshold filtering (default 0.7)
+        let threshold = 0.7;
+        assert!(high_confidence.confidence >= threshold);
+        assert!(medium_confidence.confidence >= threshold);
+        assert!(low_confidence.confidence < threshold);
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn test_validate_triple_without_ollama() {
+        // Test validation method when Ollama is not configured
+        let extractor = LLMRelationshipExtractor::new(None).unwrap();
+
+        let result = extractor.validate_triple(
+            "Socrates",
+            "TAUGHT",
+            "Plato",
+            "Socrates taught Plato."
+        ).await;
+
+        // Should gracefully fallback with high confidence when no LLM is available
+        assert!(result.is_ok(), "Should gracefully handle missing Ollama client");
+
+        let validation = result.unwrap();
+        assert!(validation.is_valid, "Fallback should assume valid");
+        assert_eq!(validation.confidence, 1.0, "Fallback should have high confidence");
+        assert!(validation.reason.contains("not configured"),
+            "Reason should explain Ollama is not configured");
     }
 }

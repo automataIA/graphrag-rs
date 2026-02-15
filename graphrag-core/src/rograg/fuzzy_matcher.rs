@@ -839,6 +839,9 @@ mod tests {
             confidence: 1.0,
             mentions: vec![],
             embedding: None,
+            first_mentioned: None,
+            last_mentioned: None,
+            temporal_validity: None,
         };
 
         let entity2 = Entity {
@@ -848,6 +851,9 @@ mod tests {
             confidence: 1.0,
             mentions: vec![],
             embedding: None,
+            first_mentioned: None,
+            last_mentioned: None,
+            temporal_validity: None,
         };
 
         graph.add_entity(entity1).unwrap();

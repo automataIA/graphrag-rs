@@ -57,11 +57,6 @@ impl Spinner {
         self.frames[self.frame_index]
     }
 
-    /// Get current frame without updating
-    pub fn current_frame(&self) -> &'static str {
-        self.frames[self.frame_index]
-    }
-
     /// Reset to first frame
     #[allow(dead_code)]
     pub fn reset(&mut self) {

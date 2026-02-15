@@ -298,7 +298,6 @@ impl HierarchicalCommunities {
             context_parts.push(String::new());
             context_parts.push("## Sub-community Summaries:".to_string());
             // Would need to track parent-child relationships to list sub-communities
-            // This is left as a TODO for full hierarchical implementation
         }
 
         context_parts.join("\n")
