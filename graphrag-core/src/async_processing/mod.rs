@@ -93,7 +93,8 @@ impl AsyncGraphRAGCore {
     /// Configured async GraphRAG instance, or an error if initialization fails
     pub async fn new(graph: KnowledgeGraph, config: AsyncConfig) -> Result<Self, GraphRAGError> {
         let rate_limiter = Arc::new(RateLimiter::new(&config));
-        let concurrent_processor = Arc::new(ConcurrentProcessor::new(config.max_concurrent_documents));
+        let concurrent_processor =
+            Arc::new(ConcurrentProcessor::new(config.max_concurrent_documents));
         let metrics = Arc::new(ProcessingMetrics::new());
 
         Ok(Self {
@@ -122,7 +123,10 @@ impl AsyncGraphRAGCore {
         let start_time = Instant::now();
         self.metrics.increment_batch_processing_started();
 
-        tracing::info!(document_count = documents.len(), "Processing documents concurrently");
+        tracing::info!(
+            document_count = documents.len(),
+            "Processing documents concurrently"
+        );
 
         let results = self
             .concurrent_processor
@@ -202,10 +206,7 @@ impl AsyncGraphRAGCore {
     ///
     /// # Returns
     /// Generated response string, or an error if processing fails
-    pub async fn query_async(
-        &self,
-        query: &str,
-    ) -> Result<String, GraphRAGError> {
+    pub async fn query_async(&self, query: &str) -> Result<String, GraphRAGError> {
         let start_time = Instant::now();
         self.metrics.increment_query_started();
 
@@ -236,12 +237,15 @@ impl AsyncGraphRAGCore {
             Ok(_) => {
                 self.metrics.increment_query_success();
                 self.metrics.record_query_duration(duration);
-                tracing::info!(duration_ms = duration.as_millis(), "Query completed successfully");
-            }
+                tracing::info!(
+                    duration_ms = duration.as_millis(),
+                    "Query completed successfully"
+                );
+            },
             Err(e) => {
                 self.metrics.increment_query_error();
                 tracing::error!(error = %e, "Query processing error");
-            }
+            },
         }
 
         result
@@ -399,7 +403,8 @@ impl PerformanceTracker {
     /// # Parameters
     /// - `duration`: Time taken for the operation
     pub fn record_operation(&self, duration: Duration) {
-        self.total_operations.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.total_operations
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         let mut total_duration = self.total_duration.lock().unwrap();
         *total_duration += duration;
@@ -410,7 +415,9 @@ impl PerformanceTracker {
     /// # Returns
     /// Average duration, or zero if no operations have been recorded
     pub fn get_average_duration(&self) -> Duration {
-        let total_ops = self.total_operations.load(std::sync::atomic::Ordering::Relaxed);
+        let total_ops = self
+            .total_operations
+            .load(std::sync::atomic::Ordering::Relaxed);
         if total_ops == 0 {
             return Duration::from_secs(0);
         }
@@ -421,6 +428,7 @@ impl PerformanceTracker {
 
     /// Returns the total number of operations recorded
     pub fn get_total_operations(&self) -> u64 {
-        self.total_operations.load(std::sync::atomic::Ordering::Relaxed)
+        self.total_operations
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 }

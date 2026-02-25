@@ -222,7 +222,7 @@ pub enum DeltaStatus {
     /// Delta failed with error message
     Failed {
         /// Error message describing the failure
-        error: String
+        error: String,
     },
 }
 
@@ -538,7 +538,7 @@ impl SelectiveInvalidation {
                         }
                         strategies.push(InvalidationStrategy::Relational(entity_id.clone(), 2));
                     }
-                }
+                },
                 ChangeType::RelationshipAdded
                 | ChangeType::RelationshipUpdated
                 | ChangeType::RelationshipRemoved => {
@@ -547,14 +547,14 @@ impl SelectiveInvalidation {
                         strategies.push(InvalidationStrategy::Relational(rel.source.clone(), 1));
                         strategies.push(InvalidationStrategy::Relational(rel.target.clone(), 1));
                     }
-                }
+                },
                 _ => {
                     // For other changes, use selective invalidation
                     let cache_keys = self.generate_cache_keys_for_change(change);
                     if !cache_keys.is_empty() {
                         strategies.push(InvalidationStrategy::Selective(cache_keys));
                     }
-                }
+                },
             }
         }
 
@@ -582,20 +582,20 @@ impl SelectiveInvalidation {
                     keys.push(format!("entity:{entity_id}"));
                     keys.push(format!("entity_neighbors:{entity_id}"));
                 }
-            }
+            },
             ChangeType::DocumentAdded | ChangeType::DocumentUpdated => {
                 if let Some(doc_id) = &change.document_id {
                     keys.push(format!("document:{doc_id}"));
                     keys.push(format!("document_chunks:{doc_id}"));
                 }
-            }
+            },
             ChangeType::EmbeddingAdded | ChangeType::EmbeddingUpdated => {
                 if let Some(entity_id) = &change.entity_id {
                     keys.push(format!("embedding:{entity_id}"));
                     keys.push(format!("similarity:{entity_id}"));
                 }
-            }
-            _ => {}
+            },
+            _ => {},
         }
 
         keys
@@ -680,7 +680,7 @@ impl ConflictResolver {
                         message: format!("Custom resolver '{resolver_name}' not found"),
                     })
                 }
-            }
+            },
             _ => Err(GraphRAGError::ConflictResolution {
                 message: "Conflict resolution strategy not implemented".to_string(),
             }),
@@ -698,7 +698,7 @@ impl ConflictResolver {
                         .into_iter()
                         .collect(),
                 })
-            }
+            },
             (ChangeData::Relationship(existing), ChangeData::Relationship(new)) => {
                 let merged = self.merge_relationships(existing, new)?;
                 Ok(ConflictResolution {
@@ -711,7 +711,7 @@ impl ConflictResolver {
                     .into_iter()
                     .collect(),
                 })
-            }
+            },
             _ => Err(GraphRAGError::ConflictResolution {
                 message: "Cannot merge incompatible data types".to_string(),
             }),
@@ -1124,7 +1124,7 @@ impl IncrementalGraphManager {
                     self.monitor
                         .complete_operation(&operation_id, true, None, 1, 0);
                     Ok(update_id)
-                }
+                },
                 Err(e) => {
                     self.monitor.complete_operation(
                         &operation_id,
@@ -1134,7 +1134,7 @@ impl IncrementalGraphManager {
                         0,
                     );
                     Err(e)
-                }
+                },
             }
         }
 
@@ -1268,7 +1268,7 @@ impl IncrementalGraphManager {
                 ChangeType::RelationshipAdded => relationship_stats.0 += 1,
                 ChangeType::RelationshipUpdated => relationship_stats.1 += 1,
                 ChangeType::RelationshipRemoved => relationship_stats.2 += 1,
-                _ => {}
+                _ => {},
             }
         }
 
@@ -1307,7 +1307,7 @@ impl IncrementalGraphManager {
                 ChangeType::RelationshipAdded => stats.relationships_added += 1,
                 ChangeType::RelationshipUpdated => stats.relationships_updated += 1,
                 ChangeType::RelationshipRemoved => stats.relationships_removed += 1,
-                _ => {}
+                _ => {},
             }
         }
 
@@ -1471,9 +1471,7 @@ impl IncrementalPageRank {
         }
 
         let duration = start.elapsed();
-        println!(
-            "🔄 Full PageRank recomputation completed in {duration:?} for {n} entities"
-        );
+        println!("🔄 Full PageRank recomputation completed in {duration:?} for {n} entities");
 
         Ok(())
     }
@@ -1713,18 +1711,18 @@ impl BatchProcessor {
             match &change.change_type {
                 ChangeType::EntityAdded | ChangeType::EntityUpdated | ChangeType::EntityRemoved => {
                     entity_changes.push(change);
-                }
+                },
                 ChangeType::RelationshipAdded
                 | ChangeType::RelationshipUpdated
                 | ChangeType::RelationshipRemoved => {
                     relationship_changes.push(change);
-                }
+                },
                 ChangeType::EmbeddingAdded
                 | ChangeType::EmbeddingUpdated
                 | ChangeType::EmbeddingRemoved => {
                     embedding_changes.push(change);
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
 
@@ -2037,7 +2035,7 @@ impl ProductionGraphStore {
                         }));
                     }
                 }
-            }
+            },
             ChangeData::Relationship(relationship) => {
                 let graph = self.graph.read();
                 for existing_rel in graph.get_all_relationships() {
@@ -2054,8 +2052,8 @@ impl ProductionGraphStore {
                         }));
                     }
                 }
-            }
-            _ => {}
+            },
+            _ => {},
         }
 
         Ok(None)
@@ -2081,14 +2079,14 @@ impl ProductionGraphStore {
                         Operation::Insert | Operation::Upsert => {
                             graph.add_entity(entity.clone())?;
                             self.incremental_pagerank.record_change(entity.id.clone());
-                        }
+                        },
                         Operation::Delete => {
                             // Remove entity and its relationships
                             // Implementation would go here
-                        }
-                        _ => {}
+                        },
+                        _ => {},
                     }
-                }
+                },
                 ChangeData::Relationship(relationship) => {
                     match change.operation {
                         Operation::Insert | Operation::Upsert => {
@@ -2097,14 +2095,14 @@ impl ProductionGraphStore {
                                 .record_change(relationship.source.clone());
                             self.incremental_pagerank
                                 .record_change(relationship.target.clone());
-                        }
+                        },
                         Operation::Delete => {
                             // Remove relationship
                             // Implementation would go here
-                        }
-                        _ => {}
+                        },
+                        _ => {},
                     }
-                }
+                },
                 ChangeData::Embedding {
                     entity_id,
                     embedding,
@@ -2112,8 +2110,8 @@ impl ProductionGraphStore {
                     if let Some(entity) = graph.get_entity_mut(entity_id) {
                         entity.embedding = Some(embedding.clone());
                     }
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
 
@@ -2136,7 +2134,7 @@ impl ProductionGraphStore {
                 if let Some(existing) = graph.get_entity(&entity.id) {
                     previous_entities.push(existing.clone());
                 }
-            }
+            },
             ChangeData::Relationship(relationship) => {
                 // Store existing relationships that might be affected
                 for rel in graph.get_all_relationships() {
@@ -2144,8 +2142,8 @@ impl ProductionGraphStore {
                         previous_relationships.push(rel.clone());
                     }
                 }
-            }
-            _ => {}
+            },
+            _ => {},
         }
 
         Ok(RollbackData {
@@ -2705,12 +2703,7 @@ mod tests {
         store.upsert_entity(entity1.clone()).await.unwrap();
         store.upsert_entity(entity2.clone()).await.unwrap();
 
-        let relationship = Relationship::new(
-            entity1.id,
-            entity2.id,
-            "KNOWS".to_string(),
-            0.8,
-        );
+        let relationship = Relationship::new(entity1.id, entity2.id, "KNOWS".to_string(), 0.8);
 
         let update_id = store.upsert_relationship(relationship).await.unwrap();
         assert!(!update_id.as_str().is_empty());
@@ -2782,7 +2775,9 @@ mod tests {
         });
 
         // Wait for event
-        let event = tokio::time::timeout(std::time::Duration::from_millis(100), event_receiver.recv()).await;
+        let event =
+            tokio::time::timeout(std::time::Duration::from_millis(100), event_receiver.recv())
+                .await;
         assert!(event.is_ok());
     }
 

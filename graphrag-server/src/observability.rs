@@ -33,10 +33,10 @@
 //! └────────┘         └──────────┘
 //! ```
 
-use std::time::Duration;
-use std::sync::Arc;
 use parking_lot::RwLock;
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
 
 /// Metrics collector for business metrics
 #[derive(Default, Clone)]
@@ -246,7 +246,8 @@ impl Observability {
         }
 
         // Average query latency
-        output.push_str("# HELP graphrag_query_latency_avg Average query latency in milliseconds\n");
+        output
+            .push_str("# HELP graphrag_query_latency_avg Average query latency in milliseconds\n");
         output.push_str("# TYPE graphrag_query_latency_avg gauge\n");
         output.push_str(&format!(
             "graphrag_query_latency_avg {}\n",

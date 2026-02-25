@@ -3,8 +3,8 @@
 //! This module provides integration with Ollama for local LLM inference.
 
 use crate::core::{GraphRAGError, Result};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 /// Generation parameters for Ollama requests
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -27,6 +27,39 @@ pub struct OllamaGenerationParams {
     /// Repeat penalty
     #[serde(skip_serializing_if = "Option::is_none")]
     pub repeat_penalty: Option<f32>,
+    /// Context window size in tokens.
+    ///
+    /// **Critical for long documents**: Ollama silently truncates prompts that exceed
+    /// the default context size (often 2k-8k tokens). Set this to accommodate the
+    /// full document + chunk + instructions when using Contextual Enrichment.
+    ///
+    /// For KV Cache efficiency, calculate as:
+    /// `tokens(instructions) + tokens(document) + tokens(max_chunk) + output_tokens + 5% margin`
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub num_ctx: Option<u32>,
+    /// How long to keep the model loaded in memory after the request (e.g. "1h", "30m", "0").
+    ///
+    /// **Critical for KV Cache**: Without this, Ollama may unload the model between
+    /// consecutive requests, destroying the KV cache and forcing a full re-evaluation
+    /// of the static document prefix for every chunk. Set to "1h" when processing
+    /// multiple chunks from the same document.
+    ///
+    /// This is a top-level Ollama API field, not an option — serialized separately.
+    #[serde(skip)]
+    pub keep_alive: Option<String>,
+
+    /// KV cache context from a previous `/api/generate` response.
+    ///
+    /// When set, the model **continues from this token state** instead of re-evaluating
+    /// the entire prompt. Use this for the two-step KV cache pattern:
+    ///
+    /// 1. **Prime**: send the full document, get `context` back (loads doc into KV cache)
+    /// 2. **Per chunk**: send only the chunk text with the priming `context`
+    ///    → Ollama skips document re-evaluation, only evaluates ~128 chunk tokens
+    ///
+    /// This is a top-level Ollama API field — serialized separately.
+    #[serde(skip)]
+    pub context: Option<Vec<i64>>,
 }
 
 impl Default for OllamaGenerationParams {
@@ -38,8 +71,29 @@ impl Default for OllamaGenerationParams {
             top_k: Some(40),
             stop: None,
             repeat_penalty: Some(1.1),
+            num_ctx: None,
+            keep_alive: None,
+            context: None,
         }
     }
+}
+
+/// Full response from `/api/generate`, including KV cache context and token stats.
+///
+/// Used by [`OllamaClient::generate_with_full_response`] to support the two-step
+/// KV cache pattern (prime with document, then enrich each chunk cheaply).
+#[derive(Debug, Clone)]
+pub struct OllamaGenerateResponse {
+    /// The generated text
+    pub text: String,
+    /// KV cache token state — pass back as `OllamaGenerationParams::context` on the
+    /// next request to continue from this exact point without re-evaluating prior tokens.
+    pub context: Vec<i64>,
+    /// Tokens actually evaluated in the prompt (vs reused from KV cache).
+    /// With KV cache working: ~= chunk_tokens.  Without: ~= full_prompt_tokens.
+    pub prompt_eval_count: u64,
+    /// Tokens generated in the response.
+    pub eval_count: u64,
 }
 
 /// Usage statistics for Ollama client
@@ -129,6 +183,21 @@ pub struct OllamaConfig {
     pub temperature: Option<f32>,
     /// Enable model caching
     pub enable_caching: bool,
+    /// How long to keep the model loaded in memory between requests (e.g. "1h", "30m", "0").
+    ///
+    /// Without this, Ollama may unload the model between requests, destroying the KV cache
+    /// and forcing full re-evaluation of long document contexts on every request.
+    /// Set to "1h" when processing multiple chunks from the same document.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keep_alive: Option<String>,
+    /// Default context window size for generation requests.
+    ///
+    /// Ollama silently truncates prompts exceeding this value (default is often 2048-8192).
+    /// For long-document processing, set this to at least:
+    /// `tokens(document) + tokens(max_chunk) + tokens(instructions) + 150 output tokens`
+    /// Use `None` to let Ollama use its model default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub num_ctx: Option<u32>,
 }
 
 impl Default for OllamaConfig {
@@ -145,6 +214,8 @@ impl Default for OllamaConfig {
             max_tokens: Some(2000),
             temperature: Some(0.7),
             enable_caching: true,
+            keep_alive: None,
+            num_ctx: None,
         }
     }
 }
@@ -191,6 +262,11 @@ impl OllamaClient {
         &self.stats
     }
 
+    /// Access the underlying Ollama configuration
+    pub fn config(&self) -> &OllamaConfig {
+        &self.config
+    }
+
     /// Clear the cache
     #[cfg(feature = "dashmap")]
     pub fn clear_cache(&self) {
@@ -230,8 +306,18 @@ impl OllamaClient {
 
     /// Generate text completion with custom parameters
     #[cfg(feature = "ureq")]
-    pub async fn generate_with_params(&self, prompt: &str, params: OllamaGenerationParams) -> Result<String> {
+    pub async fn generate_with_params(
+        &self,
+        prompt: &str,
+        params: OllamaGenerationParams,
+    ) -> Result<String> {
         let endpoint = format!("{}:{}/api/generate", self.config.host, self.config.port);
+
+        // Extract keep_alive before serializing params (it's a top-level field, not an option)
+        let keep_alive = params
+            .keep_alive
+            .clone()
+            .or_else(|| self.config.keep_alive.clone());
 
         let mut request_body = serde_json::json!({
             "model": self.config.chat_model,
@@ -239,29 +325,57 @@ impl OllamaClient {
             "stream": false,
         });
 
-        // Add custom parameters as options
-        let options = serde_json::to_value(&params).map_err(|e| GraphRAGError::Generation {
+        // keep_alive is a top-level field (controls model unloading between requests)
+        if let Some(ref ka) = keep_alive {
+            request_body["keep_alive"] = serde_json::Value::String(ka.clone());
+        }
+
+        // context is a top-level field: KV cache token state from a previous response.
+        // When set, the model continues from this state, skipping re-evaluation of prior tokens.
+        if let Some(ref ctx) = params.context {
+            request_body["context"] = serde_json::Value::Array(
+                ctx.iter()
+                    .map(|&t| serde_json::Value::Number(t.into()))
+                    .collect(),
+            );
+        }
+
+        // Build options object: serialized params + num_ctx
+        let mut options = serde_json::to_value(&params).map_err(|e| GraphRAGError::Generation {
             message: format!("Failed to serialize generation params: {}", e),
         })?;
 
-        if !options.as_object().unwrap().is_empty() {
+        // Add num_ctx to options (overrides config default if set in params)
+        let effective_num_ctx = params.num_ctx.or(self.config.num_ctx);
+        if let Some(num_ctx) = effective_num_ctx {
+            if let Some(obj) = options.as_object_mut() {
+                obj.insert(
+                    "num_ctx".to_string(),
+                    serde_json::Value::Number(num_ctx.into()),
+                );
+            }
+        }
+
+        if !options.as_object().map_or(true, |o| o.is_empty()) {
             request_body["options"] = options;
         }
 
         // Make HTTP request with retry logic
         let mut last_error = None;
         for attempt in 1..=self.config.max_retries {
-            match self.client
+            match self
+                .client
                 .post(&endpoint)
                 .set("Content-Type", "application/json")
                 .send_json(&request_body)
             {
                 Ok(response) => {
-                    let json_response: serde_json::Value = response
-                        .into_json()
-                        .map_err(|e| GraphRAGError::Generation {
-                            message: format!("Failed to parse JSON response: {}", e),
-                        })?;
+                    let json_response: serde_json::Value =
+                        response
+                            .into_json()
+                            .map_err(|e| GraphRAGError::Generation {
+                                message: format!("Failed to parse JSON response: {}", e),
+                            })?;
 
                     // Extract response text
                     if let Some(response_text) = json_response["response"].as_str() {
@@ -275,10 +389,14 @@ impl OllamaClient {
                         #[cfg(feature = "dashmap")]
                         {
                             if self.config.enable_caching {
-                                self.cache.insert(prompt.to_string(), response_string.clone());
+                                self.cache
+                                    .insert(prompt.to_string(), response_string.clone());
 
                                 #[cfg(feature = "tracing")]
-                                tracing::debug!("Cached response for prompt (length: {})", prompt.len());
+                                tracing::debug!(
+                                    "Cached response for prompt (length: {})",
+                                    prompt.len()
+                                );
                             }
                         }
 
@@ -289,7 +407,7 @@ impl OllamaClient {
                             message: format!("Invalid response format: {:?}", json_response),
                         });
                     }
-                }
+                },
                 Err(e) => {
                     #[cfg(feature = "tracing")]
                     tracing::warn!("Ollama API request failed (attempt {}): {}", attempt, e);
@@ -297,16 +415,162 @@ impl OllamaClient {
 
                     if attempt < self.config.max_retries {
                         // Wait before retry (exponential backoff)
-                        tokio::time::sleep(std::time::Duration::from_millis(100 * attempt as u64)).await;
+                        tokio::time::sleep(std::time::Duration::from_millis(100 * attempt as u64))
+                            .await;
                     }
-                }
+                },
             }
         }
 
         self.stats.record_failure();
         Err(GraphRAGError::Generation {
-            message: format!("Ollama API failed after {} retries: {:?}",
-                           self.config.max_retries, last_error),
+            message: format!(
+                "Ollama API failed after {} retries: {:?}",
+                self.config.max_retries, last_error
+            ),
+        })
+    }
+
+    /// Generate text and return the full response including KV cache context and token stats.
+    ///
+    /// Use this for the two-step contextual enrichment pattern:
+    ///
+    /// ```no_run
+    /// # use graphrag_core::ollama::{OllamaClient, OllamaConfig, OllamaGenerationParams};
+    /// # async fn example() -> graphrag_core::Result<()> {
+    /// let client = OllamaClient::new(OllamaConfig::default());
+    ///
+    /// // Step 1: Prime — load the document into Ollama's KV cache
+    /// let prime_params = OllamaGenerationParams {
+    ///     num_predict: Some(1), // generate minimal output; we just want the context
+    ///     keep_alive: Some("1h".to_string()),
+    ///     num_ctx: Some(32768),
+    ///     ..Default::default()
+    /// };
+    /// let prime = client.generate_with_full_response("<document>..full doc..</document>", prime_params).await?;
+    /// println!("Prompt tokens evaluated: {}", prime.prompt_eval_count); // ~doc_tokens
+    ///
+    /// // Step 2: Per chunk — only the chunk tokens are evaluated
+    /// for chunk in chunks {
+    ///     let params = OllamaGenerationParams {
+    ///         num_predict: Some(80),
+    ///         context: Some(prime.context.clone()),  // ← KV cache reuse!
+    ///         keep_alive: Some("1h".to_string()),
+    ///         ..Default::default()
+    ///     };
+    ///     let resp = client.generate_with_full_response(&chunk, params).await?;
+    ///     println!("Chunk tokens evaluated: {}", resp.prompt_eval_count); // ~chunk_tokens, not doc_tokens!
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[cfg(feature = "ureq")]
+    pub async fn generate_with_full_response(
+        &self,
+        prompt: &str,
+        params: OllamaGenerationParams,
+    ) -> Result<OllamaGenerateResponse> {
+        let endpoint = format!("{}:{}/api/generate", self.config.host, self.config.port);
+
+        let keep_alive = params
+            .keep_alive
+            .clone()
+            .or_else(|| self.config.keep_alive.clone());
+
+        let mut request_body = serde_json::json!({
+            "model": self.config.chat_model,
+            "prompt": prompt,
+            "stream": false,
+        });
+
+        if let Some(ref ka) = keep_alive {
+            request_body["keep_alive"] = serde_json::Value::String(ka.clone());
+        }
+
+        if let Some(ref ctx) = params.context {
+            request_body["context"] = serde_json::Value::Array(
+                ctx.iter()
+                    .map(|&t| serde_json::Value::Number(t.into()))
+                    .collect(),
+            );
+        }
+
+        let mut options = serde_json::to_value(&params).map_err(|e| GraphRAGError::Generation {
+            message: format!("Failed to serialize generation params: {}", e),
+        })?;
+
+        let effective_num_ctx = params.num_ctx.or(self.config.num_ctx);
+        if let Some(num_ctx) = effective_num_ctx {
+            if let Some(obj) = options.as_object_mut() {
+                obj.insert(
+                    "num_ctx".to_string(),
+                    serde_json::Value::Number(num_ctx.into()),
+                );
+            }
+        }
+
+        if !options.as_object().map_or(true, |o| o.is_empty()) {
+            request_body["options"] = options;
+        }
+
+        let mut last_error = None;
+        for attempt in 1..=self.config.max_retries {
+            match self
+                .client
+                .post(&endpoint)
+                .set("Content-Type", "application/json")
+                .send_json(&request_body)
+            {
+                Ok(response) => {
+                    let json_response: serde_json::Value =
+                        response
+                            .into_json()
+                            .map_err(|e| GraphRAGError::Generation {
+                                message: format!("Failed to parse JSON response: {}", e),
+                            })?;
+
+                    let text = json_response["response"]
+                        .as_str()
+                        .ok_or_else(|| GraphRAGError::Generation {
+                            message: format!("Invalid response format: {:?}", json_response),
+                        })?
+                        .to_string();
+
+                    let context: Vec<i64> = json_response["context"]
+                        .as_array()
+                        .map(|arr| arr.iter().filter_map(|v| v.as_i64()).collect())
+                        .unwrap_or_default();
+
+                    let prompt_eval_count =
+                        json_response["prompt_eval_count"].as_u64().unwrap_or(0);
+                    let eval_count = json_response["eval_count"].as_u64().unwrap_or(0);
+
+                    let estimated_tokens = (prompt.len() + text.len()) / 4;
+                    self.stats.record_success(estimated_tokens as u64);
+
+                    return Ok(OllamaGenerateResponse {
+                        text,
+                        context,
+                        prompt_eval_count,
+                        eval_count,
+                    });
+                },
+                Err(e) => {
+                    last_error = Some(e);
+                    if attempt < self.config.max_retries {
+                        tokio::time::sleep(std::time::Duration::from_millis(100 * attempt as u64))
+                            .await;
+                    }
+                },
+            }
+        }
+
+        self.stats.record_failure();
+        Err(GraphRAGError::Generation {
+            message: format!(
+                "Ollama API failed after {} retries: {:?}",
+                self.config.max_retries, last_error
+            ),
         })
     }
 
@@ -330,7 +594,10 @@ impl OllamaClient {
     /// # }
     /// ```
     #[cfg(all(feature = "ureq", feature = "tokio"))]
-    pub async fn generate_streaming(&self, prompt: &str) -> Result<tokio::sync::mpsc::Receiver<String>> {
+    pub async fn generate_streaming(
+        &self,
+        prompt: &str,
+    ) -> Result<tokio::sync::mpsc::Receiver<String>> {
         let endpoint = format!("{}:{}/api/generate", self.config.host, self.config.port);
 
         let params = OllamaGenerationParams {
@@ -383,7 +650,9 @@ impl OllamaClient {
                                 }
 
                                 // Parse JSON response for this chunk
-                                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line_str) {
+                                if let Ok(json) =
+                                    serde_json::from_str::<serde_json::Value>(&line_str)
+                                {
                                     if let Some(token) = json["response"].as_str() {
                                         total_response.push_str(token);
 
@@ -397,26 +666,27 @@ impl OllamaClient {
                                     // Check if done
                                     if json["done"].as_bool() == Some(true) {
                                         // Record success
-                                        let estimated_tokens = (prompt_len + total_response.len()) / 4;
+                                        let estimated_tokens =
+                                            (prompt_len + total_response.len()) / 4;
                                         stats.record_success(estimated_tokens as u64);
                                         break;
                                     }
                                 }
-                            }
+                            },
                             Err(e) => {
                                 #[cfg(feature = "tracing")]
                                 tracing::error!("Error reading streaming response: {}", e);
                                 stats.record_failure();
                                 break;
-                            }
+                            },
                         }
                     }
-                }
+                },
                 Err(e) => {
                     #[cfg(feature = "tracing")]
                     tracing::error!("Failed to initiate streaming request: {}", e);
                     stats.record_failure();
-                }
+                },
             }
         });
 
@@ -433,7 +703,11 @@ impl OllamaClient {
 
     /// Generate with custom parameters (fallback)
     #[cfg(not(feature = "ureq"))]
-    pub async fn generate_with_params(&self, _prompt: &str, _params: OllamaGenerationParams) -> Result<String> {
+    pub async fn generate_with_params(
+        &self,
+        _prompt: &str,
+        _params: OllamaGenerationParams,
+    ) -> Result<String> {
         Err(GraphRAGError::Generation {
             message: "ureq feature required for Ollama integration".to_string(),
         })

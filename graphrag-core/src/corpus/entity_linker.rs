@@ -1,8 +1,8 @@
 //! Cross-document entity linking with LMCD clustering
 
-use crate::core::{Result, Entity};
-use std::collections::HashMap;
+use crate::core::{Entity, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityCluster {
@@ -111,7 +111,10 @@ impl CrossDocumentEntityLinker {
     }
 
     /// Link entities across documents using the configured strategy
-    pub async fn link_entities(&mut self, document_entities: HashMap<String, Vec<Entity>>) -> Result<Vec<EntityCluster>> {
+    pub async fn link_entities(
+        &mut self,
+        document_entities: HashMap<String, Vec<Entity>>,
+    ) -> Result<Vec<EntityCluster>> {
         tracing::info!(
             document_count = document_entities.len(),
             strategy = ?self.strategy,
@@ -127,7 +130,7 @@ impl CrossDocumentEntityLinker {
                     local_entity_id: entity.id.to_string(),
                     name: entity.name.clone(),
                     context: "entity context".to_string(), // Entity doesn't have description field
-                    confidence: 1.0, // Default confidence
+                    confidence: 1.0,                       // Default confidence
                     mentions: Vec::new(), // Could be populated from entity mentions
                 });
             }
@@ -139,9 +142,19 @@ impl CrossDocumentEntityLinker {
         // Perform linking based on strategy
         match &self.strategy {
             LinkingStrategy::ExactMatch => self.exact_match_linking(all_entities).await?,
-            LinkingStrategy::FuzzyMatch { threshold } => self.fuzzy_match_linking(all_entities, *threshold).await?,
-            LinkingStrategy::SemanticSimilarity { threshold } => self.semantic_similarity_linking(all_entities, *threshold).await?,
-            LinkingStrategy::LMCD { confidence_threshold } => self.lmcd_clustering(all_entities, *confidence_threshold).await?,
+            LinkingStrategy::FuzzyMatch { threshold } => {
+                self.fuzzy_match_linking(all_entities, *threshold).await?
+            },
+            LinkingStrategy::SemanticSimilarity { threshold } => {
+                self.semantic_similarity_linking(all_entities, *threshold)
+                    .await?
+            },
+            LinkingStrategy::LMCD {
+                confidence_threshold,
+            } => {
+                self.lmcd_clustering(all_entities, *confidence_threshold)
+                    .await?
+            },
             LinkingStrategy::Hybrid => self.hybrid_linking(all_entities).await?,
         }
 
@@ -160,7 +173,10 @@ impl CrossDocumentEntityLinker {
 
         // Group entities by exact name match
         for entity in entities {
-            name_clusters.entry(entity.name.clone()).or_default().push(entity);
+            name_clusters
+                .entry(entity.name.clone())
+                .or_default()
+                .push(entity);
         }
 
         // Create clusters for each name group
@@ -184,14 +200,21 @@ impl CrossDocumentEntityLinker {
             };
 
             self.clusters.insert(cluster_id.clone(), cluster);
-            self.entity_index.entry(name.to_string()).or_default().push(cluster_id);
+            self.entity_index
+                .entry(name.to_string())
+                .or_default()
+                .push(cluster_id);
         }
 
         Ok(())
     }
 
     /// Fuzzy string matching with edit distance
-    async fn fuzzy_match_linking(&mut self, entities: Vec<CrossDocumentEntity>, threshold: f32) -> Result<()> {
+    async fn fuzzy_match_linking(
+        &mut self,
+        entities: Vec<CrossDocumentEntity>,
+        threshold: f32,
+    ) -> Result<()> {
         tracing::debug!(threshold = format!("{:.2}", threshold), "Fuzzy matching");
 
         let mut unprocessed = entities;
@@ -239,7 +262,10 @@ impl CrossDocumentEntityLinker {
                 };
 
                 self.clusters.insert(cluster_id.clone(), cluster);
-                self.entity_index.entry(canonical_name).or_default().push(cluster_id);
+                self.entity_index
+                    .entry(canonical_name)
+                    .or_default()
+                    .push(cluster_id);
             }
         }
 
@@ -247,8 +273,15 @@ impl CrossDocumentEntityLinker {
     }
 
     /// Semantic similarity using embeddings (placeholder implementation)
-    async fn semantic_similarity_linking(&mut self, entities: Vec<CrossDocumentEntity>, threshold: f32) -> Result<()> {
-        tracing::debug!(threshold = format!("{:.2}", threshold), "Semantic similarity linking");
+    async fn semantic_similarity_linking(
+        &mut self,
+        entities: Vec<CrossDocumentEntity>,
+        threshold: f32,
+    ) -> Result<()> {
+        tracing::debug!(
+            threshold = format!("{:.2}", threshold),
+            "Semantic similarity linking"
+        );
 
         // For now, fall back to fuzzy matching
         // In a real implementation, this would use embedding similarity
@@ -260,8 +293,15 @@ impl CrossDocumentEntityLinker {
     }
 
     /// LMCD (Language Model Confident Deduplication) clustering
-    async fn lmcd_clustering(&mut self, entities: Vec<CrossDocumentEntity>, confidence_threshold: f32) -> Result<()> {
-        tracing::debug!(confidence_threshold = format!("{:.2}", confidence_threshold), "LMCD clustering");
+    async fn lmcd_clustering(
+        &mut self,
+        entities: Vec<CrossDocumentEntity>,
+        confidence_threshold: f32,
+    ) -> Result<()> {
+        tracing::debug!(
+            confidence_threshold = format!("{:.2}", confidence_threshold),
+            "LMCD clustering"
+        );
 
         // Placeholder implementation - would use LLM for confident deduplication
         // For now, use a hybrid approach with high confidence
@@ -274,7 +314,8 @@ impl CrossDocumentEntityLinker {
             if exact_clusters.contains_key(&entity.name) {
                 exact_clusters.get_mut(&entity.name).unwrap().push(entity);
             } else {
-                let similar_found = exact_clusters.keys()
+                let similar_found = exact_clusters
+                    .keys()
                     .any(|name| self.calculate_string_similarity(name, &entity.name) > 0.9);
 
                 if !similar_found {
@@ -302,7 +343,10 @@ impl CrossDocumentEntityLinker {
             };
 
             self.clusters.insert(cluster_id.clone(), cluster);
-            self.entity_index.entry(name.to_string()).or_default().push(cluster_id);
+            self.entity_index
+                .entry(name.to_string())
+                .or_default()
+                .push(cluster_id);
             self.stats.lmcd_clusters += 1;
         }
 
@@ -335,7 +379,10 @@ impl CrossDocumentEntityLinker {
         // Start with exact matching for high confidence entities
         let mut entity_groups: HashMap<String, Vec<CrossDocumentEntity>> = HashMap::new();
         for entity in entities {
-            entity_groups.entry(entity.name.clone()).or_default().push(entity);
+            entity_groups
+                .entry(entity.name.clone())
+                .or_default()
+                .push(entity);
         }
 
         // Exact matches first
@@ -359,7 +406,10 @@ impl CrossDocumentEntityLinker {
                 };
 
                 self.clusters.insert(cluster_id.clone(), cluster);
-                self.entity_index.entry(name.to_string()).or_default().push(cluster_id);
+                self.entity_index
+                    .entry(name.to_string())
+                    .or_default()
+                    .push(cluster_id);
                 self.stats.exact_matches += group_len - 1;
             } else {
                 // Single entity - add to fuzzy matching pool
@@ -414,7 +464,10 @@ impl CrossDocumentEntityLinker {
             };
 
             self.clusters.insert(cluster_id.clone(), cluster);
-            self.entity_index.entry(entity.name).or_default().push(cluster_id);
+            self.entity_index
+                .entry(entity.name)
+                .or_default()
+                .push(cluster_id);
         }
 
         Ok(())
@@ -472,10 +525,9 @@ impl CrossDocumentEntityLinker {
             *name_counts.entry(entity.name.clone()).or_insert(0) += 1;
         }
 
-        name_counts.into_iter()
-            .max_by(|a, b| {
-                a.1.cmp(&b.1).then_with(|| a.0.len().cmp(&b.0.len()))
-            })
+        name_counts
+            .into_iter()
+            .max_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.len().cmp(&b.0.len())))
             .map(|(name, _)| name)
             .unwrap_or_else(|| entities[0].name.clone())
     }
@@ -485,7 +537,10 @@ impl CrossDocumentEntityLinker {
         // Simple heuristics - could be enhanced with NER
         let name_lower = name.to_lowercase();
 
-        if name_lower.contains("company") || name_lower.contains("corp") || name_lower.contains("inc") {
+        if name_lower.contains("company")
+            || name_lower.contains("corp")
+            || name_lower.contains("inc")
+        {
             "organization".to_string()
         } else if name.chars().next().unwrap_or('a').is_uppercase() && !name.contains(' ') {
             "person".to_string()
@@ -503,7 +558,8 @@ impl CrossDocumentEntityLinker {
         }
 
         // Simple metric: ratio of entities successfully clustered
-        let successfully_linked = self.stats.exact_matches + self.stats.fuzzy_matches + self.stats.semantic_matches;
+        let successfully_linked =
+            self.stats.exact_matches + self.stats.fuzzy_matches + self.stats.semantic_matches;
         successfully_linked as f32 / self.stats.entities_processed as f32
     }
 
@@ -519,9 +575,11 @@ impl CrossDocumentEntityLinker {
 
     /// Find clusters by entity name
     pub fn find_clusters(&self, entity_name: &str) -> Vec<&EntityCluster> {
-        self.entity_index.get(entity_name)
+        self.entity_index
+            .get(entity_name)
             .map(|cluster_ids| {
-                cluster_ids.iter()
+                cluster_ids
+                    .iter()
                     .filter_map(|id| self.clusters.get(id))
                     .collect()
             })

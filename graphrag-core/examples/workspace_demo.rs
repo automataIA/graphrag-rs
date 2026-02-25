@@ -5,8 +5,8 @@
 //! Run with: cargo run --example workspace_demo
 
 use graphrag_core::{
-    persistence::WorkspaceManager, ChunkId, Document, DocumentId, Entity, EntityId,
-    KnowledgeGraph, Relationship, TextChunk,
+    persistence::WorkspaceManager, ChunkId, Document, DocumentId, Entity, EntityId, KnowledgeGraph,
+    Relationship, TextChunk,
 };
 use indexmap::IndexMap;
 
@@ -139,7 +139,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\nℹ️  Workspace saved at: {}", workspace_dir);
     println!("   You can inspect the files:");
     println!("   - {}/demo/graph.json (knowledge graph)", workspace_dir);
-    println!("   - {}/demo/metadata.toml (workspace metadata)", workspace_dir);
+    println!(
+        "   - {}/demo/metadata.toml (workspace metadata)",
+        workspace_dir
+    );
 
     Ok(())
 }

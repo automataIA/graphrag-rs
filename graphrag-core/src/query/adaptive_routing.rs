@@ -88,14 +88,34 @@ impl QueryComplexityAnalyzer {
         Self {
             config,
             broad_keywords: vec![
-                "overview", "summary", "summarize", "main", "general", "all",
-                "themes", "topics", "overall", "broadly", "big picture",
-                "what are", "list all", "show me all",
+                "overview",
+                "summary",
+                "summarize",
+                "main",
+                "general",
+                "all",
+                "themes",
+                "topics",
+                "overall",
+                "broadly",
+                "big picture",
+                "what are",
+                "list all",
+                "show me all",
             ],
             specific_keywords: vec![
-                "relationship between", "how does", "why does", "specific",
-                "detail", "exactly", "precisely", "what is the connection",
-                "explain how", "describe the", "between", "and",
+                "relationship between",
+                "how does",
+                "why does",
+                "specific",
+                "detail",
+                "exactly",
+                "precisely",
+                "what is the connection",
+                "explain how",
+                "describe the",
+                "between",
+                "and",
             ],
         }
     }
@@ -110,10 +130,9 @@ impl QueryComplexityAnalyzer {
         let entity_score = self.analyze_entity_mentions(&query_lower);
 
         // Weighted combination
-        let total_score =
-            keyword_score * self.config.keyword_weight +
-            length_score * self.config.length_weight +
-            entity_score * self.config.entity_weight;
+        let total_score = keyword_score * self.config.keyword_weight
+            + length_score * self.config.length_weight
+            + entity_score * self.config.entity_weight;
 
         // Map score to complexity level
         if total_score >= 0.7 {
@@ -166,11 +185,11 @@ impl QueryComplexityAnalyzer {
         // Short queries (1-3 words) tend to be broad ("AI overview")
         // Long queries (8+ words) tend to be specific
         match word_count {
-            1..=3 => 0.5,      // Short → broad
-            4..=5 => 0.2,      // Medium-short
-            6..=7 => 0.0,      // Medium
-            8..=10 => -0.3,    // Medium-long → specific
-            _ => -0.5,         // Long → very specific
+            1..=3 => 0.5,   // Short → broad
+            4..=5 => 0.2,   // Medium-short
+            6..=7 => 0.0,   // Medium
+            8..=10 => -0.3, // Medium-long → specific
+            _ => -0.5,      // Long → very specific
         }
     }
 
@@ -186,10 +205,10 @@ impl QueryComplexityAnalyzer {
 
         // More entity indicators = more specific
         match entity_indicators {
-            0 => 0.3,      // No entities → broad
-            1 => 0.0,      // One entity → medium
-            2 => -0.4,     // Two entities → specific
-            _ => -0.7,     // Multiple entities → very specific
+            0 => 0.3,  // No entities → broad
+            1 => 0.0,  // One entity → medium
+            2 => -0.4, // Two entities → specific
+            _ => -0.7, // Multiple entities → very specific
         }
     }
 
@@ -296,7 +315,10 @@ mod tests {
         let level = analyzer.suggest_level(query);
 
         // Should be broad → high level
-        assert!(matches!(complexity, QueryComplexity::VeryBroad | QueryComplexity::Broad));
+        assert!(matches!(
+            complexity,
+            QueryComplexity::VeryBroad | QueryComplexity::Broad
+        ));
         assert!(level >= 1);
     }
 
@@ -310,7 +332,10 @@ mod tests {
         let level = analyzer.suggest_level(query);
 
         // Should be specific → low level
-        assert!(matches!(complexity, QueryComplexity::Specific | QueryComplexity::VerySpecific));
+        assert!(matches!(
+            complexity,
+            QueryComplexity::Specific | QueryComplexity::VerySpecific
+        ));
         assert_eq!(level, 0);
     }
 

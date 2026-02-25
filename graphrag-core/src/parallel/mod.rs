@@ -146,7 +146,7 @@ pub fn configure_thread_pool(num_threads: usize) -> Result<()> {
         .num_threads(num_threads)
         .build_global()
         .map_err(|e| crate::core::GraphRAGError::Config {
-            message: format!("Failed to configure thread pool: {}", e)
+            message: format!("Failed to configure thread pool: {}", e),
         })
 }
 

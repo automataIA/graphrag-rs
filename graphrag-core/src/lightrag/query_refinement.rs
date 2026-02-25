@@ -138,10 +138,8 @@ impl QueryRefiner {
 
             for concept in &current_concepts {
                 // Get co-occurring concepts from concept graph
-                let related = concept_graph.get_related_concepts(
-                    concept,
-                    self.config.concepts_per_iteration,
-                );
+                let related =
+                    concept_graph.get_related_concepts(concept, self.config.concepts_per_iteration);
 
                 for related_concept in related {
                     if !current_concepts.contains(&related_concept)
@@ -174,10 +172,7 @@ impl QueryRefiner {
             }
 
             // Retrieve chunks for current concepts using bidirectional index
-            let iteration_chunks = self.get_chunks_for_concepts(
-                &new_concepts,
-                bidirectional_index,
-            );
+            let iteration_chunks = self.get_chunks_for_concepts(&new_concepts, bidirectional_index);
 
             // Add to relevant chunks
             relevant_chunks.extend(iteration_chunks);
@@ -200,7 +195,8 @@ impl QueryRefiner {
                 (c, score)
             })
             .collect();
-        expanded_with_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        expanded_with_scores
+            .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         let expanded_concepts: Vec<String> = expanded_with_scores
             .iter()
@@ -366,7 +362,8 @@ impl RefinedQuery {
             })
             .collect();
 
-        concepts_with_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        concepts_with_scores
+            .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         concepts_with_scores
             .into_iter()
@@ -389,7 +386,7 @@ impl RefinedQuery {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lightrag::concept_graph::{ConceptGraphBuilder, ConceptExtractor};
+    use crate::lightrag::concept_graph::{ConceptExtractor, ConceptGraphBuilder};
 
     #[test]
     fn test_query_refinement_basic() {
@@ -405,28 +402,31 @@ mod tests {
 
         // Create a simple concept graph
         let mut builder = ConceptGraphBuilder::new();
-        builder.add_document_concepts("doc1", vec![
-            "machine learning".to_string(),
-            "neural networks".to_string(),
-            "deep learning".to_string(),
-        ]);
-        builder.add_chunk_concepts("chunk1", vec![
-            "machine learning".to_string(),
-            "neural networks".to_string(),
-        ]);
-        builder.add_chunk_concepts("chunk2", vec![
-            "neural networks".to_string(),
-            "deep learning".to_string(),
-        ]);
+        builder.add_document_concepts(
+            "doc1",
+            vec![
+                "machine learning".to_string(),
+                "neural networks".to_string(),
+                "deep learning".to_string(),
+            ],
+        );
+        builder.add_chunk_concepts(
+            "chunk1",
+            vec![
+                "machine learning".to_string(),
+                "neural networks".to_string(),
+            ],
+        );
+        builder.add_chunk_concepts(
+            "chunk2",
+            vec!["neural networks".to_string(), "deep learning".to_string()],
+        );
 
         let concept_graph = builder.build();
         let bidirectional_index = BidirectionalIndex::new();
 
-        let refined = refiner.refine_query(
-            "machine learning",
-            &concept_graph,
-            &bidirectional_index,
-        );
+        let refined =
+            refiner.refine_query("machine learning", &concept_graph, &bidirectional_index);
 
         assert!(!refined.initial_concepts.is_empty());
         assert_eq!(refined.original_query, "machine learning");

@@ -169,9 +169,10 @@ fn test_snapshot_creation_and_comparison() {
             "entity_2",
             NodeUpdate {
                 label: Some("Modified Entity 2".to_string()),
-                attributes: Some(HashMap::from([
-                    ("modified".to_string(), "true".to_string()),
-                ])),
+                attributes: Some(HashMap::from([(
+                    "modified".to_string(),
+                    "true".to_string(),
+                )])),
                 embeddings: None,
                 node_type: None,
             },
@@ -373,20 +374,15 @@ fn test_delta_computer_bloom_filter() {
     // Remove a node
     nodes_after.remove("node_0");
 
-    let snapshot_before = computer.create_snapshot(
-        "before".to_string(),
-        nodes_before,
-        HashMap::new(),
-    );
+    let snapshot_before =
+        computer.create_snapshot("before".to_string(), nodes_before, HashMap::new());
 
-    let snapshot_after = computer.create_snapshot(
-        "after".to_string(),
-        nodes_after,
-        HashMap::new(),
-    );
+    let snapshot_after = computer.create_snapshot("after".to_string(), nodes_after, HashMap::new());
 
     // Compute delta
-    let delta = computer.compute_delta(&snapshot_before, &snapshot_after).unwrap();
+    let delta = computer
+        .compute_delta(&snapshot_before, &snapshot_after)
+        .unwrap();
 
     // Verify results
     assert_eq!(delta.nodes_added.len(), 1); // node_10

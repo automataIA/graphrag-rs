@@ -355,10 +355,7 @@ impl DeltaComputer {
 
     fn initialize_bloom_filter(&self, snapshot: &GraphSnapshot) {
         let expected_items = snapshot.nodes.len() + snapshot.edges.len();
-        let mut bloom = BloomFilter::new(
-            expected_items,
-            self.config.bloom_false_positive_rate,
-        );
+        let mut bloom = BloomFilter::new(expected_items, self.config.bloom_false_positive_rate);
 
         // Insert all node IDs
         for node_id in snapshot.nodes.keys() {
@@ -379,7 +376,6 @@ impl DeltaComputer {
         before_nodes: &HashMap<String, NodeSnapshot>,
         after_nodes: &HashMap<String, NodeSnapshot>,
     ) -> Result<(Vec<NodeSnapshot>, Vec<String>, Vec<NodeModification>), DeltaError> {
-
         let bloom_hits = 0usize;
         let bloom_misses = 0usize;
 
@@ -402,10 +398,9 @@ impl DeltaComputer {
                         None => rayon::iter::Either::Left(after_node.clone()),
                         Some(before_node) => {
                             if before_node.content_hash != after_node.content_hash {
-                                rayon::iter::Either::Right(self.compute_node_modification(
-                                    before_node,
-                                    after_node,
-                                ))
+                                rayon::iter::Either::Right(
+                                    self.compute_node_modification(before_node, after_node),
+                                )
                             } else {
                                 // No change
                                 rayon::iter::Either::Left(NodeSnapshot {
@@ -415,7 +410,7 @@ impl DeltaComputer {
                                     last_modified: Utc::now(),
                                 })
                             }
-                        }
+                        },
                     }
                 })
         } else {
@@ -428,12 +423,10 @@ impl DeltaComputer {
                     None => added_vec.push(after_node.clone()),
                     Some(before_node) => {
                         if before_node.content_hash != after_node.content_hash {
-                            modified_vec.push(self.compute_node_modification(
-                                before_node,
-                                after_node,
-                            ));
+                            modified_vec
+                                .push(self.compute_node_modification(before_node, after_node));
                         }
-                    }
+                    },
                 }
             }
 
@@ -441,7 +434,8 @@ impl DeltaComputer {
         };
 
         // Filter out empty placeholders
-        let added: Vec<_> = added.into_iter()
+        let added: Vec<_> = added
+            .into_iter()
             .filter(|n| !n.node_id.is_empty())
             .collect();
 
@@ -468,33 +462,36 @@ impl DeltaComputer {
         &self,
         before_edges: &HashMap<(String, String), EdgeSnapshot>,
         after_edges: &HashMap<(String, String), EdgeSnapshot>,
-    ) -> Result<(Vec<EdgeSnapshot>, Vec<(String, String)>, Vec<EdgeModification>), DeltaError> {
-
+    ) -> Result<
+        (
+            Vec<EdgeSnapshot>,
+            Vec<(String, String)>,
+            Vec<EdgeModification>,
+        ),
+        DeltaError,
+    > {
         // Find added and modified edges
         let (added, modified): (Vec<_>, Vec<_>) = if self.config.parallel_computation {
             after_edges
                 .par_iter()
-                .partition_map(|(edge_key, after_edge)| {
-                    match before_edges.get(edge_key) {
-                        None => rayon::iter::Either::Left(after_edge.clone()),
-                        Some(before_edge) => {
-                            if before_edge.content_hash != after_edge.content_hash {
-                                rayon::iter::Either::Right(self.compute_edge_modification(
-                                    before_edge,
-                                    after_edge,
-                                ))
-                            } else {
-                                rayon::iter::Either::Left(EdgeSnapshot {
-                                    source: String::new(),
-                                    target: String::new(),
-                                    edge_type: String::new(),
-                                    content_hash: String::new(),
-                                    properties: HashMap::new(),
-                                    last_modified: Utc::now(),
-                                })
-                            }
+                .partition_map(|(edge_key, after_edge)| match before_edges.get(edge_key) {
+                    None => rayon::iter::Either::Left(after_edge.clone()),
+                    Some(before_edge) => {
+                        if before_edge.content_hash != after_edge.content_hash {
+                            rayon::iter::Either::Right(
+                                self.compute_edge_modification(before_edge, after_edge),
+                            )
+                        } else {
+                            rayon::iter::Either::Left(EdgeSnapshot {
+                                source: String::new(),
+                                target: String::new(),
+                                edge_type: String::new(),
+                                content_hash: String::new(),
+                                properties: HashMap::new(),
+                                last_modified: Utc::now(),
+                            })
                         }
-                    }
+                    },
                 })
         } else {
             // Sequential processing
@@ -506,12 +503,10 @@ impl DeltaComputer {
                     None => added_vec.push(after_edge.clone()),
                     Some(before_edge) => {
                         if before_edge.content_hash != after_edge.content_hash {
-                            modified_vec.push(self.compute_edge_modification(
-                                before_edge,
-                                after_edge,
-                            ));
+                            modified_vec
+                                .push(self.compute_edge_modification(before_edge, after_edge));
                         }
-                    }
+                    },
                 }
             }
 
@@ -519,9 +514,7 @@ impl DeltaComputer {
         };
 
         // Filter out empty placeholders
-        let added: Vec<_> = added.into_iter()
-            .filter(|e| !e.source.is_empty())
-            .collect();
+        let added: Vec<_> = added.into_iter().filter(|e| !e.source.is_empty()).collect();
 
         // Find removed edges
         let removed: Vec<(String, String)> = before_edges
@@ -594,7 +587,7 @@ impl DeltaComputer {
                         new_value: Some(after_value.clone()),
                         change_type: ChangeType::Added,
                     });
-                }
+                },
                 Some(before_value) if before_value != after_value => {
                     changes.push(PropertyChange {
                         property_name: key.clone(),
@@ -602,8 +595,8 @@ impl DeltaComputer {
                         new_value: Some(after_value.clone()),
                         change_type: ChangeType::Modified,
                     });
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
 
@@ -636,10 +629,14 @@ impl DeltaComputer {
     ) -> DeltaStatistics {
         let stats = self.stats.read();
 
-        let total_changes = nodes_added.len() + nodes_removed.len() + nodes_modified.len() +
-                           edges_added.len() + edges_removed.len() + edges_modified.len();
-        let total_elements = before.nodes.len() + before.edges.len() +
-                            after.nodes.len() + after.edges.len();
+        let total_changes = nodes_added.len()
+            + nodes_removed.len()
+            + nodes_modified.len()
+            + edges_added.len()
+            + edges_removed.len()
+            + edges_modified.len();
+        let total_elements =
+            before.nodes.len() + before.edges.len() + after.nodes.len() + after.edges.len();
 
         let change_percentage = if total_elements > 0 {
             (total_changes as f32 / total_elements as f32) * 100.0
@@ -689,7 +686,7 @@ impl DeltaComputer {
     }
 
     fn sha256_hash(&self, node_id: &str, properties: &HashMap<String, String>) -> String {
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
 
         let mut hasher = Sha256::new();
         hasher.update(node_id.as_bytes());
@@ -774,7 +771,10 @@ mod tests {
         let computer = DeltaComputer::new(DeltaComputationConfig::default());
 
         let mut nodes = HashMap::new();
-        nodes.insert("node1".to_string(), create_test_node("node1", vec![("name", "Alice")]));
+        nodes.insert(
+            "node1".to_string(),
+            create_test_node("node1", vec![("name", "Alice")]),
+        );
 
         let mut edges = HashMap::new();
         edges.insert(
@@ -800,10 +800,16 @@ mod tests {
         let computer = DeltaComputer::new(DeltaComputationConfig::default());
 
         let mut nodes1 = HashMap::new();
-        nodes1.insert("node1".to_string(), create_test_node("node1", vec![("name", "Alice")]));
+        nodes1.insert(
+            "node1".to_string(),
+            create_test_node("node1", vec![("name", "Alice")]),
+        );
 
         let mut nodes2 = nodes1.clone();
-        nodes2.insert("node2".to_string(), create_test_node("node2", vec![("name", "Bob")]));
+        nodes2.insert(
+            "node2".to_string(),
+            create_test_node("node2", vec![("name", "Bob")]),
+        );
 
         let snapshot1 = computer.create_snapshot("snap1".to_string(), nodes1, HashMap::new());
         let snapshot2 = computer.create_snapshot("snap2".to_string(), nodes2, HashMap::new());
@@ -819,11 +825,20 @@ mod tests {
         let computer = DeltaComputer::new(DeltaComputationConfig::default());
 
         let mut nodes1 = HashMap::new();
-        nodes1.insert("node1".to_string(), create_test_node("node1", vec![("name", "Alice")]));
-        nodes1.insert("node2".to_string(), create_test_node("node2", vec![("name", "Bob")]));
+        nodes1.insert(
+            "node1".to_string(),
+            create_test_node("node1", vec![("name", "Alice")]),
+        );
+        nodes1.insert(
+            "node2".to_string(),
+            create_test_node("node2", vec![("name", "Bob")]),
+        );
 
         let mut nodes2 = HashMap::new();
-        nodes2.insert("node1".to_string(), create_test_node("node1", vec![("name", "Alice")]));
+        nodes2.insert(
+            "node1".to_string(),
+            create_test_node("node1", vec![("name", "Alice")]),
+        );
 
         let snapshot1 = computer.create_snapshot("snap1".to_string(), nodes1, HashMap::new());
         let snapshot2 = computer.create_snapshot("snap2".to_string(), nodes2, HashMap::new());
@@ -839,10 +854,16 @@ mod tests {
         let computer = DeltaComputer::new(DeltaComputationConfig::default());
 
         let mut nodes1 = HashMap::new();
-        nodes1.insert("node1".to_string(), create_test_node("node1", vec![("name", "Alice")]));
+        nodes1.insert(
+            "node1".to_string(),
+            create_test_node("node1", vec![("name", "Alice")]),
+        );
 
         let mut nodes2 = HashMap::new();
-        nodes2.insert("node1".to_string(), create_test_node("node1", vec![("name", "Alice Updated")]));
+        nodes2.insert(
+            "node1".to_string(),
+            create_test_node("node1", vec![("name", "Alice Updated")]),
+        );
 
         let snapshot1 = computer.create_snapshot("snap1".to_string(), nodes1, HashMap::new());
         let snapshot2 = computer.create_snapshot("snap2".to_string(), nodes2, HashMap::new());
@@ -851,7 +872,10 @@ mod tests {
 
         assert_eq!(delta.nodes_modified.len(), 1);
         assert_eq!(delta.nodes_modified[0].node_id, "node1");
-        assert_ne!(delta.nodes_modified[0].old_hash, delta.nodes_modified[0].new_hash);
+        assert_ne!(
+            delta.nodes_modified[0].old_hash,
+            delta.nodes_modified[0].new_hash
+        );
     }
 
     #[test]
@@ -890,14 +914,14 @@ mod tests {
         }));
 
         // Check for added property
-        assert!(changes.iter().any(|c| {
-            c.property_name == "email" && matches!(c.change_type, ChangeType::Added)
-        }));
+        assert!(changes
+            .iter()
+            .any(|c| { c.property_name == "email" && matches!(c.change_type, ChangeType::Added) }));
 
         // Check for removed property
-        assert!(changes.iter().any(|c| {
-            c.property_name == "age" && matches!(c.change_type, ChangeType::Removed)
-        }));
+        assert!(changes
+            .iter()
+            .any(|c| { c.property_name == "age" && matches!(c.change_type, ChangeType::Removed) }));
     }
 
     #[test]

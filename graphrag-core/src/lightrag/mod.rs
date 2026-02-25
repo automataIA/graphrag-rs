@@ -19,8 +19,8 @@
 //! - 700x cheaper query costs
 
 pub mod dual_retrieval;
-pub mod keyword_extraction;
 pub mod graph_indexer;
+pub mod keyword_extraction;
 
 #[cfg(feature = "lazygraphrag")]
 pub mod concept_graph;
@@ -41,29 +41,28 @@ pub mod iterative_deepening;
 pub mod lazy_pipeline;
 
 pub use dual_retrieval::{
-    DualLevelRetriever, DualRetrievalConfig, DualRetrievalResults,
-    MergeStrategy, SemanticSearcher,
+    DualLevelRetriever, DualRetrievalConfig, DualRetrievalResults, MergeStrategy, SemanticSearcher,
 };
-pub use keyword_extraction::{
-    KeywordExtractor, KeywordExtractorConfig, DualLevelKeywords,
+pub use graph_indexer::{ExtractedEntity, ExtractedRelationship, ExtractionResult, GraphIndexer};
+pub use keyword_extraction::{DualLevelKeywords, KeywordExtractor, KeywordExtractorConfig};
+
+#[cfg(feature = "lazygraphrag")]
+pub use query_refinement::{QueryRefinementConfig, QueryRefiner, RefinedQuery};
+
+#[cfg(feature = "lazygraphrag")]
+pub use iterative_deepening::{
+    DepthResults, IterativeDeepeningSearch, SearchConfig, SearchResults, StopReason,
 };
-pub use graph_indexer::{GraphIndexer, ExtractionResult, ExtractedEntity, ExtractedRelationship};
 
 #[cfg(feature = "lazygraphrag")]
-pub use query_refinement::{QueryRefiner, QueryRefinementConfig, RefinedQuery};
-
-#[cfg(feature = "lazygraphrag")]
-pub use iterative_deepening::{IterativeDeepeningSearch, SearchConfig, SearchResults, DepthResults, StopReason};
-
-#[cfg(feature = "lazygraphrag")]
-pub use lazy_pipeline::{LazyGraphRAGPipeline, LazyPipelineConfig, PipelineStatistics, GraphStatistics};
+pub use lazy_pipeline::{
+    GraphStatistics, LazyGraphRAGPipeline, LazyPipelineConfig, PipelineStatistics,
+};
 
 #[cfg(feature = "lazygraphrag")]
 pub use concept_selection::{
-    ConceptRanker, ConceptSelectionConfig, RankedConcept, ConceptRankingStats,
+    ConceptRanker, ConceptRankingStats, ConceptSelectionConfig, RankedConcept,
 };
 
 #[cfg(feature = "lazygraphrag")]
-pub use query_concepts::{
-    QueryConceptMatcher, QueryMatchConfig, MatchedConcept, MatchingStats,
-};
+pub use query_concepts::{MatchedConcept, MatchingStats, QueryConceptMatcher, QueryMatchConfig};

@@ -34,7 +34,7 @@ pub struct KeywordExtractorConfig {
 impl Default for KeywordExtractorConfig {
     fn default() -> Self {
         Self {
-            max_keywords: 20,  // LightRAG optimization
+            max_keywords: 20, // LightRAG optimization
             language: "English".to_string(),
             enable_cache: true,
         }
@@ -49,7 +49,10 @@ pub struct KeywordExtractor {
 
 impl KeywordExtractor {
     /// Create a new keyword extractor
-    pub fn new(llm: Arc<dyn AsyncLanguageModel<Error = GraphRAGError>>, config: KeywordExtractorConfig) -> Self {
+    pub fn new(
+        llm: Arc<dyn AsyncLanguageModel<Error = GraphRAGError>>,
+        config: KeywordExtractorConfig,
+    ) -> Self {
         Self { llm, config }
     }
 
@@ -74,7 +77,8 @@ impl KeywordExtractor {
 
     /// Build prompt for keyword extraction
     fn build_extraction_prompt(&self, query: &str) -> String {
-        format!(r#"Extract keywords at two levels from this query: "{}"
+        format!(
+            r#"Extract keywords at two levels from this query: "{}"
 
 Return JSON with this exact structure:
 {{
@@ -105,7 +109,9 @@ Query: "What are the main themes in the dataset?"
 
 Language: {}
 
-Now extract keywords:"#, query, self.config.max_keywords, self.config.language)
+Now extract keywords:"#,
+            query, self.config.max_keywords, self.config.language
+        )
     }
 
     /// Parse LLM response into keywords
@@ -114,9 +120,9 @@ Now extract keywords:"#, query, self.config.max_keywords, self.config.language)
         let json_str = self.extract_json(response)?;
 
         // Parse JSON
-        let keywords: DualLevelKeywords = serde_json::from_str(&json_str)
-            .map_err(|e| GraphRAGError::Serialization {
-                message: format!("Failed to parse keywords JSON: {}", e)
+        let keywords: DualLevelKeywords =
+            serde_json::from_str(&json_str).map_err(|e| GraphRAGError::Serialization {
+                message: format!("Failed to parse keywords JSON: {}", e),
             })?;
 
         Ok(keywords)
@@ -138,7 +144,7 @@ Now extract keywords:"#, query, self.config.max_keywords, self.config.language)
         }
 
         Err(GraphRAGError::Serialization {
-            message: "No JSON object found in LLM response".to_string()
+            message: "No JSON object found in LLM response".to_string(),
         })
     }
 
@@ -151,13 +157,13 @@ Now extract keywords:"#, query, self.config.max_keywords, self.config.language)
                 message: format!(
                     "Too many keywords: {} (max: {})",
                     total, self.config.max_keywords
-                )
+                ),
             });
         }
 
         if total == 0 {
             return Err(GraphRAGError::Validation {
-                message: "No keywords extracted".to_string()
+                message: "No keywords extracted".to_string(),
             });
         }
 
@@ -165,7 +171,10 @@ Now extract keywords:"#, query, self.config.max_keywords, self.config.language)
     }
 
     /// Extract keywords with fallback to query terms
-    pub async fn extract_with_fallback(&self, query: &str) -> Result<DualLevelKeywords, GraphRAGError> {
+    pub async fn extract_with_fallback(
+        &self,
+        query: &str,
+    ) -> Result<DualLevelKeywords, GraphRAGError> {
         match self.extract(query).await {
             Ok(keywords) => Ok(keywords),
             Err(e) => {
@@ -183,7 +192,7 @@ Now extract keywords:"#, query, self.config.max_keywords, self.config.language)
                     high_level: Vec::new(),
                     low_level: words,
                 })
-            }
+            },
         }
     }
 }

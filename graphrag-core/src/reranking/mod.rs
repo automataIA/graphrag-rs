@@ -10,6 +10,5 @@ pub mod confidence;
 pub mod cross_encoder;
 
 pub use cross_encoder::{
-    CrossEncoder, CrossEncoderConfig, ConfidenceCrossEncoder,
-    RankedResult, RerankingStats,
+    ConfidenceCrossEncoder, CrossEncoder, CrossEncoderConfig, RankedResult, RerankingStats,
 };

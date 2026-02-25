@@ -99,9 +99,7 @@ impl Theme {
 
     /// Get style for error messages
     pub fn error(&self) -> Style {
-        Style::default()
-            .fg(self.error)
-            .add_modifier(Modifier::BOLD)
+        Style::default().fg(self.error).add_modifier(Modifier::BOLD)
     }
 
     /// Get style for warning messages

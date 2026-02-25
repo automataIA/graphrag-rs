@@ -172,9 +172,9 @@ impl WorkspaceManager {
                     .to_string();
 
                 // Load metadata
-                let metadata = self.load_metadata(&workspace_name).unwrap_or_else(|_| {
-                    WorkspaceMetadata::new(workspace_name.clone())
-                });
+                let metadata = self
+                    .load_metadata(&workspace_name)
+                    .unwrap_or_else(|_| WorkspaceMetadata::new(workspace_name.clone()));
 
                 // Calculate size
                 let size_bytes = Self::calculate_dir_size(&path).unwrap_or(0);
@@ -216,9 +216,9 @@ impl WorkspaceManager {
         }
 
         // Update metadata
-        let mut metadata = self.load_metadata(workspace_name).unwrap_or_else(|_| {
-            WorkspaceMetadata::new(workspace_name.to_string())
-        });
+        let mut metadata = self
+            .load_metadata(workspace_name)
+            .unwrap_or_else(|_| WorkspaceMetadata::new(workspace_name.to_string()));
         metadata.update_from_graph(graph);
         self.save_metadata(&metadata, workspace_name)?;
 
@@ -289,11 +289,10 @@ impl WorkspaceManager {
         }
 
         let toml_string = fs::read_to_string(metadata_path)?;
-        let metadata: WorkspaceMetadata = toml::from_str(&toml_string).map_err(|e| {
-            GraphRAGError::Config {
+        let metadata: WorkspaceMetadata =
+            toml::from_str(&toml_string).map_err(|e| GraphRAGError::Config {
                 message: format!("Failed to parse metadata: {}", e),
-            }
-        })?;
+            })?;
 
         Ok(metadata)
     }

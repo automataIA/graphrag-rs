@@ -3,8 +3,8 @@
 //! Tests for Voy k-d tree integration and vector similarity search.
 //! These tests validate that Voy provides accurate nearest neighbor search.
 
-use wasm_bindgen_test::*;
 use graphrag_wasm::GraphRAG;
+use wasm_bindgen_test::*;
 
 wasm_bindgen_test_configure!(run_in_browser);
 
@@ -18,11 +18,10 @@ async fn test_voy_index_build() {
     // Add documents
     for i in 0..10 {
         let embedding: Vec<f32> = (0..384).map(|j| ((j + i * 10) as f32) / 384.0).collect();
-        graph.add_document(
-            format!("doc{}", i),
-            format!("Document {}", i),
-            embedding
-        ).await.unwrap();
+        graph
+            .add_document(format!("doc{}", i), format!("Document {}", i), embedding)
+            .await
+            .unwrap();
     }
 
     // Build Voy index
@@ -52,9 +51,18 @@ async fn test_voy_search_accuracy() {
     // Doc 2: all 1.0
     let embedding2: Vec<f32> = vec![1.0; 384];
 
-    graph.add_document("doc0".to_string(), "Zero".to_string(), embedding0).await.unwrap();
-    graph.add_document("doc1".to_string(), "Half".to_string(), embedding1).await.unwrap();
-    graph.add_document("doc2".to_string(), "One".to_string(), embedding2).await.unwrap();
+    graph
+        .add_document("doc0".to_string(), "Zero".to_string(), embedding0)
+        .await
+        .unwrap();
+    graph
+        .add_document("doc1".to_string(), "Half".to_string(), embedding1)
+        .await
+        .unwrap();
+    graph
+        .add_document("doc2".to_string(), "One".to_string(), embedding2)
+        .await
+        .unwrap();
 
     // Build index
     graph.build_index().await.unwrap();
@@ -80,11 +88,10 @@ async fn test_knn_parameter() {
     // Add 10 documents
     for i in 0..10 {
         let embedding: Vec<f32> = (0..384).map(|j| ((j + i) as f32) / 384.0).collect();
-        graph.add_document(
-            format!("doc{}", i),
-            format!("Document {}", i),
-            embedding
-        ).await.unwrap();
+        graph
+            .add_document(format!("doc{}", i), format!("Document {}", i), embedding)
+            .await
+            .unwrap();
     }
 
     graph.build_index().await.unwrap();
@@ -119,11 +126,14 @@ async fn test_identical_embeddings() {
 
     // Add 3 documents with identical embeddings
     for i in 0..3 {
-        graph.add_document(
-            format!("doc{}", i),
-            format!("Document {}", i),
-            identical_embedding.clone()
-        ).await.unwrap();
+        graph
+            .add_document(
+                format!("doc{}", i),
+                format!("Document {}", i),
+                identical_embedding.clone(),
+            )
+            .await
+            .unwrap();
     }
 
     graph.build_index().await.unwrap();
@@ -145,11 +155,10 @@ async fn test_index_rebuild() {
     // Add 5 documents and build index
     for i in 0..5 {
         let embedding: Vec<f32> = (0..384).map(|j| ((j + i * 10) as f32) / 384.0).collect();
-        graph.add_document(
-            format!("doc{}", i),
-            format!("Document {}", i),
-            embedding
-        ).await.unwrap();
+        graph
+            .add_document(format!("doc{}", i), format!("Document {}", i), embedding)
+            .await
+            .unwrap();
     }
 
     graph.build_index().await.unwrap();
@@ -158,11 +167,10 @@ async fn test_index_rebuild() {
     // Add 5 more documents
     for i in 5..10 {
         let embedding: Vec<f32> = (0..384).map(|j| ((j + i * 10) as f32) / 384.0).collect();
-        graph.add_document(
-            format!("doc{}", i),
-            format!("Document {}", i),
-            embedding
-        ).await.unwrap();
+        graph
+            .add_document(format!("doc{}", i), format!("Document {}", i), embedding)
+            .await
+            .unwrap();
     }
 
     // Rebuild index
@@ -188,11 +196,10 @@ async fn test_search_performance() {
     // Add 100 documents
     for i in 0..100 {
         let embedding: Vec<f32> = (0..384).map(|j| ((j + i * 10) as f32) / 384.0).collect();
-        graph.add_document(
-            format!("doc{}", i),
-            format!("Document {}", i),
-            embedding
-        ).await.unwrap();
+        graph
+            .add_document(format!("doc{}", i), format!("Document {}", i), embedding)
+            .await
+            .unwrap();
     }
 
     // Build index
@@ -242,11 +249,10 @@ async fn test_brute_force_fallback() {
     // Add documents
     for i in 0..5 {
         let embedding: Vec<f32> = (0..384).map(|j| ((j + i * 10) as f32) / 384.0).collect();
-        graph.add_document(
-            format!("doc{}", i),
-            format!("Document {}", i),
-            embedding
-        ).await.unwrap();
+        graph
+            .add_document(format!("doc{}", i), format!("Document {}", i), embedding)
+            .await
+            .unwrap();
     }
 
     // Even if Voy fails to build, brute-force should work
@@ -277,10 +283,10 @@ async fn test_empty_index_query() {
             web_sys::console::log_1(&format!("Empty query result: {}", json).into());
             // Should be empty array or similar
             assert!(json.contains("[]") || json.contains("\"results\":[]"));
-        }
+        },
         Err(e) => {
             web_sys::console::log_1(&format!("Empty query error (expected): {:?}", e).into());
-        }
+        },
     }
 }
 
@@ -294,11 +300,10 @@ async fn test_high_dimensional_embeddings() {
 
     for i in 0..5 {
         let embedding: Vec<f32> = (0..768).map(|j| ((j + i * 10) as f32) / 768.0).collect();
-        graph.add_document(
-            format!("doc{}", i),
-            format!("Document {}", i),
-            embedding
-        ).await.unwrap();
+        graph
+            .add_document(format!("doc{}", i), format!("Document {}", i), embedding)
+            .await
+            .unwrap();
     }
 
     let result = graph.build_index().await;
@@ -319,11 +324,10 @@ async fn test_low_dimensional_embeddings() {
 
     for i in 0..5 {
         let embedding: Vec<f32> = (0..128).map(|j| ((j + i * 10) as f32) / 128.0).collect();
-        graph.add_document(
-            format!("doc{}", i),
-            format!("Document {}", i),
-            embedding
-        ).await.unwrap();
+        graph
+            .add_document(format!("doc{}", i), format!("Document {}", i), embedding)
+            .await
+            .unwrap();
     }
 
     let result = graph.build_index().await;

@@ -210,7 +210,8 @@ graphrag-wasm/dist/models/minilm-l6.onnx
 
 # exclude auto-generated or specific md files if necessary,
 # but keep general .md (article.md, README.md, etc.)
-# !README.md
+/*.md
+!README.md
 
 # exclude files with hidden extensions
 .*.*

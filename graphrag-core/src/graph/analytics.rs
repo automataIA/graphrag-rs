@@ -7,8 +7,8 @@
 //! - Graph embeddings preparation
 //! - Temporal graph analysis
 
-use std::collections::{HashMap, HashSet, VecDeque};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Community detection result
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -370,13 +370,7 @@ impl GraphAnalytics {
     }
 
     /// DFS helper for all_paths
-    fn dfs_paths(
-        &self,
-        current: &str,
-        end: &str,
-        state: &mut PathSearchState,
-        max_depth: usize,
-    ) {
+    fn dfs_paths(&self, current: &str, end: &str, state: &mut PathSearchState, max_depth: usize) {
         if state.path.len() >= max_depth {
             return;
         }

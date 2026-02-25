@@ -87,9 +87,22 @@ pub async fn run_benchmark(
 
     for (i, q) in questions.iter().enumerate() {
         let q_start = Instant::now();
-        // Use ask() which returns Result<String>
-        let (answer, sources) = match graphrag.ask(q).await {
-            Ok(ans) => (ans, vec![]), // Sources not returned by ask(), would need ask_explained or similar
+        // Use ask_explained() which returns answer + source references
+        let (answer, sources) = match graphrag.ask_explained(q).await {
+            Ok(explained) => {
+                let src_strings: Vec<String> = explained
+                    .sources
+                    .iter()
+                    .map(|s| {
+                        if s.excerpt.is_empty() {
+                            s.id.clone()
+                        } else {
+                            format!("[{}] {}", s.id, s.excerpt)
+                        }
+                    })
+                    .collect();
+                (explained.answer, src_strings)
+            },
             Err(e) => (format!("Error: {}", e), vec![]),
         };
         let q_ms = q_start.elapsed().as_millis();

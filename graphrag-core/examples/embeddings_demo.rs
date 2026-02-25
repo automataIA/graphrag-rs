@@ -8,10 +8,7 @@
 ///! - Jina AI API
 ///! - Mistral AI API
 ///! - Together AI API
-
-use graphrag_core::embeddings::{
-    EmbeddingConfig, EmbeddingProvider, EmbeddingProviderType,
-};
+use graphrag_core::embeddings::{EmbeddingConfig, EmbeddingProvider, EmbeddingProviderType};
 
 #[cfg(feature = "huggingface-hub")]
 use graphrag_core::embeddings::huggingface::HuggingFaceEmbeddings;
@@ -46,10 +43,9 @@ async fn main() -> graphrag_core::core::error::Result<()> {
             }
 
             match hf_embeddings.embed(text).await {
-                Ok(embedding) => println!(
-                    "   ✅ Generated embedding: {} dimensions",
-                    embedding.len()
-                ),
+                Ok(embedding) => {
+                    println!("   ✅ Generated embedding: {} dimensions", embedding.len())
+                },
                 Err(e) => println!("   ⚠️  Embedding failed: {}", e),
             }
         } else {
@@ -65,16 +61,13 @@ async fn main() -> graphrag_core::core::error::Result<()> {
         println!("   Model: text-embedding-3-small");
 
         if let Ok(api_key) = std::env::var("OPENAI_API_KEY") {
-            let openai = HttpEmbeddingProvider::openai(
-                api_key,
-                "text-embedding-3-small".to_string(),
-            );
+            let openai =
+                HttpEmbeddingProvider::openai(api_key, "text-embedding-3-small".to_string());
 
             match openai.embed(text).await {
-                Ok(embedding) => println!(
-                    "   ✅ Generated embedding: {} dimensions",
-                    embedding.len()
-                ),
+                Ok(embedding) => {
+                    println!("   ✅ Generated embedding: {} dimensions", embedding.len())
+                },
                 Err(e) => println!("   ⚠️  API call failed: {}", e),
             }
         } else {
@@ -90,16 +83,12 @@ async fn main() -> graphrag_core::core::error::Result<()> {
         println!("   Model: voyage-3-large");
 
         if let Ok(api_key) = std::env::var("VOYAGE_API_KEY") {
-            let voyage = HttpEmbeddingProvider::voyage_ai(
-                api_key,
-                "voyage-3-large".to_string(),
-            );
+            let voyage = HttpEmbeddingProvider::voyage_ai(api_key, "voyage-3-large".to_string());
 
             match voyage.embed(text).await {
-                Ok(embedding) => println!(
-                    "   ✅ Generated embedding: {} dimensions",
-                    embedding.len()
-                ),
+                Ok(embedding) => {
+                    println!("   ✅ Generated embedding: {} dimensions", embedding.len())
+                },
                 Err(e) => println!("   ⚠️  API call failed: {}", e),
             }
         } else {
@@ -115,16 +104,12 @@ async fn main() -> graphrag_core::core::error::Result<()> {
         println!("   Model: embed-english-v3.0");
 
         if let Ok(api_key) = std::env::var("COHERE_API_KEY") {
-            let cohere = HttpEmbeddingProvider::cohere(
-                api_key,
-                "embed-english-v3.0".to_string(),
-            );
+            let cohere = HttpEmbeddingProvider::cohere(api_key, "embed-english-v3.0".to_string());
 
             match cohere.embed(text).await {
-                Ok(embedding) => println!(
-                    "   ✅ Generated embedding: {} dimensions",
-                    embedding.len()
-                ),
+                Ok(embedding) => {
+                    println!("   ✅ Generated embedding: {} dimensions", embedding.len())
+                },
                 Err(e) => println!("   ⚠️  API call failed: {}", e),
             }
         } else {
@@ -140,16 +125,12 @@ async fn main() -> graphrag_core::core::error::Result<()> {
         println!("   Model: jina-embeddings-v3");
 
         if let Ok(api_key) = std::env::var("JINA_API_KEY") {
-            let jina = HttpEmbeddingProvider::jina_ai(
-                api_key,
-                "jina-embeddings-v3".to_string(),
-            );
+            let jina = HttpEmbeddingProvider::jina_ai(api_key, "jina-embeddings-v3".to_string());
 
             match jina.embed(text).await {
-                Ok(embedding) => println!(
-                    "   ✅ Generated embedding: {} dimensions",
-                    embedding.len()
-                ),
+                Ok(embedding) => {
+                    println!("   ✅ Generated embedding: {} dimensions", embedding.len())
+                },
                 Err(e) => println!("   ⚠️  API call failed: {}", e),
             }
         } else {
@@ -165,16 +146,12 @@ async fn main() -> graphrag_core::core::error::Result<()> {
         println!("   Model: mistral-embed");
 
         if let Ok(api_key) = std::env::var("MISTRAL_API_KEY") {
-            let mistral = HttpEmbeddingProvider::mistral(
-                api_key,
-                "mistral-embed".to_string(),
-            );
+            let mistral = HttpEmbeddingProvider::mistral(api_key, "mistral-embed".to_string());
 
             match mistral.embed(text).await {
-                Ok(embedding) => println!(
-                    "   ✅ Generated embedding: {} dimensions",
-                    embedding.len()
-                ),
+                Ok(embedding) => {
+                    println!("   ✅ Generated embedding: {} dimensions", embedding.len())
+                },
                 Err(e) => println!("   ⚠️  API call failed: {}", e),
             }
         } else {
@@ -190,16 +167,13 @@ async fn main() -> graphrag_core::core::error::Result<()> {
         println!("   Model: BAAI/bge-large-en-v1.5");
 
         if let Ok(api_key) = std::env::var("TOGETHER_API_KEY") {
-            let together = HttpEmbeddingProvider::together_ai(
-                api_key,
-                "BAAI/bge-large-en-v1.5".to_string(),
-            );
+            let together =
+                HttpEmbeddingProvider::together_ai(api_key, "BAAI/bge-large-en-v1.5".to_string());
 
             match together.embed(text).await {
-                Ok(embedding) => println!(
-                    "   ✅ Generated embedding: {} dimensions",
-                    embedding.len()
-                ),
+                Ok(embedding) => {
+                    println!("   ✅ Generated embedding: {} dimensions", embedding.len())
+                },
                 Err(e) => println!("   ⚠️  API call failed: {}", e),
             }
         } else {
@@ -227,7 +201,7 @@ async fn main() -> graphrag_core::core::error::Result<()> {
                     println!("   ✅ Provider created from config");
                     println!("   Provider: {}", provider.provider_name());
                     println!("   Dimensions: {}", provider.dimensions());
-                }
+                },
                 Err(e) => println!("   ⚠️  Config error: {}", e),
             }
         }

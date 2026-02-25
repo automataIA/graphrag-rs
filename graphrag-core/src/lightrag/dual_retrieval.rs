@@ -10,7 +10,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use crate::core::error::GraphRAGError;
-use crate::lightrag::keyword_extraction::{KeywordExtractor, DualLevelKeywords};
+use crate::lightrag::keyword_extraction::{DualLevelKeywords, KeywordExtractor};
 use crate::retrieval::SearchResult;
 
 /// Dual-level retrieval results
@@ -45,8 +45,8 @@ pub struct DualRetrievalConfig {
 impl Default for DualRetrievalConfig {
     fn default() -> Self {
         Self {
-            high_level_weight: 0.6,   // Favor topics slightly
-            low_level_weight: 0.4,    // But still consider entities
+            high_level_weight: 0.6, // Favor topics slightly
+            low_level_weight: 0.4,  // But still consider entities
             merge_strategy: MergeStrategy::Interleave,
         }
     }
@@ -78,8 +78,8 @@ pub trait SemanticSearcher: Send + Sync {
 /// LightRAG-style dual-level retriever
 pub struct DualLevelRetriever {
     keyword_extractor: Arc<KeywordExtractor>,
-    high_level_store: Arc<dyn SemanticSearcher>,  // Community/topic search
-    low_level_store: Arc<dyn SemanticSearcher>,   // Entity/chunk search
+    high_level_store: Arc<dyn SemanticSearcher>, // Community/topic search
+    low_level_store: Arc<dyn SemanticSearcher>,  // Entity/chunk search
     config: DualRetrievalConfig,
 }
 
@@ -124,11 +124,7 @@ impl DualLevelRetriever {
         let low_level_chunks = low_results?;
 
         // 3. Merge and deduplicate
-        let merged_chunks = self.merge_results(
-            &high_level_chunks,
-            &low_level_chunks,
-            top_k,
-        )?;
+        let merged_chunks = self.merge_results(&high_level_chunks, &low_level_chunks, top_k)?;
 
         log::info!(
             "Dual retrieval: {} high-level, {} low-level → {} merged",
@@ -162,9 +158,7 @@ impl DualLevelRetriever {
         log::debug!("High-level query: '{}'", combined_query);
 
         // Search in topic-level index (community summaries, abstracts)
-        let results = self.high_level_store
-            .search(&combined_query, top_k)
-            .await?;
+        let results = self.high_level_store.search(&combined_query, top_k).await?;
 
         Ok(results)
     }
@@ -186,9 +180,7 @@ impl DualLevelRetriever {
         log::debug!("Low-level query: '{}'", combined_query);
 
         // Search in entity-level index (chunks, entities)
-        let results = self.low_level_store
-            .search(&combined_query, top_k)
-            .await?;
+        let results = self.low_level_store.search(&combined_query, top_k).await?;
 
         Ok(results)
     }
@@ -234,13 +226,13 @@ impl DualLevelRetriever {
                     if seen_ids.insert(c.id.clone()) {
                         merged.push(c.clone());
                     }
-                }
+                },
                 None => {
                     // This source exhausted, continue with the other
                     if high_iter.len() == 0 && low_iter.len() == 0 {
                         break;
                     }
-                }
+                },
             }
 
             use_high = !use_high;

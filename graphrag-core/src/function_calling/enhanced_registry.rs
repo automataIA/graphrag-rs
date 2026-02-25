@@ -155,7 +155,7 @@ impl EnhancedToolRegistry {
                     .take(5)
                     .map(|(name, _)| name.clone())
                     .collect()
-            }
+            },
         }
     }
 

@@ -26,7 +26,6 @@ pub mod data_import;
 // Re-export main types
 #[cfg(feature = "async")]
 pub use data_import::{
-    DataFormat, ImportConfig, ColumnMappings,
-    ImportedEntity, ImportedRelationship, ImportResult,
-    ImportError, DataImporter, StreamingImporter, StreamingSource,
+    ColumnMappings, DataFormat, DataImporter, ImportConfig, ImportError, ImportResult,
+    ImportedEntity, ImportedRelationship, StreamingImporter, StreamingSource,
 };

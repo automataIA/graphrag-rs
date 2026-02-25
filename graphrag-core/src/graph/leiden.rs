@@ -7,11 +7,11 @@
 //! Reference: "From Louvain to Leiden: guaranteeing well-connected communities"
 //! Traag, Waltman & van Eck (2019)
 
-use std::collections::{HashMap, HashSet};
 use petgraph::graph::{Graph, NodeIndex};
 use petgraph::Undirected;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
+use std::collections::{HashMap, HashSet};
 
 use crate::Result;
 
@@ -153,7 +153,8 @@ impl HierarchicalCommunities {
         // Group by entity type
         let mut by_type: HashMap<String, Vec<&EntityMetadata>> = HashMap::new();
         for meta in &metadata {
-            by_type.entry(meta.entity_type.clone())
+            by_type
+                .entry(meta.entity_type.clone())
                 .or_insert_with(Vec::new)
                 .push(meta);
         }
@@ -206,7 +207,8 @@ impl HierarchicalCommunities {
             let community_ids: HashSet<usize> = level_communities.values().copied().collect();
 
             for community_id in community_ids {
-                let summary = self.generate_community_summary(level, community_id, graph, max_length);
+                let summary =
+                    self.generate_community_summary(level, community_id, graph, max_length);
                 self.summaries.insert(community_id, summary);
             }
         }
@@ -359,20 +361,21 @@ impl HierarchicalCommunities {
 
         // Get all communities at this level
         if let Some(level_communities) = self.levels.get(&level) {
-            let unique_communities: HashSet<usize> =
-                level_communities.values().copied().collect();
+            let unique_communities: HashSet<usize> = level_communities.values().copied().collect();
 
             for community_id in unique_communities {
                 let entities = self.get_community_entities(level, community_id, graph);
 
                 // Check relevance
-                let is_relevant = entities.iter().any(|entity|
-                    entity.to_lowercase().contains(&query_lower)
-                );
+                let is_relevant = entities
+                    .iter()
+                    .any(|entity| entity.to_lowercase().contains(&query_lower));
 
                 if is_relevant {
                     // Get or generate summary
-                    let summary = self.summaries.get(&community_id)
+                    let summary = self
+                        .summaries
+                        .get(&community_id)
                         .cloned()
                         .unwrap_or_else(|| {
                             // Fallback: create entity list
@@ -488,8 +491,8 @@ impl LeidenCommunityDetector {
         Ok(HierarchicalCommunities {
             levels,
             hierarchy,
-            summaries: HashMap::new(),  // Filled later by LLM if needed
-            entity_mapping: None,  // Enriched when called from KnowledgeGraph
+            summaries: HashMap::new(), // Filled later by LLM if needed
+            entity_mapping: None,      // Enriched when called from KnowledgeGraph
         })
     }
 
@@ -497,7 +500,10 @@ impl LeidenCommunityDetector {
     fn hierarchical_leiden(
         &self,
         graph: &Graph<String, f32, Undirected>,
-    ) -> Result<(HashMap<usize, HashMap<NodeIndex, usize>>, HashMap<usize, Option<usize>>)> {
+    ) -> Result<(
+        HashMap<usize, HashMap<NodeIndex, usize>>,
+        HashMap<usize, Option<usize>>,
+    )> {
         let mut levels = HashMap::new();
         let hierarchy = HashMap::new();
 
@@ -515,11 +521,7 @@ impl LeidenCommunityDetector {
         while improved && iteration < MAX_ITERATIONS {
             improved = false;
             for node in current_graph.node_indices() {
-                let best_community = self.find_best_community(
-                    &current_graph,
-                    node,
-                    &communities,
-                );
+                let best_community = self.find_best_community(&current_graph, node, &communities);
 
                 if best_community != communities[&node] {
                     communities.insert(node, best_community);
@@ -543,7 +545,8 @@ impl LeidenCommunityDetector {
         &self,
         graph: &Graph<String, f32, Undirected>,
     ) -> HashMap<NodeIndex, usize> {
-        graph.node_indices()
+        graph
+            .node_indices()
             .enumerate()
             .map(|(i, node)| (node, i))
             .collect()
@@ -711,7 +714,7 @@ impl LeidenCommunityDetector {
         communities: &HashMap<NodeIndex, usize>,
     ) -> f32 {
         let degree = graph.edges(node).count() as f32;
-        let total_edges = graph.edge_count() as f32 * 2.0;  // Undirected
+        let total_edges = graph.edge_count() as f32 * 2.0; // Undirected
 
         // Edges to communities
         let k_i_in_to = self.edges_to_community(graph, node, to_community, communities);
@@ -723,8 +726,9 @@ impl LeidenCommunityDetector {
 
         // Delta Q using Newman's modularity formula
         let delta = ((k_i_in_to as f32 - k_i_in_from as f32) / total_edges)
-            - self.config.resolution * degree
-            * ((sigma_tot_to - sigma_tot_from + degree) / (total_edges * total_edges));
+            - self.config.resolution
+                * degree
+                * ((sigma_tot_to - sigma_tot_from + degree) / (total_edges * total_edges));
 
         delta
     }
@@ -737,7 +741,8 @@ impl LeidenCommunityDetector {
         community: usize,
         communities: &HashMap<NodeIndex, usize>,
     ) -> usize {
-        graph.neighbors(node)
+        graph
+            .neighbors(node)
             .filter(|&neighbor| communities.get(&neighbor) == Some(&community))
             .count()
     }
@@ -749,7 +754,8 @@ impl LeidenCommunityDetector {
         community: usize,
         communities: &HashMap<NodeIndex, usize>,
     ) -> f32 {
-        communities.iter()
+        communities
+            .iter()
             .filter(|(_, &c)| c == community)
             .map(|(&node, _)| graph.edges(node).count() as f32)
             .sum()
@@ -819,11 +825,7 @@ mod tests {
         let detector = LeidenCommunityDetector::new(config);
 
         // First 3 nodes form connected triangle
-        let nodes = vec![
-            NodeIndex::new(0),
-            NodeIndex::new(1),
-            NodeIndex::new(2),
-        ];
+        let nodes = vec![NodeIndex::new(0), NodeIndex::new(1), NodeIndex::new(2)];
 
         assert!(detector.is_well_connected(&graph, &nodes));
     }

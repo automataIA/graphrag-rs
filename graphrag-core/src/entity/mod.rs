@@ -1,5 +1,8 @@
 /// ATOM atomic fact extraction module (Phase 1.3)
 pub mod atomic_fact_extractor;
+/// GLiNER-Relex joint NER + RE extractor (feature-gated: `gliner`)
+#[cfg(feature = "gliner")]
+mod gliner_extractor;
 /// Bidirectional entity-chunk index for fast lookups
 pub mod bidirectional_index;
 /// Gleaning-based entity extraction module
@@ -16,11 +19,14 @@ pub mod semantic_merging;
 pub mod string_similarity_linker;
 
 pub use atomic_fact_extractor::{AtomicFact, AtomicFactExtractor};
+#[cfg(feature = "gliner")]
+pub use gliner_extractor::GLiNERExtractor;
 pub use bidirectional_index::{BidirectionalIndex, IndexStatistics};
 pub use gleaning_extractor::{ExtractionCompletionStatus, GleaningConfig, GleaningEntityExtractor};
 pub use llm_extractor::LLMEntityExtractor;
 pub use llm_relationship_extractor::{
-    ExtractedEntity, ExtractedRelationship, ExtractionResult, LLMRelationshipExtractor, TripleValidation,
+    ExtractedEntity, ExtractedRelationship, ExtractionResult, LLMRelationshipExtractor,
+    TripleValidation,
 };
 pub use semantic_merging::{EntityMergeDecision, MergingStatistics, SemanticEntityMerger};
 pub use string_similarity_linker::{EntityLinkingConfig, StringSimilarityLinker};
@@ -65,7 +71,7 @@ impl EntityExtractor {
                         Ok(regex) => allowed_patterns.push(regex),
                         Err(e) => {
                             tracing::warn!("Invalid allowed pattern '{pattern}': {e}");
-                        }
+                        },
                     }
                 }
             }
@@ -76,7 +82,7 @@ impl EntityExtractor {
                         Ok(regex) => excluded_patterns.push(regex),
                         Err(e) => {
                             tracing::warn!("Invalid excluded pattern '{pattern}': {e}");
-                        }
+                        },
                     }
                 }
             }
@@ -123,26 +129,26 @@ impl EntityExtractor {
             match entity_type.as_str() {
                 "PERSON" | "CHARACTER" | "RESEARCHER" | "SPEAKER" | "DIALOGUE_SPEAKER" => {
                     entities.extend(self.extract_persons(text, &chunk.id)?);
-                }
+                },
                 "ORGANIZATION" | "INSTITUTION" | "BRAND" | "COMPANY" => {
                     entities.extend(self.extract_organizations(text, &chunk.id)?);
-                }
+                },
                 "LOCATION" | "SETTING" | "PLACE" => {
                     entities.extend(self.extract_locations(text, &chunk.id)?);
-                }
+                },
                 "CONCEPT" | "THEORY" | "THEME" | "ARGUMENT" | "IDEA" => {
                     entities.extend(self.extract_concepts(text, &chunk.id, entity_type)?);
-                }
+                },
                 "EVENT" | "EXPERIMENT" | "HAPPENING" => {
                     entities.extend(self.extract_events(text, &chunk.id)?);
-                }
+                },
                 "OBJECT" | "TOOL" | "ARTIFACT" | "ITEM" => {
                     entities.extend(self.extract_objects(text, &chunk.id)?);
-                }
+                },
                 _ => {
                     // For any other entity type, use generic extraction
                     entities.extend(self.extract_generic_entities(text, &chunk.id, entity_type)?);
-                }
+                },
             }
         }
 
@@ -712,7 +718,7 @@ impl EntityExtractor {
                 if name.split_whitespace().count() == 2 {
                     confidence += 0.2;
                 }
-            }
+            },
             "ORGANIZATION" => {
                 if name.contains("Inc") || name.contains("Corp") || name.contains("LLC") {
                     confidence += 0.3;
@@ -720,7 +726,7 @@ impl EntityExtractor {
                 if name.contains("University") || name.contains("Institute") {
                     confidence += 0.2;
                 }
-            }
+            },
             "LOCATION" => {
                 if name.contains(',') {
                     confidence += 0.2;
@@ -728,8 +734,8 @@ impl EntityExtractor {
                 if self.is_known_location(name) {
                     confidence += 0.3;
                 }
-            }
-            _ => {}
+            },
+            _ => {},
         }
 
         // Adjust based on capitalization
@@ -780,10 +786,10 @@ impl EntityExtractor {
                     if entity.confidence > existing.confidence {
                         existing.confidence = entity.confidence;
                     }
-                }
+                },
                 None => {
                     unique_entities.insert(key, entity);
-                }
+                },
             }
         }
 
@@ -830,7 +836,7 @@ impl EntityExtractor {
                 } else {
                     "ASSOCIATED_WITH".to_string()
                 }
-            }
+            },
             ("PERSON", "LOCATION") | ("LOCATION", "PERSON") => {
                 if context.contains("born in") || context.contains("from") {
                     "BORN_IN".to_string()
@@ -839,14 +845,14 @@ impl EntityExtractor {
                 } else {
                     "ASSOCIATED_WITH".to_string()
                 }
-            }
+            },
             ("ORGANIZATION", "LOCATION") | ("LOCATION", "ORGANIZATION") => {
                 if context.contains("headquartered") || context.contains("based in") {
                     "HEADQUARTERED_IN".to_string()
                 } else {
                     "LOCATED_IN".to_string()
                 }
-            }
+            },
             ("PERSON", "PERSON") => {
                 if context.contains("married") || context.contains("spouse") {
                     "MARRIED_TO".to_string()
@@ -855,7 +861,7 @@ impl EntityExtractor {
                 } else {
                     "KNOWS".to_string()
                 }
-            }
+            },
             _ => "RELATED_TO".to_string(),
         }
     }

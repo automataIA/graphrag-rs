@@ -192,12 +192,19 @@ impl SymbolicAnchoringStrategy {
 
         // Conceptual query patterns
         let conceptual_patterns = [
-            "what is", "nature of", "meaning of", "definition of",
-            "concept of", "idea of", "philosophy of", "theory of"
+            "what is",
+            "nature of",
+            "meaning of",
+            "definition of",
+            "concept of",
+            "idea of",
+            "philosophy of",
+            "theory of",
         ];
 
         let query_lower = query.to_lowercase();
-        let is_conceptual = conceptual_patterns.iter()
+        let is_conceptual = conceptual_patterns
+            .iter()
             .any(|pattern| query_lower.contains(pattern));
 
         if is_conceptual {
@@ -246,10 +253,31 @@ impl SymbolicAnchoringStrategy {
     fn is_likely_concept(word: &str) -> bool {
         // Common abstract concept patterns
         let concept_words = [
-            "love", "virtue", "justice", "truth", "beauty", "good", "evil",
-            "knowledge", "wisdom", "courage", "philosophy", "ethics", "morality",
-            "freedom", "happiness", "meaning", "purpose", "existence", "reality",
-            "consciousness", "mind", "soul", "spirit", "nature", "essence"
+            "love",
+            "virtue",
+            "justice",
+            "truth",
+            "beauty",
+            "good",
+            "evil",
+            "knowledge",
+            "wisdom",
+            "courage",
+            "philosophy",
+            "ethics",
+            "morality",
+            "freedom",
+            "happiness",
+            "meaning",
+            "purpose",
+            "existence",
+            "reality",
+            "consciousness",
+            "mind",
+            "soul",
+            "spirit",
+            "nature",
+            "essence",
         ];
 
         concept_words.contains(&word)
@@ -531,8 +559,7 @@ mod tests {
         pagerank_scores.insert(EntityId::new("concept_love".to_string()), 0.3);
         pagerank_scores.insert(EntityId::new("dialog_phaedrus".to_string()), 0.9);
 
-        let strategy = SymbolicAnchoringStrategy::new(graph)
-            .with_pagerank_scores(pagerank_scores);
+        let strategy = SymbolicAnchoringStrategy::new(graph).with_pagerank_scores(pagerank_scores);
 
         // Create anchor with both entities
         let mut anchor = SymbolicAnchor::new("love".to_string(), 0.8);
@@ -543,7 +570,11 @@ mod tests {
 
         // With PageRank: count_score=0.2 (2/10), avg_pr=0.6 (0.3+0.9)/2
         // Expected: 0.2*0.4 + 0.6*0.6 = 0.08 + 0.36 = 0.44
-        assert!(relevance > 0.4 && relevance < 0.5, "Expected ~0.44, got {}", relevance);
+        assert!(
+            relevance > 0.4 && relevance < 0.5,
+            "Expected ~0.44, got {}",
+            relevance
+        );
     }
 
     #[test]
@@ -560,6 +591,10 @@ mod tests {
         let relevance = strategy.calculate_relevance(&anchor);
 
         // Without PageRank: just count_score = 2/10 = 0.2
-        assert!((relevance - 0.2).abs() < 0.01, "Expected 0.2, got {}", relevance);
+        assert!(
+            (relevance - 0.2).abs() < 0.01,
+            "Expected 0.2, got {}",
+            relevance
+        );
     }
 }

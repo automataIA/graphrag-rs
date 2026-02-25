@@ -255,7 +255,9 @@ impl RegistryBuilder {
     /// - MockRetriever for content retrieval
     #[cfg(feature = "memory-storage")]
     pub fn with_test_defaults() -> Self {
-        use crate::core::test_utils::{MockEmbedder, MockLanguageModel, MockRetriever, MockVectorStore};
+        use crate::core::test_utils::{
+            MockEmbedder, MockLanguageModel, MockRetriever, MockVectorStore,
+        };
         use crate::storage::MemoryStorage;
 
         Self::new()
@@ -415,7 +417,11 @@ impl ServiceConfig {
                     builder = builder.with_service(embedder);
 
                     #[cfg(feature = "tracing")]
-                    tracing::info!("Registered Ollama embedder with model: {}, dimension: {}", model, dimension);
+                    tracing::info!(
+                        "Registered Ollama embedder with model: {}, dimension: {}",
+                        model,
+                        dimension
+                    );
                 }
             }
         }
@@ -440,7 +446,10 @@ impl ServiceConfig {
                     builder = builder.with_service(extractor);
 
                     #[cfg(feature = "tracing")]
-                    tracing::info!("Registered GraphIndexer entity extractor with threshold: {}", threshold);
+                    tracing::info!(
+                        "Registered GraphIndexer entity extractor with threshold: {}",
+                        threshold
+                    );
                 }
             }
         }
@@ -491,7 +500,11 @@ impl ServiceConfig {
                 builder = builder.with_service(language_model);
 
                 #[cfg(feature = "tracing")]
-                tracing::info!("Registered Ollama language model: {} at {}", model, base_url);
+                tracing::info!(
+                    "Registered Ollama language model: {} at {}",
+                    model,
+                    base_url
+                );
             }
         }
 
@@ -539,7 +552,9 @@ impl ServiceConfig {
         {
             if self.enable_function_calling {
                 #[cfg(feature = "tracing")]
-                tracing::info!("Function calling enabled - use function_calling::FunctionCaller directly");
+                tracing::info!(
+                    "Function calling enabled - use function_calling::FunctionCaller directly"
+                );
             }
         }
 

@@ -1,5 +1,5 @@
-use crate::{GraphRAGError, Result};
 use crate::config::{Config, SetConfig};
+use crate::{GraphRAGError, Result};
 use std::path::Path;
 
 /// Result of configuration validation
@@ -59,9 +59,13 @@ impl Validatable for Config {
         if self.chunk_size == 0 {
             result.add_error("Chunk size must be greater than 0".to_string());
         } else if self.chunk_size < 100 {
-            result.add_warning("Chunk size is very small (<100), this may affect performance".to_string());
+            result.add_warning(
+                "Chunk size is very small (<100), this may affect performance".to_string(),
+            );
         } else if self.chunk_size > 10000 {
-            result.add_warning("Chunk size is very large (>10000), this may affect quality".to_string());
+            result.add_warning(
+                "Chunk size is very large (>10000), this may affect quality".to_string(),
+            );
         } else {
             // Chunk size is in acceptable range (100-10000)
         }
@@ -70,7 +74,9 @@ impl Validatable for Config {
         if self.chunk_overlap >= self.chunk_size {
             result.add_error("Chunk overlap must be less than chunk size".to_string());
         } else if self.chunk_overlap > self.chunk_size / 2 {
-            result.add_warning("Chunk overlap is more than 50% of chunk size, this may be inefficient".to_string());
+            result.add_warning(
+                "Chunk overlap is more than 50% of chunk size, this may be inefficient".to_string(),
+            );
         } else {
             // Chunk overlap is in acceptable range
         }
@@ -91,7 +97,9 @@ impl Validatable for Config {
             if top_k == 0 {
                 result.add_error("Top-k results must be greater than 0".to_string());
             } else if top_k > 100 {
-                result.add_warning("Top-k results is very high (>100), this may affect performance".to_string());
+                result.add_warning(
+                    "Top-k results is very high (>100), this may affect performance".to_string(),
+                );
             } else {
                 // Top-k is in acceptable range
             }
@@ -102,9 +110,15 @@ impl Validatable for Config {
             if !(0.0..=1.0).contains(&threshold) {
                 result.add_error("Similarity threshold must be between 0.0 and 1.0".to_string());
             } else if threshold < 0.1 {
-                result.add_warning("Similarity threshold is very low (<0.1), this may return irrelevant results".to_string());
+                result.add_warning(
+                    "Similarity threshold is very low (<0.1), this may return irrelevant results"
+                        .to_string(),
+                );
             } else if threshold > 0.9 {
-                result.add_warning("Similarity threshold is very high (>0.9), this may return too few results".to_string());
+                result.add_warning(
+                    "Similarity threshold is very high (>0.9), this may return too few results"
+                        .to_string(),
+                );
             } else {
                 // Similarity threshold is in acceptable range (0.1-0.9)
             }
@@ -126,19 +140,26 @@ impl Validatable for Config {
         // Ensure all paths exist
         let output_path = Path::new(&self.output_dir);
         if !output_path.exists() {
-            result.add_warning(format!("Output directory does not exist: {}", self.output_dir));
+            result.add_warning(format!(
+                "Output directory does not exist: {}",
+                self.output_dir
+            ));
             result.add_suggestion("Directory will be created automatically".to_string());
         }
 
         // Validate feature compatibility
         #[cfg(not(feature = "ollama"))]
         {
-            result.add_warning("Ollama feature is not enabled, local LLM support unavailable".to_string());
+            result.add_warning(
+                "Ollama feature is not enabled, local LLM support unavailable".to_string(),
+            );
         }
 
         #[cfg(not(feature = "parallel-processing"))]
         {
-            result.add_warning("Parallel processing is not enabled, performance may be reduced".to_string());
+            result.add_warning(
+                "Parallel processing is not enabled, performance may be reduced".to_string(),
+            );
         }
 
         // Check for optimal settings
@@ -171,24 +192,42 @@ fn validate_pipeline_approach(config: &SetConfig, result: &mut ValidationResult)
     match approach.as_str() {
         "semantic" | "algorithmic" | "hybrid" => {},
         invalid => {
-            result.add_error(format!("Invalid pipeline approach: '{}'. Must be 'semantic', 'algorithmic', or 'hybrid'", invalid));
+            result.add_error(format!(
+                "Invalid pipeline approach: '{}'. Must be 'semantic', 'algorithmic', or 'hybrid'",
+                invalid
+            ));
             return;
-        }
+        },
     }
 
     // Validate semantic pipeline
     if approach == "semantic" {
         match &config.semantic {
             None => {
-                result.add_error("Semantic pipeline approach selected but [semantic] configuration is missing".to_string());
-            }
+                result.add_error(
+                    "Semantic pipeline approach selected but [semantic] configuration is missing"
+                        .to_string(),
+                );
+            },
             Some(semantic) => {
                 if !semantic.enabled {
-                    result.add_error("Semantic pipeline approach selected but semantic.enabled = false".to_string());
+                    result.add_error(
+                        "Semantic pipeline approach selected but semantic.enabled = false"
+                            .to_string(),
+                    );
                 }
 
                 // Validate semantic embeddings
-                let valid_backends = ["huggingface", "openai", "voyage", "cohere", "jina", "mistral", "together", "ollama"];
+                let valid_backends = [
+                    "huggingface",
+                    "openai",
+                    "voyage",
+                    "cohere",
+                    "jina",
+                    "mistral",
+                    "together",
+                    "ollama",
+                ];
                 if !valid_backends.contains(&semantic.embeddings.backend.as_str()) {
                     result.add_error(format!(
                         "Invalid semantic embedding backend: '{}'. Must be one of: {}",
@@ -198,27 +237,41 @@ fn validate_pipeline_approach(config: &SetConfig, result: &mut ValidationResult)
                 }
 
                 if semantic.embeddings.dimension == 0 {
-                    result.add_error("Semantic embedding dimension must be greater than 0".to_string());
+                    result.add_error(
+                        "Semantic embedding dimension must be greater than 0".to_string(),
+                    );
                 }
 
                 // Validate semantic entity extraction
-                if semantic.entity_extraction.confidence_threshold < 0.0 || semantic.entity_extraction.confidence_threshold > 1.0 {
+                if semantic.entity_extraction.confidence_threshold < 0.0
+                    || semantic.entity_extraction.confidence_threshold > 1.0
+                {
                     result.add_error("Semantic entity extraction confidence threshold must be between 0.0 and 1.0".to_string());
                 }
 
-                if semantic.entity_extraction.temperature < 0.0 || semantic.entity_extraction.temperature > 2.0 {
-                    result.add_error("Semantic entity extraction temperature must be between 0.0 and 2.0".to_string());
+                if semantic.entity_extraction.temperature < 0.0
+                    || semantic.entity_extraction.temperature > 2.0
+                {
+                    result.add_error(
+                        "Semantic entity extraction temperature must be between 0.0 and 2.0"
+                            .to_string(),
+                    );
                 }
 
                 // Validate semantic retrieval
-                if semantic.retrieval.similarity_threshold < 0.0 || semantic.retrieval.similarity_threshold > 1.0 {
-                    result.add_error("Semantic retrieval similarity threshold must be between 0.0 and 1.0".to_string());
+                if semantic.retrieval.similarity_threshold < 0.0
+                    || semantic.retrieval.similarity_threshold > 1.0
+                {
+                    result.add_error(
+                        "Semantic retrieval similarity threshold must be between 0.0 and 1.0"
+                            .to_string(),
+                    );
                 }
 
                 if semantic.retrieval.top_k == 0 {
                     result.add_error("Semantic retrieval top_k must be greater than 0".to_string());
                 }
-            }
+            },
         }
     }
 
@@ -227,10 +280,13 @@ fn validate_pipeline_approach(config: &SetConfig, result: &mut ValidationResult)
         match &config.algorithmic {
             None => {
                 result.add_error("Algorithmic pipeline approach selected but [algorithmic] configuration is missing".to_string());
-            }
+            },
             Some(algorithmic) => {
                 if !algorithmic.enabled {
-                    result.add_error("Algorithmic pipeline approach selected but algorithmic.enabled = false".to_string());
+                    result.add_error(
+                        "Algorithmic pipeline approach selected but algorithmic.enabled = false"
+                            .to_string(),
+                    );
                 }
 
                 // Validate algorithmic embeddings
@@ -242,15 +298,24 @@ fn validate_pipeline_approach(config: &SetConfig, result: &mut ValidationResult)
                 }
 
                 if algorithmic.embeddings.dimension == 0 {
-                    result.add_error("Algorithmic embedding dimension must be greater than 0".to_string());
+                    result.add_error(
+                        "Algorithmic embedding dimension must be greater than 0".to_string(),
+                    );
                 }
 
-                if algorithmic.embeddings.max_document_frequency < 0.0 || algorithmic.embeddings.max_document_frequency > 1.0 {
-                    result.add_error("Algorithmic max_document_frequency must be between 0.0 and 1.0".to_string());
+                if algorithmic.embeddings.max_document_frequency < 0.0
+                    || algorithmic.embeddings.max_document_frequency > 1.0
+                {
+                    result.add_error(
+                        "Algorithmic max_document_frequency must be between 0.0 and 1.0"
+                            .to_string(),
+                    );
                 }
 
                 // Validate algorithmic entity extraction
-                if algorithmic.entity_extraction.confidence_threshold < 0.0 || algorithmic.entity_extraction.confidence_threshold > 1.0 {
+                if algorithmic.entity_extraction.confidence_threshold < 0.0
+                    || algorithmic.entity_extraction.confidence_threshold > 1.0
+                {
                     result.add_error("Algorithmic entity extraction confidence threshold must be between 0.0 and 1.0".to_string());
                 }
 
@@ -264,9 +329,11 @@ fn validate_pipeline_approach(config: &SetConfig, result: &mut ValidationResult)
                 }
 
                 if algorithmic.retrieval.top_k == 0 {
-                    result.add_error("Algorithmic retrieval top_k must be greater than 0".to_string());
+                    result.add_error(
+                        "Algorithmic retrieval top_k must be greater than 0".to_string(),
+                    );
                 }
-            }
+            },
         }
     }
 
@@ -274,11 +341,16 @@ fn validate_pipeline_approach(config: &SetConfig, result: &mut ValidationResult)
     if approach == "hybrid" {
         match &config.hybrid {
             None => {
-                result.add_error("Hybrid pipeline approach selected but [hybrid] configuration is missing".to_string());
-            }
+                result.add_error(
+                    "Hybrid pipeline approach selected but [hybrid] configuration is missing"
+                        .to_string(),
+                );
+            },
             Some(hybrid) => {
                 if !hybrid.enabled {
-                    result.add_error("Hybrid pipeline approach selected but hybrid.enabled = false".to_string());
+                    result.add_error(
+                        "Hybrid pipeline approach selected but hybrid.enabled = false".to_string(),
+                    );
                 }
 
                 // Validate hybrid weights
@@ -291,15 +363,22 @@ fn validate_pipeline_approach(config: &SetConfig, result: &mut ValidationResult)
                 }
 
                 if hybrid.weights.semantic_weight < 0.0 || hybrid.weights.semantic_weight > 1.0 {
-                    result.add_error("Hybrid semantic_weight must be between 0.0 and 1.0".to_string());
+                    result.add_error(
+                        "Hybrid semantic_weight must be between 0.0 and 1.0".to_string(),
+                    );
                 }
 
-                if hybrid.weights.algorithmic_weight < 0.0 || hybrid.weights.algorithmic_weight > 1.0 {
-                    result.add_error("Hybrid algorithmic_weight must be between 0.0 and 1.0".to_string());
+                if hybrid.weights.algorithmic_weight < 0.0
+                    || hybrid.weights.algorithmic_weight > 1.0
+                {
+                    result.add_error(
+                        "Hybrid algorithmic_weight must be between 0.0 and 1.0".to_string(),
+                    );
                 }
 
                 // Validate hybrid entity extraction weights
-                let entity_weight_sum = hybrid.entity_extraction.llm_weight + hybrid.entity_extraction.pattern_weight;
+                let entity_weight_sum =
+                    hybrid.entity_extraction.llm_weight + hybrid.entity_extraction.pattern_weight;
                 if (entity_weight_sum - 1.0).abs() > 0.01 {
                     result.add_warning(format!(
                         "Hybrid entity extraction weights should sum to 1.0 (currently: {:.2})",
@@ -308,7 +387,8 @@ fn validate_pipeline_approach(config: &SetConfig, result: &mut ValidationResult)
                 }
 
                 // Validate hybrid retrieval weights
-                let retrieval_weight_sum = hybrid.retrieval.vector_weight + hybrid.retrieval.bm25_weight;
+                let retrieval_weight_sum =
+                    hybrid.retrieval.vector_weight + hybrid.retrieval.bm25_weight;
                 if (retrieval_weight_sum - 1.0).abs() > 0.01 {
                     result.add_warning(format!(
                         "Hybrid retrieval weights should sum to 1.0 (currently: {:.2})",
@@ -317,14 +397,21 @@ fn validate_pipeline_approach(config: &SetConfig, result: &mut ValidationResult)
                 }
 
                 if hybrid.retrieval.rrf_constant == 0 {
-                    result.add_error("Hybrid RRF constant must be greater than 0 (typically 60)".to_string());
+                    result.add_error(
+                        "Hybrid RRF constant must be greater than 0 (typically 60)".to_string(),
+                    );
                 }
 
                 // Validate confidence boost
-                if hybrid.entity_extraction.confidence_boost < 0.0 || hybrid.entity_extraction.confidence_boost > 1.0 {
-                    result.add_warning("Hybrid confidence_boost should typically be between 0.0 and 1.0".to_string());
+                if hybrid.entity_extraction.confidence_boost < 0.0
+                    || hybrid.entity_extraction.confidence_boost > 1.0
+                {
+                    result.add_warning(
+                        "Hybrid confidence_boost should typically be between 0.0 and 1.0"
+                            .to_string(),
+                    );
                 }
-            }
+            },
         }
     }
 
@@ -333,18 +420,24 @@ fn validate_pipeline_approach(config: &SetConfig, result: &mut ValidationResult)
         "semantic" => {
             result.add_suggestion("Semantic pipeline uses neural embeddings and LLM-based extraction for high-quality results".to_string());
             if config.ollama.enabled {
-                result.add_suggestion("Consider using 'llama3.1:8b' for entity extraction with gleaning enabled".to_string());
+                result.add_suggestion(
+                    "Consider using 'llama3.1:8b' for entity extraction with gleaning enabled"
+                        .to_string(),
+                );
             }
-        }
+        },
         "algorithmic" => {
             result.add_suggestion("Algorithmic pipeline uses pattern matching and TF-IDF for fast, resource-efficient processing".to_string());
             result.add_suggestion("Algorithmic pipeline works well for structured documents and doesn't require an LLM".to_string());
-        }
+        },
         "hybrid" => {
             result.add_suggestion("Hybrid pipeline combines semantic and algorithmic approaches for balanced quality and performance".to_string());
-            result.add_suggestion("Fine-tune hybrid weights based on your specific use case and evaluation metrics".to_string());
-        }
-        _ => {}
+            result.add_suggestion(
+                "Fine-tune hybrid weights based on your specific use case and evaluation metrics"
+                    .to_string(),
+            );
+        },
+        _ => {},
     }
 }
 
@@ -408,7 +501,9 @@ impl Validatable for SetConfig {
 
             // Suggest common models if using defaults
             if ollama.chat_model == "llama2" {
-                result.add_suggestion("Consider using 'llama3.1:8b' for better performance".to_string());
+                result.add_suggestion(
+                    "Consider using 'llama3.1:8b' for better performance".to_string(),
+                );
             }
         }
 
@@ -418,8 +513,10 @@ impl Validatable for SetConfig {
             "memory" | "file" | "sqlite" | "postgresql" | "neo4j" => {},
             db_type => {
                 result.add_error(format!("Unknown database type: {}", db_type));
-                result.add_suggestion("Supported types: memory, file, sqlite, postgresql, neo4j".to_string());
-            }
+                result.add_suggestion(
+                    "Supported types: memory, file, sqlite, postgresql, neo4j".to_string(),
+                );
+            },
         }
 
         result
@@ -440,10 +537,9 @@ impl Validatable for SetConfig {
 /// Validate a TOML configuration file
 pub fn validate_config_file(path: &Path, strict: bool) -> Result<ValidationResult> {
     let config_str = std::fs::read_to_string(path)?;
-    let config: SetConfig = toml::from_str(&config_str)
-        .map_err(|e| GraphRAGError::Config {
-            message: format!("Failed to parse TOML config: {}", e)
-        })?;
+    let config: SetConfig = toml::from_str(&config_str).map_err(|e| GraphRAGError::Config {
+        message: format!("Failed to parse TOML config: {}", e),
+    })?;
 
     let result = if strict {
         config.validate_strict()

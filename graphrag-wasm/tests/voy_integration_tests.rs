@@ -2,9 +2,9 @@
 //!
 //! These tests verify the complete Voy integration with modern API v0.6+
 
-use wasm_bindgen_test::*;
-use graphrag_wasm::voy_bindings::{VoyIndex, check_voy_available};
+use graphrag_wasm::voy_bindings::{check_voy_available, VoyIndex};
 use js_sys::{Array, Float32Array};
+use wasm_bindgen_test::*;
 
 wasm_bindgen_test_configure!(run_in_browser);
 
@@ -68,7 +68,10 @@ async fn test_voy_search() {
 
     // Check results structure
     let results_array = Array::from(&results);
-    assert!(results_array.length() > 0, "Should return at least one result");
+    assert!(
+        results_array.length() > 0,
+        "Should return at least one result"
+    );
 
     web_sys::console::log_1(&format!("Search results: {:?}", results).into());
 }
@@ -85,14 +88,21 @@ async fn test_incremental_add() {
 
     // Add embeddings one by one
     let emb1 = Float32Array::from(&[0.1_f32, 0.2, 0.3][..]);
-    index.add_embedding(emb1.into(), "doc1", "Document 1", "/doc1").unwrap();
+    index
+        .add_embedding(emb1.into(), "doc1", "Document 1", "/doc1")
+        .unwrap();
 
     let emb2 = Float32Array::from(&[0.4_f32, 0.5, 0.6][..]);
-    index.add_embedding(emb2.into(), "doc2", "Document 2", "/doc2").unwrap();
+    index
+        .add_embedding(emb2.into(), "doc2", "Document 2", "/doc2")
+        .unwrap();
 
     // Verify size
     let size = index.size().unwrap();
-    assert_eq!(size, 2, "Index should contain 2 embeddings after incremental add");
+    assert_eq!(
+        size, 2,
+        "Index should contain 2 embeddings after incremental add"
+    );
 }
 
 /// Test 5: Serialize and deserialize index (placeholder for persistence)
@@ -168,10 +178,15 @@ async fn test_large_scale_indexing() {
     let index_result = VoyIndex::from_embeddings(embeddings.into(), 384);
     let index_time = js_sys::Date::now() - start;
 
-    assert!(index_result.is_ok(), "Should create large index successfully");
+    assert!(
+        index_result.is_ok(),
+        "Should create large index successfully"
+    );
 
     let index = index_result.unwrap();
-    web_sys::console::log_1(&format!("✅ Indexed 1000 embeddings (384d) in {:.2}ms", index_time).into());
+    web_sys::console::log_1(
+        &format!("✅ Indexed 1000 embeddings (384d) in {:.2}ms", index_time).into(),
+    );
 
     // Test search performance
     let query_start = js_sys::Date::now();

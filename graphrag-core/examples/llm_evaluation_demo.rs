@@ -9,15 +9,13 @@
 //! ```
 
 use graphrag_core::{
-    Document, DocumentId, Entity, EntityId, Relationship, ChunkId,
     evaluation::{
-        EvaluableQueryResultBuilder, LLMEvaluationPrompt, LLMEvaluation,
-        DocumentProcessingValidator, EntityExtractionValidator,
-        RelationshipExtractionValidator, GraphConstructionValidator,
-        PipelineValidationReport,
+        DocumentProcessingValidator, EntityExtractionValidator, EvaluableQueryResultBuilder,
+        GraphConstructionValidator, LLMEvaluation, LLMEvaluationPrompt, PipelineValidationReport,
+        RelationshipExtractionValidator,
     },
     text::TextProcessor,
-    Result,
+    ChunkId, Document, DocumentId, Entity, EntityId, Relationship, Result,
 };
 
 fn main() -> Result<()> {
@@ -57,7 +55,8 @@ Entities represent real-world objects like people, organizations, and locations.
 
 ### Relationships
 Relationships define how entities are connected, such as "works_for" or "located_in".
-"#.to_string(),
+"#
+        .to_string(),
     );
 
     // Phase 1: Document Processing
@@ -66,7 +65,14 @@ Relationships define how entities are connected, such as "works_for" or "located
 
     let doc_validation = DocumentProcessingValidator::validate(&document, &chunks);
     println!("### Phase 1: Document Processing");
-    println!("Status: {}", if doc_validation.passed { "✅ PASSED" } else { "❌ FAILED" });
+    println!(
+        "Status: {}",
+        if doc_validation.passed {
+            "✅ PASSED"
+        } else {
+            "❌ FAILED"
+        }
+    );
     println!("Checks performed: {}", doc_validation.checks.len());
     for check in &doc_validation.checks {
         let icon = if check.passed { "  ✅" } else { "  ❌" };
@@ -118,7 +124,14 @@ Relationships define how entities are connected, such as "works_for" or "located
 
     let entity_validation = EntityExtractionValidator::validate(&chunks, &entities);
     println!("### Phase 2: Entity Extraction");
-    println!("Status: {}", if entity_validation.passed { "✅ PASSED" } else { "❌ FAILED" });
+    println!(
+        "Status: {}",
+        if entity_validation.passed {
+            "✅ PASSED"
+        } else {
+            "❌ FAILED"
+        }
+    );
     for check in &entity_validation.checks {
         let icon = if check.passed { "  ✅" } else { "  ❌" };
         println!("{} {}: {}", icon, check.name, check.message);
@@ -145,7 +158,14 @@ Relationships define how entities are connected, such as "works_for" or "located
 
     let rel_validation = RelationshipExtractionValidator::validate(&entities, &relationships);
     println!("### Phase 3: Relationship Extraction");
-    println!("Status: {}", if rel_validation.passed { "✅ PASSED" } else { "❌ FAILED" });
+    println!(
+        "Status: {}",
+        if rel_validation.passed {
+            "✅ PASSED"
+        } else {
+            "❌ FAILED"
+        }
+    );
     for check in &rel_validation.checks {
         let icon = if check.passed { "  ✅" } else { "  ❌" };
         println!("{} {}: {}", icon, check.name, check.message);
@@ -154,13 +174,20 @@ Relationships define how entities are connected, such as "works_for" or "located
 
     // Phase 4: Graph Construction
     let graph_validation = GraphConstructionValidator::validate(
-        1,                    // documents
-        chunks.len(),         // chunks
-        entities.len(),       // entities
-        relationships.len(),  // relationships
+        1,                   // documents
+        chunks.len(),        // chunks
+        entities.len(),      // entities
+        relationships.len(), // relationships
     );
     println!("### Phase 4: Graph Construction");
-    println!("Status: {}", if graph_validation.passed { "✅ PASSED" } else { "❌ FAILED" });
+    println!(
+        "Status: {}",
+        if graph_validation.passed {
+            "✅ PASSED"
+        } else {
+            "❌ FAILED"
+        }
+    );
     for check in &graph_validation.checks {
         let icon = if check.passed { "  ✅" } else { "  ❌" };
         println!("{} {}: {}", icon, check.name, check.message);
@@ -177,7 +204,10 @@ Relationships define how entities are connected, such as "works_for" or "located
 
     println!("### Complete Pipeline Report");
     println!("{}", report.summary);
-    println!("Total checks: {}/{} passed", report.passed_checks, report.total_checks);
+    println!(
+        "Total checks: {}/{} passed",
+        report.passed_checks, report.total_checks
+    );
 
     if !report.all_warnings().is_empty() {
         println!("\n⚠️  All Warnings:");
@@ -229,15 +259,13 @@ fn demo_query_evaluation() -> Result<()> {
     ];
 
     // Retrieved relationships
-    let relationships = vec![
-        Relationship {
-            source: EntityId::new("e2".to_string()),
-            target: EntityId::new("e3".to_string()),
-            relation_type: "is_a".to_string(),
-            confidence: 0.9,
-            context: vec![],
-        },
-    ];
+    let relationships = vec![Relationship {
+        source: EntityId::new("e2".to_string()),
+        target: EntityId::new("e3".to_string()),
+        relation_type: "is_a".to_string(),
+        confidence: 0.9,
+        context: vec![],
+    }];
 
     // Context chunks
     let chunks = vec![
@@ -261,10 +289,12 @@ fn demo_query_evaluation() -> Result<()> {
     println!("### Query Result Summary");
     println!("Query: {}", result.query);
     println!("Answer length: {} chars", result.answer.len());
-    println!("Retrieved: {} entities, {} relationships, {} chunks",
+    println!(
+        "Retrieved: {} entities, {} relationships, {} chunks",
         result.metadata.entities_count,
         result.metadata.relationships_count,
-        result.metadata.chunks_count);
+        result.metadata.chunks_count
+    );
     println!("Retrieval strategy: {}", result.metadata.retrieval_strategy);
     println!("Processing time: {}ms", result.metadata.processing_time_ms);
     println!();
@@ -317,7 +347,10 @@ fn demo_query_evaluation() -> Result<()> {
     println!("Passes threshold 5.0: {}", evaluation.passes_threshold(5.0));
 
     let (weak_dim, weak_score) = evaluation.weakest_dimension();
-    println!("\nWeakest dimension: {} (score: {})", weak_dim, weak_score.score);
+    println!(
+        "\nWeakest dimension: {} (score: {})",
+        weak_dim, weak_score.score
+    );
     println!("Recommendation: {}", weak_score.reasoning);
 
     Ok(())

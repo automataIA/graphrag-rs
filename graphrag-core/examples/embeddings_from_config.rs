@@ -7,7 +7,6 @@
 ///! ```bash
 ///! cargo run --example embeddings_from_config --features "ureq,huggingface-hub"
 ///! ```
-
 use graphrag_core::embeddings::config::EmbeddingProviderConfig;
 use graphrag_core::embeddings::EmbeddingProvider;
 
@@ -32,12 +31,12 @@ async fn main() -> graphrag_core::core::error::Result<()> {
             println!("   Model: {}", cfg.model);
             println!("   Batch size: {}", cfg.batch_size);
             cfg
-        }
+        },
         Err(e) => {
             println!("   ⚠️  Failed to load config: {}", e);
             println!("   Using default configuration instead\n");
             EmbeddingProviderConfig::default()
-        }
+        },
     };
 
     // Convert to EmbeddingConfig
@@ -69,10 +68,10 @@ async fn main() -> graphrag_core::core::error::Result<()> {
                                         "   ✅ Generated embedding: {} dimensions",
                                         embedding.len()
                                     );
-                                }
+                                },
                                 Err(e) => println!("   ⚠️  Embedding failed: {}", e),
                             }
-                        }
+                        },
                         Err(e) => println!("   ⚠️  Initialization failed: {}", e),
                     }
                 } else {
@@ -85,7 +84,7 @@ async fn main() -> graphrag_core::core::error::Result<()> {
                 println!("   ⚠️  HuggingFace feature not enabled");
                 println!("   Enable with: --features huggingface-hub");
             }
-        }
+        },
         _ => {
             #[cfg(feature = "ureq")]
             {
@@ -104,14 +103,14 @@ async fn main() -> graphrag_core::core::error::Result<()> {
                                         "   ✅ Generated embedding: {} dimensions",
                                         embedding.len()
                                     );
-                                }
+                                },
                                 Err(e) => println!("   ⚠️  API call failed: {}", e),
                             }
                         } else {
                             println!("   ⚠️  API key not set");
                             println!("   Set api_key in config or use environment variable");
                         }
-                    }
+                    },
                     Err(e) => println!("   ⚠️  Failed to create provider: {}", e),
                 }
             }
@@ -121,7 +120,7 @@ async fn main() -> graphrag_core::core::error::Result<()> {
                 println!("   ⚠️  HTTP features not enabled");
                 println!("   Enable with: --features ureq");
             }
-        }
+        },
     }
 
     println!("\n3️⃣  Example configurations:");

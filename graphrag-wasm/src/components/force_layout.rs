@@ -198,10 +198,9 @@ impl ForceLayout {
     /// Calculate attractive forces along edges
     fn calculate_attraction(&mut self) {
         for edge in &self.edges {
-            if let (Some(source_node), Some(target_node)) = (
-                self.nodes.get(&edge.source),
-                self.nodes.get(&edge.target),
-            ) {
+            if let (Some(source_node), Some(target_node)) =
+                (self.nodes.get(&edge.source), self.nodes.get(&edge.target))
+            {
                 let delta = target_node.position.sub(&source_node.position);
                 let distance = delta.magnitude().max(1.0);
 
@@ -223,7 +222,10 @@ impl ForceLayout {
     fn update_positions(&mut self) {
         for node in self.nodes.values_mut() {
             // Update velocity with damping
-            node.velocity = node.velocity.mul(self.config.damping).add(&node.force.mul(self.config.dt));
+            node.velocity = node
+                .velocity
+                .mul(self.config.damping)
+                .add(&node.force.mul(self.config.dt));
 
             // Update position
             node.position = node.position.add(&node.velocity.mul(self.config.dt));
@@ -233,8 +235,16 @@ impl ForceLayout {
             let half_width = self.config.width / 2.0;
             let half_height = self.config.height / 2.0;
 
-            node.position.x = node.position.x.max(-half_width + margin).min(half_width - margin);
-            node.position.y = node.position.y.max(-half_height + margin).min(half_height - margin);
+            node.position.x = node
+                .position
+                .x
+                .max(-half_width + margin)
+                .min(half_width - margin);
+            node.position.y = node
+                .position
+                .y
+                .max(-half_height + margin)
+                .min(half_height - margin);
 
             // Reset force
             node.force = Vec2::default();
@@ -243,7 +253,9 @@ impl ForceLayout {
 
     /// Check if layout has converged
     fn has_converged(&self) -> bool {
-        let total_movement: f64 = self.nodes.values()
+        let total_movement: f64 = self
+            .nodes
+            .values()
             .map(|node| node.velocity.magnitude())
             .sum();
 
@@ -270,14 +282,17 @@ impl ForceLayout {
 
     /// Get node positions
     pub fn get_positions(&self) -> HashMap<String, (f64, f64)> {
-        self.nodes.iter()
+        self.nodes
+            .iter()
             .map(|(id, node)| (id.clone(), (node.position.x, node.position.y)))
             .collect()
     }
 
     /// Get a specific node position
     pub fn get_position(&self, id: &str) -> Option<(f64, f64)> {
-        self.nodes.get(id).map(|node| (node.position.x, node.position.y))
+        self.nodes
+            .get(id)
+            .map(|node| (node.position.x, node.position.y))
     }
 
     /// Clear all nodes and edges

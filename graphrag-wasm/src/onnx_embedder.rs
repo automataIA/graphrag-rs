@@ -26,12 +26,12 @@
 //! | MiniLM-L6 | 80ms | 3ms | 27x |
 //! | BERT-base | 200ms | 8ms | 25x |
 
+use js_sys::{Array, Object, Promise, Reflect};
+use std::str::FromStr;
+use tokenizers::Tokenizer;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
-use tokenizers::Tokenizer;
-use std::str::FromStr;
-use js_sys::{Object, Reflect, Array, Promise};
 
 /// ONNX Runtime Web bindings
 #[wasm_bindgen]
@@ -76,9 +76,14 @@ impl std::fmt::Display for OnnxEmbedderError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             OnnxEmbedderError::RuntimeNotAvailable => {
-                write!(f, "ONNX Runtime not available - add <script src='onnxruntime-web'> to HTML")
-            }
-            OnnxEmbedderError::ModelNotLoaded => write!(f, "Model not loaded - call load_model() first"),
+                write!(
+                    f,
+                    "ONNX Runtime not available - add <script src='onnxruntime-web'> to HTML"
+                )
+            },
+            OnnxEmbedderError::ModelNotLoaded => {
+                write!(f, "Model not loaded - call load_model() first")
+            },
             OnnxEmbedderError::InferenceFailed(msg) => write!(f, "Inference failed: {}", msg),
             OnnxEmbedderError::InvalidInput(msg) => write!(f, "Invalid input: {}", msg),
             OnnxEmbedderError::WebGPUNotAvailable => write!(f, "WebGPU not available"),
@@ -89,7 +94,9 @@ impl std::fmt::Display for OnnxEmbedderError {
 impl From<JsValue> for OnnxEmbedderError {
     fn from(value: JsValue) -> Self {
         OnnxEmbedderError::InferenceFailed(
-            value.as_string().unwrap_or_else(|| "Unknown error".to_string())
+            value
+                .as_string()
+                .unwrap_or_else(|| "Unknown error".to_string()),
         )
     }
 }
@@ -144,7 +151,10 @@ impl OnnxEmbedder {
     /// let tokenizer_json = response.text().await?;
     /// let embedder = OnnxEmbedder::from_tokenizer_json(384, &tokenizer_json)?;
     /// ```
-    pub fn from_tokenizer_json(dimension: usize, tokenizer_json: &str) -> Result<Self, OnnxEmbedderError> {
+    pub fn from_tokenizer_json(
+        dimension: usize,
+        tokenizer_json: &str,
+    ) -> Result<Self, OnnxEmbedderError> {
         if !is_onnx_available() {
             return Err(OnnxEmbedderError::RuntimeNotAvailable);
         }
@@ -152,10 +162,9 @@ impl OnnxEmbedder {
         let max_length = 128; // Standard for most BERT models
 
         // Create HuggingFace tokenizer from JSON (WASM-compatible!)
-        let tokenizer = Tokenizer::from_str(tokenizer_json)
-            .map_err(|e| OnnxEmbedderError::InvalidInput(
-                format!("Could not create tokenizer from JSON: {}", e)
-            ))?;
+        let tokenizer = Tokenizer::from_str(tokenizer_json).map_err(|e| {
+            OnnxEmbedderError::InvalidInput(format!("Could not create tokenizer from JSON: {}", e))
+        })?;
 
         Ok(Self {
             dimension,
@@ -171,12 +180,15 @@ impl OnnxEmbedder {
     /// # Arguments
     /// * `model_url` - URL to ONNX model file
     /// * `use_webgpu` - Use WebGPU acceleration (recommended)
-    pub async fn load_model(&mut self, model_url: &str, _use_webgpu: bool) -> Result<(), OnnxEmbedderError> {
+    pub async fn load_model(
+        &mut self,
+        model_url: &str,
+        _use_webgpu: bool,
+    ) -> Result<(), OnnxEmbedderError> {
         web_sys::console::log_1(&format!("Loading ONNX model from: {}", model_url).into());
 
         // Get window.ort.InferenceSession
-        let window = web_sys::window()
-            .ok_or(OnnxEmbedderError::RuntimeNotAvailable)?;
+        let window = web_sys::window().ok_or(OnnxEmbedderError::RuntimeNotAvailable)?;
         let ort = Reflect::get(&window, &JsValue::from_str("ort"))
             .map_err(|_| OnnxEmbedderError::RuntimeNotAvailable)?;
         let inference_session_class = Reflect::get(&ort, &JsValue::from_str("InferenceSession"))
@@ -196,27 +208,28 @@ impl OnnxEmbedder {
             &options,
             &JsValue::from_str("executionProviders"),
             &providers,
-        ).map_err(|_| OnnxEmbedderError::WebGPUNotAvailable)?;
+        )
+        .map_err(|_| OnnxEmbedderError::WebGPUNotAvailable)?;
 
         // Call ort.InferenceSession.create(model_url, options)
         let args = Array::new();
         args.push(&JsValue::from_str(model_url));
         args.push(&options.into());
 
-        let session_promise = Reflect::apply(
-            &create_fn.into(),
-            &inference_session_class,
-            &args
-        ).map_err(|e| OnnxEmbedderError::InferenceFailed(
-            format!("Failed to call InferenceSession.create(): {:?}", e)
-        ))?;
+        let session_promise = Reflect::apply(&create_fn.into(), &inference_session_class, &args)
+            .map_err(|e| {
+                OnnxEmbedderError::InferenceFailed(format!(
+                    "Failed to call InferenceSession.create(): {:?}",
+                    e
+                ))
+            })?;
 
         // Await the promise
         let session_value = JsFuture::from(Promise::from(session_promise))
             .await
-            .map_err(|e| OnnxEmbedderError::InferenceFailed(
-                format!("Failed to load model: {:?}", e)
-            ))?;
+            .map_err(|e| {
+                OnnxEmbedderError::InferenceFailed(format!("Failed to load model: {:?}", e))
+            })?;
 
         // Cast to InferenceSession
         let session: InferenceSession = session_value.unchecked_into();
@@ -237,7 +250,9 @@ impl OnnxEmbedder {
     /// # Returns
     /// Embedding vector
     pub async fn embed(&self, text: &str) -> Result<Vec<f32>, OnnxEmbedderError> {
-        let session = self.session.as_ref()
+        let session = self
+            .session
+            .as_ref()
             .ok_or(OnnxEmbedderError::ModelNotLoaded)?;
 
         if text.is_empty() {
@@ -245,14 +260,18 @@ impl OnnxEmbedder {
         }
 
         // Tokenize using HuggingFace tokenizer
-        let encoding = self.tokenizer.encode(text, false)
-            .map_err(|e| OnnxEmbedderError::InvalidInput(
-                format!("Tokenization failed: {}", e)
-            ))?;
+        let encoding = self
+            .tokenizer
+            .encode(text, false)
+            .map_err(|e| OnnxEmbedderError::InvalidInput(format!("Tokenization failed: {}", e)))?;
 
         // Get input_ids and attention_mask
         let input_ids: Vec<i64> = encoding.get_ids().iter().map(|&id| id as i64).collect();
-        let attention_mask: Vec<i64> = encoding.get_attention_mask().iter().map(|&m| m as i64).collect();
+        let attention_mask: Vec<i64> = encoding
+            .get_attention_mask()
+            .iter()
+            .map(|&m| m as i64)
+            .collect();
 
         // Pad or truncate to max_length
         let mut padded_input_ids = input_ids;
@@ -269,8 +288,14 @@ impl OnnxEmbedder {
         let feeds = Object::new();
 
         // Create int64 tensors (required by ONNX models)
-        web_sys::console::log_1(&format!("Creating input tensors: dims=[1, {}], len={}",
-            self.max_length, padded_input_ids.len()).into());
+        web_sys::console::log_1(
+            &format!(
+                "Creating input tensors: dims=[1, {}], len={}",
+                self.max_length,
+                padded_input_ids.len()
+            )
+            .into(),
+        );
 
         // Use BigInt64Array for int64 support
         let input_ids_array = js_sys::BigInt64Array::new_with_length(self.max_length as u32);
@@ -313,12 +338,11 @@ impl OnnxEmbedder {
 
         // Run inference
         web_sys::console::log_1(&"🔄 Running ONNX inference...".into());
-        let output = session.run(feeds.into()).await
-            .map_err(|e| {
-                let error_msg = format!("ONNX inference failed: {:?}", e);
-                web_sys::console::error_1(&error_msg.clone().into());
-                OnnxEmbedderError::InferenceFailed(error_msg)
-            })?;
+        let output = session.run(feeds.into()).await.map_err(|e| {
+            let error_msg = format!("ONNX inference failed: {:?}", e);
+            web_sys::console::error_1(&error_msg.clone().into());
+            OnnxEmbedderError::InferenceFailed(error_msg)
+        })?;
         web_sys::console::log_1(&"✅ ONNX inference completed".into());
 
         // Extract embeddings from output
@@ -348,15 +372,16 @@ impl OnnxEmbedder {
     /// Extract embedding from ONNX output
     fn extract_embedding(&self, output: JsValue) -> Result<Vec<f32>, OnnxEmbedderError> {
         // Try to get "last_hidden_state" or "pooler_output"
-        let tensor = if let Ok(last_hidden) = js_sys::Reflect::get(&output, &"last_hidden_state".into()) {
-            last_hidden
-        } else if let Ok(pooler) = js_sys::Reflect::get(&output, &"pooler_output".into()) {
-            pooler
-        } else {
-            return Err(OnnxEmbedderError::InferenceFailed(
-                "Could not find output tensor".to_string()
-            ));
-        };
+        let tensor =
+            if let Ok(last_hidden) = js_sys::Reflect::get(&output, &"last_hidden_state".into()) {
+                last_hidden
+            } else if let Ok(pooler) = js_sys::Reflect::get(&output, &"pooler_output".into()) {
+                pooler
+            } else {
+                return Err(OnnxEmbedderError::InferenceFailed(
+                    "Could not find output tensor".to_string(),
+                ));
+            };
 
         // Get data array
         let tensor_data = js_sys::Reflect::get(&tensor, &"data".into())
@@ -423,9 +448,7 @@ impl Clone for WasmOnnxEmbedder {
     fn clone(&self) -> Self {
         // We can't clone OnnxEmbedder, so clones will have None
         // User must create new instances
-        Self {
-            inner: None,
-        }
+        Self { inner: None }
     }
 }
 
@@ -456,8 +479,14 @@ impl WasmOnnxEmbedder {
     /// # Arguments
     /// * `model_url` - URL to ONNX model file (e.g., "./models/minilm-l6.onnx")
     /// * `use_webgpu` - Use WebGPU acceleration (default: true)
-    pub async fn load_model(&mut self, model_url: &str, use_webgpu: Option<bool>) -> Result<(), JsValue> {
-        let embedder = self.inner.as_mut()
+    pub async fn load_model(
+        &mut self,
+        model_url: &str,
+        use_webgpu: Option<bool>,
+    ) -> Result<(), JsValue> {
+        let embedder = self
+            .inner
+            .as_mut()
             .ok_or_else(|| JsValue::from_str("Embedder not initialized"))?;
 
         embedder
@@ -468,7 +497,9 @@ impl WasmOnnxEmbedder {
 
     /// Generate embedding for text
     pub async fn embed(&self, text: &str) -> Result<js_sys::Float32Array, JsValue> {
-        let embedder = self.inner.as_ref()
+        let embedder = self
+            .inner
+            .as_ref()
             .ok_or_else(|| JsValue::from_str("Embedder not initialized"))?;
 
         let embedding = embedder
@@ -481,7 +512,9 @@ impl WasmOnnxEmbedder {
 
     /// Generate embeddings for multiple texts
     pub async fn embed_batch(&self, texts: Vec<String>) -> Result<js_sys::Array, JsValue> {
-        let embedder = self.inner.as_ref()
+        let embedder = self
+            .inner
+            .as_ref()
             .ok_or_else(|| JsValue::from_str("Embedder not initialized"))?;
 
         let text_refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
@@ -512,7 +545,8 @@ impl WasmOnnxEmbedder {
 
     /// Get model name
     pub fn model_name(&self) -> Option<String> {
-        self.inner.as_ref()
+        self.inner
+            .as_ref()
             .and_then(|e| e.model_name().map(|s| s.to_string()))
     }
 }

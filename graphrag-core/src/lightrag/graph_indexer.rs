@@ -77,7 +77,10 @@ impl GraphIndexer {
             let phrase = window.join(" ");
 
             // Look for capitalized phrases
-            if window.iter().all(|w| w.chars().next().map_or(false, |c| c.is_uppercase())) {
+            if window
+                .iter()
+                .all(|w| w.chars().next().map_or(false, |c| c.is_uppercase()))
+            {
                 entities.push(ExtractedEntity {
                     id: format!("entity_{}", entity_id),
                     name: phrase.clone(),
@@ -115,7 +118,11 @@ impl GraphIndexer {
     }
 
     /// Extract relationships between entities using pattern matching
-    fn extract_relationships(&self, text: &str, entities: &[ExtractedEntity]) -> Vec<ExtractedRelationship> {
+    fn extract_relationships(
+        &self,
+        text: &str,
+        entities: &[ExtractedEntity],
+    ) -> Vec<ExtractedRelationship> {
         let mut relationships = Vec::new();
         let text_lower = text.to_lowercase();
 
@@ -181,12 +188,16 @@ impl GraphIndexer {
                                 let mut confidence: f32 = *base_confidence;
 
                                 // Higher confidence for type-appropriate relationships
-                                match (*rel_type, first.entity_type.as_str(), second.entity_type.as_str()) {
+                                match (
+                                    *rel_type,
+                                    first.entity_type.as_str(),
+                                    second.entity_type.as_str(),
+                                ) {
                                     ("works_at", "person", "organization") => confidence += 0.2,
                                     ("located_in", _, "location") => confidence += 0.2,
                                     ("founded", "person", "organization") => confidence += 0.2,
                                     ("manages", "person", _) => confidence += 0.1,
-                                    _ => {}
+                                    _ => {},
                                 }
 
                                 confidence = confidence.min(1.0);
@@ -201,7 +212,9 @@ impl GraphIndexer {
                                 } else {
                                     // Some relationships are bidirectional or should be reversed
                                     let (final_source, final_target) = match *rel_type {
-                                        "works_at" | "located_in" | "from" => (second.name.clone(), first.name.clone()),
+                                        "works_at" | "located_in" | "from" => {
+                                            (second.name.clone(), first.name.clone())
+                                        },
                                         _ => (first.name.clone(), second.name.clone()),
                                     };
                                     relationships.push(ExtractedRelationship {
@@ -221,7 +234,8 @@ impl GraphIndexer {
 
         // Deduplicate relationships
         relationships.sort_by(|a, b| {
-            a.source.cmp(&b.source)
+            a.source
+                .cmp(&b.source)
                 .then(a.target.cmp(&b.target))
                 .then(a.relation_type.cmp(&b.relation_type))
         });

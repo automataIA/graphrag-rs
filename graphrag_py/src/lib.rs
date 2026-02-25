@@ -56,17 +56,24 @@ impl PyGraphRAG {
     ///     RuntimeError: If initialization fails
     #[staticmethod]
     fn default_local() -> PyResult<Self> {
-        let rag = GraphRAG::default_local()
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Failed to create GraphRAG: {}", e)))?;
+        let rag = GraphRAG::default_local().map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                "Failed to create GraphRAG: {}",
+                e
+            ))
+        })?;
 
         let inner = Arc::new(Mutex::new(rag));
 
         // Initialize the GraphRAG system
         {
             let mut guard = inner.blocking_lock();
-            guard
-                .initialize()
-                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Failed to initialize GraphRAG: {}", e)))?;
+            guard.initialize().map_err(|e| {
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                    "Failed to initialize GraphRAG: {}",
+                    e
+                ))
+            })?;
         }
 
         Ok(PyGraphRAG { inner })
@@ -84,14 +91,26 @@ impl PyGraphRAG {
     ///     RuntimeError: If initialization fails
     #[staticmethod]
     fn from_config(config_path: String) -> PyResult<Self> {
-        let config = Config::from_file(&config_path)
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Failed to load config: {}", e)))?;
+        let config = Config::from_file(&config_path).map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                "Failed to load config: {}",
+                e
+            ))
+        })?;
 
-        let mut rag = GraphRAG::new(config)
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Failed to create GraphRAG: {}", e)))?;
+        let mut rag = GraphRAG::new(config).map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                "Failed to create GraphRAG: {}",
+                e
+            ))
+        })?;
 
-        rag.initialize()
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Failed to initialize GraphRAG: {}", e)))?;
+        rag.initialize().map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                "Failed to initialize GraphRAG: {}",
+                e
+            ))
+        })?;
 
         Ok(PyGraphRAG {
             inner: Arc::new(Mutex::new(rag)),
@@ -110,13 +129,20 @@ impl PyGraphRAG {
     ///
     /// Raises:
     ///     RuntimeError: If adding the document fails
-    fn add_document_from_text<'p>(&self, py: Python<'p>, text: String) -> PyResult<Bound<'p, PyAny>> {
+    fn add_document_from_text<'p>(
+        &self,
+        py: Python<'p>,
+        text: String,
+    ) -> PyResult<Bound<'p, PyAny>> {
         let inner = self.inner.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let mut guard = inner.lock().await;
-            guard
-                .add_document_from_text(&text)
-                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Failed to add document: {}", e)))?;
+            guard.add_document_from_text(&text).map_err(|e| {
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                    "Failed to add document: {}",
+                    e
+                ))
+            })?;
             Ok(Python::with_gil(|py| py.None()))
         })
     }
@@ -135,10 +161,12 @@ impl PyGraphRAG {
         let inner = self.inner.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let mut guard = inner.lock().await;
-            guard
-                .build_graph()
-                .await
-                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Failed to build graph: {}", e)))?;
+            guard.build_graph().await.map_err(|e| {
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                    "Failed to build graph: {}",
+                    e
+                ))
+            })?;
             Ok(Python::with_gil(|py| py.None()))
         })
     }
@@ -155,9 +183,12 @@ impl PyGraphRAG {
     ///     RuntimeError: If clearing fails
     fn clear_graph(&self) -> PyResult<()> {
         let mut guard = self.inner.blocking_lock();
-        guard
-            .clear_graph()
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Failed to clear graph: {}", e)))?;
+        guard.clear_graph().map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                "Failed to clear graph: {}",
+                e
+            ))
+        })?;
         Ok(())
     }
 
@@ -178,10 +209,9 @@ impl PyGraphRAG {
         let inner = self.inner.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let mut guard = inner.lock().await;
-            let answer = guard
-                .ask(&query)
-                .await
-                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Query failed: {}", e)))?;
+            let answer = guard.ask(&query).await.map_err(|e| {
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Query failed: {}", e))
+            })?;
             Ok(answer)
         })
     }
@@ -203,10 +233,12 @@ impl PyGraphRAG {
         let inner = self.inner.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let mut guard = inner.lock().await;
-            let answer = guard
-                .ask_with_reasoning(&query)
-                .await
-                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Query with reasoning failed: {}", e)))?;
+            let answer = guard.ask_with_reasoning(&query).await.map_err(|e| {
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                    "Query with reasoning failed: {}",
+                    e
+                ))
+            })?;
             Ok(answer)
         })
     }
@@ -252,7 +284,10 @@ fn graphrag_py(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // Add module metadata
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
-    m.add("__doc__", "Python bindings for GraphRAG - Graph-based Retrieval Augmented Generation")?;
+    m.add(
+        "__doc__",
+        "Python bindings for GraphRAG - Graph-based Retrieval Augmented Generation",
+    )?;
 
     Ok(())
 }

@@ -136,6 +136,8 @@ mod tests {
     fn test_is_supported_document() {
         assert!(FileOperations::is_supported_document(Path::new("test.txt")));
         assert!(FileOperations::is_supported_document(Path::new("test.md")));
-        assert!(!FileOperations::is_supported_document(Path::new("test.pdf")));
+        assert!(!FileOperations::is_supported_document(Path::new(
+            "test.pdf"
+        )));
     }
 }

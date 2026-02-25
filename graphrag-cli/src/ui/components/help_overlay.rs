@@ -4,7 +4,7 @@ use crate::theme::Theme;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     text::{Line, Span},
-    widgets::{Block, Borders, BorderType, Clear, Paragraph},
+    widgets::{Block, BorderType, Borders, Clear, Paragraph},
     Frame,
 };
 
@@ -53,7 +53,7 @@ impl super::Component for HelpOverlay {
             crate::action::Action::ToggleHelp => {
                 self.toggle();
                 None
-            }
+            },
             _ => None,
         }
     }
@@ -77,17 +77,13 @@ impl super::Component for HelpOverlay {
 
         let help_text = vec![
             Line::from(""),
-            Line::from(vec![
-                Span::styled("Global Shortcuts", self.theme.title()),
-            ]),
+            Line::from(vec![Span::styled("Global Shortcuts", self.theme.title())]),
             Line::from("━".repeat(55)),
             keybinding_line("?", "Toggle this help overlay", &self.theme),
             keybinding_line("q / Ctrl+C", "Quit application", &self.theme),
             keybinding_line("Tab", "Switch focus between panes", &self.theme),
             Line::from(""),
-            Line::from(vec![
-                Span::styled("Input Box", self.theme.title()),
-            ]),
+            Line::from(vec![Span::styled("Input Box", self.theme.title())]),
             Line::from("━".repeat(55)),
             keybinding_line("Enter", "Submit query or /command", &self.theme),
             keybinding_line("Ctrl+D", "Clear input", &self.theme),
@@ -97,9 +93,10 @@ impl super::Component for HelpOverlay {
                 Span::styled("Type queries directly or use /commands", self.theme.text()),
             ]),
             Line::from(""),
-            Line::from(vec![
-                Span::styled("Results Viewer Navigation", self.theme.title()),
-            ]),
+            Line::from(vec![Span::styled(
+                "Results Viewer Navigation",
+                self.theme.title(),
+            )]),
             Line::from("━".repeat(55)),
             keybinding_line("j / ↓", "Scroll down one line", &self.theme),
             keybinding_line("k / ↑", "Scroll up one line", &self.theme),
@@ -108,9 +105,7 @@ impl super::Component for HelpOverlay {
             keybinding_line("Home", "Jump to top", &self.theme),
             keybinding_line("End", "Jump to bottom", &self.theme),
             Line::from(""),
-            Line::from(vec![
-                Span::styled("Slash Commands", self.theme.title()),
-            ]),
+            Line::from(vec![Span::styled("Slash Commands", self.theme.title())]),
             Line::from("━".repeat(55)),
             keybinding_line("/config <file>", "Load configuration", &self.theme),
             keybinding_line("/load <file>", "Load document", &self.theme),
@@ -119,9 +114,7 @@ impl super::Component for HelpOverlay {
             keybinding_line("/workspace <name>", "Switch workspace", &self.theme),
             keybinding_line("/help", "Show command help", &self.theme),
             Line::from(""),
-            Line::from(vec![
-                Span::styled("Status Indicators", self.theme.title()),
-            ]),
+            Line::from(vec![Span::styled("Status Indicators", self.theme.title())]),
             Line::from("━".repeat(55)),
             Line::from(vec![
                 Span::styled("ℹ  ", self.theme.info()),
@@ -138,9 +131,10 @@ impl super::Component for HelpOverlay {
                 Span::styled("Progress", self.theme.text()),
             ]),
             Line::from(""),
-            Line::from(vec![
-                Span::styled("Press ? to close this help", self.theme.dimmed()),
-            ]),
+            Line::from(vec![Span::styled(
+                "Press ? to close this help",
+                self.theme.dimmed(),
+            )]),
         ];
 
         let paragraph = Paragraph::new(help_text)

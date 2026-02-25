@@ -22,8 +22,8 @@
 //! - arXiv:2510.24120v1
 
 use super::concept_graph::ConceptGraph;
-use petgraph::prelude::*;
 use petgraph::algo::page_rank;
+use petgraph::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -154,10 +154,9 @@ impl ConceptRanker {
             let idf_score = idf_scores.get(concept_text).copied().unwrap_or(0.0);
 
             // Weighted combination
-            let combined_score =
-                (self.config.degree_weight * degree_score) +
-                (self.config.pagerank_weight * pagerank_score) +
-                (self.config.idf_weight * idf_score);
+            let combined_score = (self.config.degree_weight * degree_score)
+                + (self.config.pagerank_weight * pagerank_score)
+                + (self.config.idf_weight * idf_score);
 
             // Skip concepts below threshold
             if combined_score < self.config.min_score {
@@ -177,7 +176,9 @@ impl ConceptRanker {
 
         // Sort by score descending
         ranked_concepts.sort_by(|a, b| {
-            b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal)
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         ranked_concepts
@@ -199,8 +200,14 @@ impl ConceptRanker {
 
         for (concept_text, &node_idx) in &graph.concept_to_node {
             // Count both incoming and outgoing edges
-            let in_degree = graph.graph.neighbors_directed(node_idx, Direction::Incoming).count();
-            let out_degree = graph.graph.neighbors_directed(node_idx, Direction::Outgoing).count();
+            let in_degree = graph
+                .graph
+                .neighbors_directed(node_idx, Direction::Incoming)
+                .count();
+            let out_degree = graph
+                .graph
+                .neighbors_directed(node_idx, Direction::Outgoing)
+                .count();
             let total_degree = (in_degree + out_degree) as f32;
 
             // Normalize to [0, 1]
@@ -222,7 +229,7 @@ impl ConceptRanker {
         let pr_scores = page_rank(
             &graph.graph,
             self.config.pagerank_damping,
-            None,  // max_iterations (None = use default)
+            None, // max_iterations (None = use default)
         );
 
         // Find max score for normalization
@@ -405,20 +412,44 @@ impl ConceptRanker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lightrag::concept_graph::{ConceptGraphBuilder, ConceptExtractor};
+    use crate::lightrag::concept_graph::{ConceptExtractor, ConceptGraphBuilder};
 
     #[test]
     fn test_concept_ranking() {
         let mut builder = ConceptGraphBuilder::new();
 
         // Build a small test graph
-        builder.add_document_concepts("doc1", vec!["machine learning".to_string(), "neural networks".to_string()]);
-        builder.add_document_concepts("doc2", vec!["machine learning".to_string(), "deep learning".to_string()]);
-        builder.add_document_concepts("doc3", vec!["neural networks".to_string(), "deep learning".to_string()]);
+        builder.add_document_concepts(
+            "doc1",
+            vec![
+                "machine learning".to_string(),
+                "neural networks".to_string(),
+            ],
+        );
+        builder.add_document_concepts(
+            "doc2",
+            vec!["machine learning".to_string(), "deep learning".to_string()],
+        );
+        builder.add_document_concepts(
+            "doc3",
+            vec!["neural networks".to_string(), "deep learning".to_string()],
+        );
 
-        builder.add_chunk_concepts("chunk1", vec!["machine learning".to_string(), "neural networks".to_string()]);
-        builder.add_chunk_concepts("chunk2", vec!["machine learning".to_string(), "deep learning".to_string()]);
-        builder.add_chunk_concepts("chunk3", vec!["neural networks".to_string(), "deep learning".to_string()]);
+        builder.add_chunk_concepts(
+            "chunk1",
+            vec![
+                "machine learning".to_string(),
+                "neural networks".to_string(),
+            ],
+        );
+        builder.add_chunk_concepts(
+            "chunk2",
+            vec!["machine learning".to_string(), "deep learning".to_string()],
+        );
+        builder.add_chunk_concepts(
+            "chunk3",
+            vec!["neural networks".to_string(), "deep learning".to_string()],
+        );
 
         let graph = builder.build();
 

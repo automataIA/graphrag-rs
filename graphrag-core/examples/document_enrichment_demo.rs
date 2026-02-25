@@ -9,7 +9,7 @@
 
 use graphrag_core::{
     core::{Document, DocumentId},
-    text::{ChunkEnricher, LayoutParser, TextProcessor, parsers::*},
+    text::{parsers::*, ChunkEnricher, LayoutParser, TextProcessor},
     Result,
 };
 
@@ -89,7 +89,10 @@ are effective for sequential data.
     // Display first few chunks with their metadata
     for (idx, chunk) in chunks.iter().take(3).enumerate() {
         println!("Chunk #{}", idx + 1);
-        println!("  Content: {}...", &chunk.content[..chunk.content.len().min(80)]);
+        println!(
+            "  Content: {}...",
+            &chunk.content[..chunk.content.len().min(80)]
+        );
 
         if let Some(chapter) = &chunk.metadata.chapter {
             println!("  📖 Chapter: {}", chapter);
@@ -175,7 +178,12 @@ each have their strengths for different use cases.</p>
     for (idx, chunk) in chunks.iter().enumerate() {
         if !chunk.metadata.heading_path.is_empty() {
             let indent = "  ".repeat(chunk.metadata.heading_path.len() - 1);
-            println!("  {}└─ Chunk {} at: {}", indent, idx + 1, chunk.metadata.heading_path.last().unwrap());
+            println!(
+                "  {}└─ Chunk {} at: {}",
+                indent,
+                idx + 1,
+                chunk.metadata.heading_path.last().unwrap()
+            );
         }
     }
 
@@ -225,7 +233,10 @@ average case lookups.
     // Use automatic parser detection
     let chunks = processor.chunk_hierarchical_and_enrich(&document)?;
 
-    println!("✅ Generated {} enriched chunks with hierarchical boundaries\n", chunks.len());
+    println!(
+        "✅ Generated {} enriched chunks with hierarchical boundaries\n",
+        chunks.len()
+    );
 
     // Show detected structure
     println!("🔍 Detected Structure:");
@@ -238,11 +249,24 @@ average case lookups.
     }
 
     println!("\n📊 Chunk Metadata Coverage:");
-    let with_chapter = chunks.iter().filter(|c| c.metadata.chapter.is_some()).count();
-    let with_keywords = chunks.iter().filter(|c| !c.metadata.keywords.is_empty()).count();
-    let with_summary = chunks.iter().filter(|c| c.metadata.summary.is_some()).count();
+    let with_chapter = chunks
+        .iter()
+        .filter(|c| c.metadata.chapter.is_some())
+        .count();
+    let with_keywords = chunks
+        .iter()
+        .filter(|c| !c.metadata.keywords.is_empty())
+        .count();
+    let with_summary = chunks
+        .iter()
+        .filter(|c| c.metadata.summary.is_some())
+        .count();
 
-    println!("  Chunks with chapter info: {}/{}", with_chapter, chunks.len());
+    println!(
+        "  Chunks with chapter info: {}/{}",
+        with_chapter,
+        chunks.len()
+    );
     println!("  Chunks with keywords: {}/{}", with_keywords, chunks.len());
     println!("  Chunks with summaries: {}/{}", with_summary, chunks.len());
 
@@ -289,14 +313,20 @@ for frequently accessed data and session management.
     println!("🎯 Hierarchical + Enrichment:");
     println!("  Chunks: {}", enriched_chunks.len());
 
-    let keywords_count: usize = enriched_chunks.iter()
+    let keywords_count: usize = enriched_chunks
+        .iter()
         .map(|c| c.metadata.keywords.len())
         .sum();
     let avg_keywords = keywords_count as f32 / enriched_chunks.len() as f32;
 
     println!("  Avg keywords per chunk: {:.1}", avg_keywords);
-    println!("  Chunks with structure: {}",
-        enriched_chunks.iter().filter(|c| c.metadata.chapter.is_some()).count());
+    println!(
+        "  Chunks with structure: {}",
+        enriched_chunks
+            .iter()
+            .filter(|c| c.metadata.chapter.is_some())
+            .count()
+    );
 
     // Show metadata completeness
     println!("\n📈 Metadata Completeness:");

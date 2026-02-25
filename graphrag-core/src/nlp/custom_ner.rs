@@ -14,9 +14,9 @@
 //! - Custom product names
 //! - Technical jargon extraction
 
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use regex::Regex;
 
 /// Entity type definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -122,7 +122,8 @@ impl CustomNER {
 
     /// Register entity type
     pub fn register_entity_type(&mut self, entity_type: EntityType) {
-        self.entity_types.insert(entity_type.name.clone(), entity_type);
+        self.entity_types
+            .insert(entity_type.name.clone(), entity_type);
     }
 
     /// Add extraction rule
@@ -219,7 +220,10 @@ impl CustomNER {
         let mut pos = 0;
 
         for word in words {
-            if word.to_lowercase().starts_with(&rule.pattern.to_lowercase()) {
+            if word
+                .to_lowercase()
+                .starts_with(&rule.pattern.to_lowercase())
+            {
                 entities.push(ExtractedEntity {
                     text: word.to_string(),
                     entity_type: rule.entity_type.clone(),
@@ -355,7 +359,8 @@ impl CustomNER {
 
         // Sort by position, then by confidence (descending)
         entities.sort_by(|a, b| {
-            a.start.cmp(&b.start)
+            a.start
+                .cmp(&b.start)
                 .then(b.confidence.partial_cmp(&a.confidence).unwrap())
         });
 
@@ -477,10 +482,7 @@ mod tests {
 
     #[test]
     fn test_entity_type_creation() {
-        let mut entity_type = EntityType::new(
-            "PROTEIN".to_string(),
-            "Protein names".to_string(),
-        );
+        let mut entity_type = EntityType::new("PROTEIN".to_string(), "Protein names".to_string());
 
         entity_type.add_example("hemoglobin".to_string());
         entity_type.add_example("insulin".to_string());
@@ -539,10 +541,7 @@ mod tests {
     fn test_dictionary_extraction() {
         let mut ner = CustomNER::new();
 
-        let mut protein_type = EntityType::new(
-            "PROTEIN".to_string(),
-            "Protein names".to_string(),
-        );
+        let mut protein_type = EntityType::new("PROTEIN".to_string(), "Protein names".to_string());
         protein_type.add_dictionary_entries(vec![
             "insulin".to_string(),
             "hemoglobin".to_string(),
@@ -627,16 +626,14 @@ mod tests {
 
         let example = AnnotatedExample {
             text: "Insulin regulates glucose.".to_string(),
-            entities: vec![
-                ExtractedEntity {
-                    text: "Insulin".to_string(),
-                    entity_type: "PROTEIN".to_string(),
-                    start: 0,
-                    end: 7,
-                    confidence: 1.0,
-                    rule_name: "manual".to_string(),
-                },
-            ],
+            entities: vec![ExtractedEntity {
+                text: "Insulin".to_string(),
+                entity_type: "PROTEIN".to_string(),
+                start: 0,
+                end: 7,
+                confidence: 1.0,
+                rule_name: "manual".to_string(),
+            }],
         };
 
         dataset.add_example(example);

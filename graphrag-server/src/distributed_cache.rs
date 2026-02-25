@@ -35,11 +35,11 @@
 //! └─────────────────────────────────────┘
 //! ```
 
+use parking_lot::RwLock;
 use redis::{Client, Commands, RedisError};
 use serde::{de::DeserializeOwned, Serialize};
-use std::sync::Arc;
-use parking_lot::RwLock;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// Cache entry with metadata
@@ -166,17 +166,17 @@ impl DistributedCache {
                         Ok(_) => {
                             tracing::info!("✅ Redis connected: {}", url);
                             Some(client)
-                        }
+                        },
                         Err(e) => {
                             tracing::warn!("⚠️ Redis connection failed, L2 cache disabled: {}", e);
                             None
-                        }
+                        },
                     }
-                }
+                },
                 Err(e) => {
                     tracing::warn!("⚠️ Redis client creation failed, L2 cache disabled: {}", e);
                     None
-                }
+                },
             }
         } else {
             tracing::info!("Redis URL not provided, L2 cache disabled");
@@ -215,7 +215,7 @@ impl DistributedCache {
                 Ok(val) => return Some(val),
                 Err(e) => {
                     tracing::warn!("Failed to deserialize L1 cache value: {}", e);
-                }
+                },
             }
         }
 
@@ -233,7 +233,7 @@ impl DistributedCache {
                 Ok(val) => return Some(val),
                 Err(e) => {
                     tracing::warn!("Failed to deserialize L2 cache value: {}", e);
-                }
+                },
             }
         }
 
@@ -255,7 +255,7 @@ impl DistributedCache {
             Err(e) => {
                 tracing::error!("Failed to serialize cache value: {}", e);
                 return;
-            }
+            },
         };
 
         // Set in L1
@@ -400,10 +400,7 @@ impl DistributedCache {
     /// Evict from L1 cache using LRU
     fn evict_l1(&self, cache: &mut HashMap<String, CacheEntry<Vec<u8>>>) {
         // Find least recently used entry
-        if let Some((lru_key, _)) = cache
-            .iter()
-            .min_by_key(|(_, entry)| entry.last_accessed)
-        {
+        if let Some((lru_key, _)) = cache.iter().min_by_key(|(_, entry)| entry.last_accessed) {
             let lru_key = lru_key.clone();
             cache.remove(&lru_key);
             self.stats.write().evictions += 1;

@@ -100,7 +100,7 @@ impl Default for CacheConfig {
             enable_warming: false,
             initial_capacity: Some(1_000),
             cleanup_interval_seconds: 300, // 5 minutes
-            max_entry_size: 1024 * 1024, // 1MB
+            max_entry_size: 1024 * 1024,   // 1MB
             enable_compression: false,
             compression_threshold: 1024 * 10, // 10KB
             persistence: PersistenceConfig::default(),
@@ -118,37 +118,38 @@ impl CacheConfig {
     pub fn validate(&self) -> CacheResult<()> {
         if self.max_capacity == 0 {
             return Err(CacheError::Configuration(
-                "max_capacity must be greater than 0".to_string()
+                "max_capacity must be greater than 0".to_string(),
             ));
         }
 
         if self.ttl_seconds == 0 {
             return Err(CacheError::Configuration(
-                "ttl_seconds must be greater than 0".to_string()
+                "ttl_seconds must be greater than 0".to_string(),
             ));
         }
 
         if self.cleanup_interval_seconds == 0 {
             return Err(CacheError::Configuration(
-                "cleanup_interval_seconds must be greater than 0".to_string()
+                "cleanup_interval_seconds must be greater than 0".to_string(),
             ));
         }
 
         if self.max_entry_size == 0 {
             return Err(CacheError::Configuration(
-                "max_entry_size must be greater than 0".to_string()
+                "max_entry_size must be greater than 0".to_string(),
             ));
         }
 
         if self.enable_compression && self.compression_threshold == 0 {
             return Err(CacheError::Configuration(
-                "compression_threshold must be greater than 0 when compression is enabled".to_string()
+                "compression_threshold must be greater than 0 when compression is enabled"
+                    .to_string(),
             ));
         }
 
         if self.persistence.enabled && self.persistence.directory.is_none() {
             return Err(CacheError::Configuration(
-                "persistence directory must be specified when persistence is enabled".to_string()
+                "persistence directory must be specified when persistence is enabled".to_string(),
             ));
         }
 
@@ -174,7 +175,7 @@ impl CacheConfig {
             enable_statistics: true,
             enable_warming: true,
             initial_capacity: Some(10_000),
-            cleanup_interval_seconds: 600, // 10 minutes
+            cleanup_interval_seconds: 600,   // 10 minutes
             max_entry_size: 5 * 1024 * 1024, // 5MB
             enable_compression: true,
             compression_threshold: 50 * 1024, // 50KB
@@ -197,7 +198,7 @@ impl CacheConfig {
             enable_warming: false,
             initial_capacity: Some(100),
             cleanup_interval_seconds: 60, // 1 minute
-            max_entry_size: 1024 * 1024, // 1MB
+            max_entry_size: 1024 * 1024,  // 1MB
             enable_compression: false,
             compression_threshold: 1024 * 10, // 10KB
             persistence: PersistenceConfig::default(),
@@ -213,7 +214,7 @@ impl CacheConfig {
             enable_statistics: false, // Disable for max performance
             enable_warming: true,
             initial_capacity: Some(25_000),
-            cleanup_interval_seconds: 1800, // 30 minutes
+            cleanup_interval_seconds: 1800,   // 30 minutes
             max_entry_size: 10 * 1024 * 1024, // 10MB
             enable_compression: true,
             compression_threshold: 100 * 1024, // 100KB
@@ -357,10 +358,16 @@ mod tests {
 
     #[test]
     fn test_config_validation() {
-        let config = CacheConfig { max_capacity: 0, ..Default::default() };
+        let config = CacheConfig {
+            max_capacity: 0,
+            ..Default::default()
+        };
         assert!(config.validate().is_err());
 
-        let config = CacheConfig { ttl_seconds: 0, ..Default::default() };
+        let config = CacheConfig {
+            ttl_seconds: 0,
+            ..Default::default()
+        };
         assert!(config.validate().is_err());
 
         let config = CacheConfig {

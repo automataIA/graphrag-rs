@@ -92,10 +92,12 @@ impl VectorStore for LanceDBStore {
             .map(|(_, vec, _)| Some(vec.iter().map(|&v| Some(v)).collect()))
             .collect();
 
-        let vector_array = Arc::new(FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
-            embeddings,
-            self.dimension as i32,
-        ));
+        let vector_array = Arc::new(
+            FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
+                embeddings,
+                self.dimension as i32,
+            ),
+        );
 
         // Create schema and RecordBatch
         let schema = Arc::new(Schema::new(vec![
@@ -110,9 +112,11 @@ impl VectorStore for LanceDBStore {
             ),
         ]));
 
-        let batch = RecordBatch::try_new(schema.clone(), vec![id_array, vector_array])
-            .map_err(|e| GraphRAGError::VectorSearch {
-                message: format!("Failed to create record batch: {}", e),
+        let batch =
+            RecordBatch::try_new(schema.clone(), vec![id_array, vector_array]).map_err(|e| {
+                GraphRAGError::VectorSearch {
+                    message: format!("Failed to create record batch: {}", e),
+                }
             })?;
 
         // Add to table

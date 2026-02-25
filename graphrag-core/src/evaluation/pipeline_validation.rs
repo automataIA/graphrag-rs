@@ -3,7 +3,7 @@
 //! This module provides tools to validate each phase of the GraphRAG pipeline,
 //! ensuring that every step produces expected outputs before proceeding.
 
-use crate::{Document, TextChunk, Entity, Relationship};
+use crate::{Document, Entity, Relationship, TextChunk};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -83,14 +83,20 @@ impl DocumentProcessingValidator {
                 passed: coverage_ratio >= 0.9, // At least 90% coverage
                 expected: "Coverage ratio >= 0.9".to_string(),
                 actual: format!("{:.2}", coverage_ratio),
-                message: format!("Chunks cover {:.1}% of original content", coverage_ratio * 100.0),
+                message: format!(
+                    "Chunks cover {:.1}% of original content",
+                    coverage_ratio * 100.0
+                ),
             });
 
             metrics.insert("coverage_ratio".to_string(), coverage_ratio);
         }
 
         // Check 4: No chunk is empty
-        let empty_chunks = chunks.iter().filter(|c| c.content.trim().is_empty()).count();
+        let empty_chunks = chunks
+            .iter()
+            .filter(|c| c.content.trim().is_empty())
+            .count();
         checks.push(ValidationCheck {
             name: "no_empty_chunks".to_string(),
             passed: empty_chunks == 0,
@@ -106,11 +112,11 @@ impl DocumentProcessingValidator {
         // Check 5: Chunk metadata is populated
         let chunks_with_metadata = chunks
             .iter()
-            .filter(|c|
-                c.metadata.chapter.is_some() ||
-                !c.metadata.keywords.is_empty() ||
-                c.metadata.summary.is_some()
-            )
+            .filter(|c| {
+                c.metadata.chapter.is_some()
+                    || !c.metadata.keywords.is_empty()
+                    || c.metadata.summary.is_some()
+            })
             .count();
 
         let metadata_ratio = if chunks.is_empty() {
@@ -122,7 +128,9 @@ impl DocumentProcessingValidator {
         if metadata_ratio < 0.5 {
             warnings.push(format!(
                 "Only {}/{} chunks have enriched metadata ({}%)",
-                chunks_with_metadata, chunks.len(), (metadata_ratio * 100.0) as u32
+                chunks_with_metadata,
+                chunks.len(),
+                (metadata_ratio * 100.0) as u32
             ));
         }
 
@@ -136,8 +144,10 @@ impl DocumentProcessingValidator {
 
         metrics.insert("metadata_ratio".to_string(), metadata_ratio);
         metrics.insert("chunks_count".to_string(), chunks.len() as f64);
-        metrics.insert("avg_chunk_size".to_string(),
-            chunks.iter().map(|c| c.content.len()).sum::<usize>() as f64 / chunks.len().max(1) as f64
+        metrics.insert(
+            "avg_chunk_size".to_string(),
+            chunks.iter().map(|c| c.content.len()).sum::<usize>() as f64
+                / chunks.len().max(1) as f64,
         );
 
         let passed = checks.iter().all(|c| c.passed);
@@ -187,7 +197,10 @@ impl EntityExtractionValidator {
             expected: "All confidences in [0.0, 1.0]".to_string(),
             actual: format!("{} invalid scores", invalid_confidence),
             message: if invalid_confidence > 0 {
-                format!("{} entities have invalid confidence scores", invalid_confidence)
+                format!(
+                    "{} entities have invalid confidence scores",
+                    invalid_confidence
+                )
             } else {
                 "All confidence scores are valid".to_string()
             },
@@ -236,7 +249,10 @@ impl EntityExtractionValidator {
                 expected: "All mentions reference valid chunks".to_string(),
                 actual: format!("{} invalid references", invalid_mentions),
                 message: if invalid_mentions > 0 {
-                    format!("{} entity mentions reference non-existent chunks", invalid_mentions)
+                    format!(
+                        "{} entity mentions reference non-existent chunks",
+                        invalid_mentions
+                    )
                 } else {
                     "All entity mentions are valid".to_string()
                 },
@@ -250,11 +266,14 @@ impl EntityExtractionValidator {
         // Metrics
         metrics.insert("entities_count".to_string(), entities.len() as f64);
         if !entities.is_empty() {
-            metrics.insert("avg_confidence".to_string(),
-                entities.iter().map(|e| e.confidence as f64).sum::<f64>() / entities.len() as f64
+            metrics.insert(
+                "avg_confidence".to_string(),
+                entities.iter().map(|e| e.confidence as f64).sum::<f64>() / entities.len() as f64,
             );
-            metrics.insert("avg_mentions_per_entity".to_string(),
-                entities.iter().map(|e| e.mentions.len()).sum::<usize>() as f64 / entities.len() as f64
+            metrics.insert(
+                "avg_mentions_per_entity".to_string(),
+                entities.iter().map(|e| e.mentions.len()).sum::<usize>() as f64
+                    / entities.len() as f64,
             );
         }
 
@@ -319,14 +338,20 @@ impl RelationshipExtractionValidator {
             expected: "All confidences in [0.0, 1.0]".to_string(),
             actual: format!("{} invalid", invalid_confidence),
             message: if invalid_confidence > 0 {
-                format!("{} relationships have invalid confidence", invalid_confidence)
+                format!(
+                    "{} relationships have invalid confidence",
+                    invalid_confidence
+                )
             } else {
                 "All relationship confidences valid".to_string()
             },
         });
 
         // Check 3: Relationship types are populated
-        let missing_types = relationships.iter().filter(|r| r.relation_type.is_empty()).count();
+        let missing_types = relationships
+            .iter()
+            .filter(|r| r.relation_type.is_empty())
+            .count();
         checks.push(ValidationCheck {
             name: "relationship_types_populated".to_string(),
             passed: missing_types == 0,
@@ -352,26 +377,40 @@ impl RelationshipExtractionValidator {
             expected: "All relationships reference valid entities".to_string(),
             actual: format!("{} orphaned", orphan_relationships),
             message: if orphan_relationships > 0 {
-                format!("{} relationships reference non-existent entities", orphan_relationships)
+                format!(
+                    "{} relationships reference non-existent entities",
+                    orphan_relationships
+                )
             } else {
                 "All relationships have valid entity references".to_string()
             },
         });
 
         if orphan_relationships > 0 {
-            warnings.push("Some relationships reference entities that don't exist in the graph".to_string());
+            warnings.push(
+                "Some relationships reference entities that don't exist in the graph".to_string(),
+            );
         }
 
         // Metrics
-        metrics.insert("relationships_count".to_string(), relationships.len() as f64);
+        metrics.insert(
+            "relationships_count".to_string(),
+            relationships.len() as f64,
+        );
         if !entities.is_empty() {
-            metrics.insert("relationships_per_entity".to_string(),
-                relationships.len() as f64 / entities.len() as f64
+            metrics.insert(
+                "relationships_per_entity".to_string(),
+                relationships.len() as f64 / entities.len() as f64,
             );
         }
         if !relationships.is_empty() {
-            metrics.insert("avg_relationship_confidence".to_string(),
-                relationships.iter().map(|r| r.confidence as f64).sum::<f64>() / relationships.len() as f64
+            metrics.insert(
+                "avg_relationship_confidence".to_string(),
+                relationships
+                    .iter()
+                    .map(|r| r.confidence as f64)
+                    .sum::<f64>()
+                    / relationships.len() as f64,
             );
         }
 
@@ -511,16 +550,22 @@ impl PipelineValidationReport {
             .count();
 
         let summary = if overall_passed {
-            format!("✅ All pipeline phases validated successfully ({}/{} checks passed)",
-                passed_checks, total_checks)
+            format!(
+                "✅ All pipeline phases validated successfully ({}/{} checks passed)",
+                passed_checks, total_checks
+            )
         } else {
             let failed_phases: Vec<_> = phases
                 .iter()
                 .filter(|p| !p.passed)
                 .map(|p| p.phase_name.as_str())
                 .collect();
-            format!("❌ Pipeline validation failed in: {} ({}/{} checks passed)",
-                failed_phases.join(", "), passed_checks, total_checks)
+            format!(
+                "❌ Pipeline validation failed in: {} ({}/{} checks passed)",
+                failed_phases.join(", "),
+                passed_checks,
+                total_checks
+            )
         };
 
         Self {
@@ -537,13 +582,21 @@ impl PipelineValidationReport {
         let mut report = String::new();
         report.push_str("# Pipeline Validation Report\n\n");
         report.push_str(&format!("{}\n\n", self.summary));
-        report.push_str(&format!("**Total Checks**: {}/{} passed\n\n",
-            self.passed_checks, self.total_checks));
+        report.push_str(&format!(
+            "**Total Checks**: {}/{} passed\n\n",
+            self.passed_checks, self.total_checks
+        ));
 
         for phase in &self.phases {
             report.push_str(&format!("## Phase: {}\n", phase.phase_name));
-            report.push_str(&format!("**Status**: {}\n\n",
-                if phase.passed { "✅ PASSED" } else { "❌ FAILED" }));
+            report.push_str(&format!(
+                "**Status**: {}\n\n",
+                if phase.passed {
+                    "✅ PASSED"
+                } else {
+                    "❌ FAILED"
+                }
+            ));
 
             // Checks
             report.push_str("### Checks\n");
@@ -595,7 +648,7 @@ impl PipelineValidationReport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{DocumentId, ChunkId, EntityId};
+    use crate::{ChunkId, DocumentId, EntityId};
 
     #[test]
     fn test_document_processing_validation() {
@@ -629,29 +682,25 @@ mod tests {
 
     #[test]
     fn test_entity_extraction_validation() {
-        let chunks = vec![
-            TextChunk::new(
-                ChunkId::new("c1".to_string()),
-                DocumentId::new("test".to_string()),
-                "Alice works at Stanford".to_string(),
-                0,
-                23,
-            ),
-        ];
+        let chunks = vec![TextChunk::new(
+            ChunkId::new("c1".to_string()),
+            DocumentId::new("test".to_string()),
+            "Alice works at Stanford".to_string(),
+            0,
+            23,
+        )];
 
-        let entities = vec![
-            Entity {
-                id: EntityId::new("e1".to_string()),
-                name: "Alice".to_string(),
-                entity_type: "person".to_string(),
-                confidence: 0.9,
-                mentions: vec![],
-                embedding: None,
-                first_mentioned: None,
-                last_mentioned: None,
-                temporal_validity: None,
-            },
-        ];
+        let entities = vec![Entity {
+            id: EntityId::new("e1".to_string()),
+            name: "Alice".to_string(),
+            entity_type: "person".to_string(),
+            confidence: 0.9,
+            mentions: vec![],
+            embedding: None,
+            first_mentioned: None,
+            last_mentioned: None,
+            temporal_validity: None,
+        }];
 
         let validation = EntityExtractionValidator::validate(&chunks, &entities);
         assert!(validation.passed);
@@ -662,15 +711,13 @@ mod tests {
         let doc_validation = PhaseValidation {
             phase_name: "Test Phase".to_string(),
             passed: true,
-            checks: vec![
-                ValidationCheck {
-                    name: "test_check".to_string(),
-                    passed: true,
-                    expected: "pass".to_string(),
-                    actual: "pass".to_string(),
-                    message: "OK".to_string(),
-                },
-            ],
+            checks: vec![ValidationCheck {
+                name: "test_check".to_string(),
+                passed: true,
+                expected: "pass".to_string(),
+                actual: "pass".to_string(),
+                message: "OK".to_string(),
+            }],
             warnings: vec![],
             metrics: HashMap::new(),
         };

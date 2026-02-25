@@ -49,6 +49,10 @@ pub struct SetConfig {
     #[serde(default)]
     pub ollama: OllamaSetConfig,
 
+    /// GLiNER-Relex extractor configuration
+    #[serde(default)]
+    pub gliner: GlinerSetConfig,
+
     /// Experimental features
     #[serde(default)]
     pub experimental: ExperimentalConfig,
@@ -62,18 +66,26 @@ pub struct SetConfig {
     pub auto_save: AutoSaveSetConfig,
 }
 
-/// Auto-save configuration
+/// Auto-save / storage configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AutoSaveSetConfig {
-    /// Enable auto-save functionality
+    /// Enable persistent storage.
+    /// `false` (default) → graph lives in memory only.
+    /// `true` → graph is saved to disk after `build_graph()` and reloaded on the next run.
     #[serde(default)]
     pub enabled: bool,
+
+    /// Base directory for workspace storage. Required when `enabled = true`.
+    /// Example: `"./output"` or `"/data/graphrag"`.
+    /// The workspace folder is created at `<base_dir>/<workspace_name>/`.
+    #[serde(default)]
+    pub base_dir: Option<String>,
 
     /// Auto-save interval in seconds (0 = save after every graph build)
     #[serde(default = "default_auto_save_interval")]
     pub interval_seconds: u64,
 
-    /// Workspace name for auto-saves (if None, uses "autosave")
+    /// Workspace name — sub-folder inside `base_dir` (default: "default").
     #[serde(default)]
     pub workspace_name: Option<String>,
 
@@ -86,6 +98,7 @@ impl Default for AutoSaveSetConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            base_dir: None,
             interval_seconds: default_auto_save_interval(),
             workspace_name: None,
             max_versions: default_max_auto_save_versions(),
@@ -196,8 +209,8 @@ pub struct EntityExtractionConfig {
     #[serde(default = "default_ner_model")]
     pub model_name: String,
 
-    /// Temperature for LLM generation
-    #[serde(default = "default_temperature")]
+    /// Temperature for entity extraction (0.0 = fully deterministic JSON output)
+    #[serde(default = "default_extraction_temperature")]
     pub temperature: f32,
 
     /// Maximum tokens for extraction
@@ -465,6 +478,71 @@ pub struct OllamaSetConfig {
 
     /// Temperature
     pub temperature: Option<f32>,
+
+    /// How long to keep the model loaded in memory (e.g. "1h", "30m", "0")
+    ///
+    /// Critical for KV Cache efficiency when processing multiple chunks from the same document.
+    pub keep_alive: Option<String>,
+
+    /// Context window size in tokens (overrides Ollama model default)
+    ///
+    /// Ollama silently truncates prompts exceeding the context window.
+    /// Set this when processing long documents to avoid silent truncation.
+    pub num_ctx: Option<u32>,
+}
+
+/// GLiNER-Relex extractor configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GlinerSetConfig {
+    /// Enable GLiNER-Relex extraction
+    #[serde(default)]
+    pub enabled: bool,
+    /// Path to the ONNX model file
+    #[serde(default)]
+    pub model_path: String,
+    /// Path to tokenizer.json (defaults to same dir as model_path)
+    #[serde(default)]
+    pub tokenizer_path: String,
+    /// "span" (default) or "token"
+    #[serde(default = "default_gliner_mode")]
+    pub mode: String,
+    /// Entity labels to extract
+    #[serde(default = "default_gliner_entity_labels")]
+    pub entity_labels: Vec<String>,
+    /// Relation labels to extract
+    #[serde(default = "default_gliner_relation_labels")]
+    pub relation_labels: Vec<String>,
+    /// Minimum entity confidence threshold
+    #[serde(default = "default_entity_threshold")]
+    pub entity_threshold: f32,
+    /// Minimum relation confidence threshold
+    #[serde(default = "default_relation_threshold")]
+    pub relation_threshold: f32,
+    /// Use GPU (CUDA) for inference
+    #[serde(default)]
+    pub use_gpu: bool,
+}
+
+fn default_gliner_mode()            -> String      { "span".to_string() }
+fn default_gliner_entity_labels()   -> Vec<String> { vec!["person".into(), "organization".into(), "location".into()] }
+fn default_gliner_relation_labels() -> Vec<String> { vec!["related to".into(), "part of".into()] }
+fn default_entity_threshold()       -> f32         { 0.4 }
+fn default_relation_threshold()     -> f32         { 0.5 }
+
+impl Default for GlinerSetConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            model_path: String::new(),
+            tokenizer_path: String::new(),
+            mode: default_gliner_mode(),
+            entity_labels: default_gliner_entity_labels(),
+            relation_labels: default_gliner_relation_labels(),
+            entity_threshold: default_entity_threshold(),
+            relation_threshold: default_relation_threshold(),
+            use_gpu: false,
+        }
+    }
 }
 
 /// Experimental features configuration
@@ -751,8 +829,7 @@ pub struct SemanticGraphConfig {
 
 /// Algorithmic/Classic NLP pipeline configuration
 /// Uses pattern matching, TF-IDF, and keyword-based methods
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AlgorithmicPipelineConfig {
     /// Enable algorithmic pipeline
     #[serde(default)]
@@ -1091,6 +1168,9 @@ fn default_ner_model() -> String {
 fn default_temperature() -> f32 {
     0.1
 }
+fn default_extraction_temperature() -> f32 {
+    0.0
+}
 fn default_max_tokens() -> usize {
     2048
 }
@@ -1317,24 +1397,24 @@ fn default_hybrid_fallback_strategy() -> String {
     "semantic_first".to_string()
 }
 fn default_auto_save_interval() -> u64 {
-    300  // 5 minutes
+    300 // 5 minutes
 }
 fn default_max_auto_save_versions() -> usize {
-    5  // Keep 5 versions by default
+    5 // Keep 5 versions by default
 }
 
 // LazyGraphRAG default functions
 fn default_min_concept_length() -> usize {
-    3  // Minimum 3 characters for concepts
+    3 // Minimum 3 characters for concepts
 }
 fn default_max_concept_words() -> usize {
-    5  // Maximum 5 words per concept
+    5 // Maximum 5 words per concept
 }
 fn default_co_occurrence_threshold() -> usize {
-    1  // Minimum 1 shared chunk for relationship
+    1 // Minimum 1 shared chunk for relationship
 }
 fn default_max_refinement_iterations() -> usize {
-    3  // Up to 3 query refinement iterations
+    3 // Up to 3 query refinement iterations
 }
 
 // E2GraphRAG default functions
@@ -1347,10 +1427,10 @@ fn default_e2_entity_types() -> Vec<String> {
     ]
 }
 fn default_e2_min_confidence() -> f32 {
-    0.6  // 60% minimum confidence for pattern-based extraction
+    0.6 // 60% minimum confidence for pattern-based extraction
 }
 fn default_min_entity_frequency() -> usize {
-    1  // Entities must appear at least once
+    1 // Entities must appear at least once
 }
 
 impl Default for GeneralConfig {
@@ -1474,6 +1554,8 @@ impl Default for OllamaSetConfig {
             fallback_to_hash: false,
             max_tokens: Some(800),
             temperature: Some(0.3),
+            keep_alive: None,
+            num_ctx: None,
         }
     }
 }
@@ -1542,7 +1624,6 @@ impl Default for SemanticGraphConfig {
         }
     }
 }
-
 
 impl Default for AlgorithmicEmbeddingsConfig {
     fn default() -> Self {
@@ -1670,10 +1751,7 @@ impl SetConfig {
         let content = fs::read_to_string(path_ref)?;
 
         // Detect format by file extension
-        let extension = path_ref
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("");
+        let extension = path_ref.extension().and_then(|e| e.to_str()).unwrap_or("");
 
         let config: SetConfig = match extension {
             #[cfg(feature = "json5-support")]
@@ -1681,18 +1759,17 @@ impl SetConfig {
                 json5::from_str(&content).map_err(|e| crate::core::GraphRAGError::Config {
                     message: format!("JSON5 parse error: {e}"),
                 })?
-            }
+            },
             #[cfg(not(feature = "json5-support"))]
             "json5" | "json" => {
                 return Err(crate::core::GraphRAGError::Config {
-                    message: "JSON5 support not enabled. Rebuild with --features json5-support".to_string(),
+                    message: "JSON5 support not enabled. Rebuild with --features json5-support"
+                        .to_string(),
                 });
-            }
-            _ => {
-                toml::from_str(&content).map_err(|e| crate::core::GraphRAGError::Config {
-                    message: format!("TOML parse error: {e}"),
-                })?
-            }
+            },
+            _ => toml::from_str(&content).map_err(|e| crate::core::GraphRAGError::Config {
+                message: format!("TOML parse error: {e}"),
+            })?,
         };
 
         Ok(config)
@@ -1729,9 +1806,7 @@ impl SetConfig {
         config.text.chunk_overlap = self.pipeline.text_extraction.chunk_overlap;
 
         // Map entity extraction based on approach
-        config.entities.min_confidence = self
-            .entity_extraction
-            .min_confidence;
+        config.entities.min_confidence = self.entity_extraction.min_confidence;
 
         // Map entity types from pipeline.entity_extraction
         if let Some(ref types) = self.pipeline.entity_extraction.entity_types {
@@ -1746,28 +1821,25 @@ impl SetConfig {
             "semantic" => {
                 if let Some(ref semantic) = self.semantic {
                     config.entities.use_gleaning = semantic.entity_extraction.use_gleaning;
-                    config.entities.max_gleaning_rounds = semantic.entity_extraction.max_gleaning_rounds;
-                    config.entities.min_confidence = semantic.entity_extraction.confidence_threshold;
+                    config.entities.max_gleaning_rounds =
+                        semantic.entity_extraction.max_gleaning_rounds;
+                    config.entities.min_confidence =
+                        semantic.entity_extraction.confidence_threshold;
                 } else {
-                    // Fallback for semantic approach: ALWAYS enable gleaning when mode.approach = "semantic"
-                    // This ensures JSON5 configs with mode.approach="semantic" use LLM-based extraction
-                    config.entities.use_gleaning = true;
-                    config.entities.max_gleaning_rounds = if self.entity_extraction.use_gleaning {
-                        self.entity_extraction.max_gleaning_rounds
-                    } else {
-                        default_max_gleaning_rounds() // Use default if not explicitly set
-                    };
-                    // Use top-level min_confidence if available
+                    // No semantic sub-section: use top-level entity_extraction settings directly
+                    config.entities.use_gleaning = self.entity_extraction.use_gleaning;
+                    config.entities.max_gleaning_rounds = self.entity_extraction.max_gleaning_rounds;
                     config.entities.min_confidence = self.entity_extraction.min_confidence;
                 }
-            }
+            },
             "algorithmic" => {
                 // Algorithmic uses pattern-based extraction, no gleaning
                 config.entities.use_gleaning = false;
                 if let Some(ref algorithmic) = self.algorithmic {
-                    config.entities.min_confidence = algorithmic.entity_extraction.confidence_threshold;
+                    config.entities.min_confidence =
+                        algorithmic.entity_extraction.confidence_threshold;
                 }
-            }
+            },
             "hybrid" => {
                 // Hybrid can use both, enable gleaning for LLM component
                 config.entities.use_gleaning = true;
@@ -1775,12 +1847,12 @@ impl SetConfig {
                     // Use hybrid configuration if available
                     config.entities.max_gleaning_rounds = 2; // Reduced for hybrid efficiency
                 }
-            }
+            },
             _ => {
                 // Unknown approach, use top-level config as fallback
                 config.entities.use_gleaning = self.entity_extraction.use_gleaning;
                 config.entities.max_gleaning_rounds = self.entity_extraction.max_gleaning_rounds;
-            }
+            },
         }
 
         // Map graph building
@@ -1813,12 +1885,28 @@ impl SetConfig {
             fallback_to_hash: self.ollama.fallback_to_hash,
             max_tokens: self.ollama.max_tokens,
             temperature: self.ollama.temperature,
-            enable_caching: true, // Default to enabled
+            enable_caching: true,
+            keep_alive: self.ollama.keep_alive.clone(),
+            num_ctx: self.ollama.num_ctx,
+        };
+
+        // Map GLiNER configuration
+        config.gliner = crate::config::GlinerConfig {
+            enabled:            self.gliner.enabled,
+            model_path:         self.gliner.model_path.clone(),
+            tokenizer_path:     self.gliner.tokenizer_path.clone(),
+            mode:               self.gliner.mode.clone(),
+            entity_labels:      self.gliner.entity_labels.clone(),
+            relation_labels:    self.gliner.relation_labels.clone(),
+            entity_threshold:   self.gliner.entity_threshold,
+            relation_threshold: self.gliner.relation_threshold,
+            use_gpu:            self.gliner.use_gpu,
         };
 
         // Map auto-save configuration
         config.auto_save = crate::config::AutoSaveConfig {
             enabled: self.auto_save.enabled,
+            base_dir: self.auto_save.base_dir.clone(),
             interval_seconds: self.auto_save.interval_seconds,
             workspace_name: self.auto_save.workspace_name.clone(),
             max_versions: self.auto_save.max_versions,

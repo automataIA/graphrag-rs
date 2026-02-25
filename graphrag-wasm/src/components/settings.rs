@@ -57,19 +57,19 @@ pub struct UserSettings {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum EmbeddingProviderType {
-    ONNX,           // Local ONNX Runtime Web
-    OpenAI,         // OpenAI API
-    VoyageAI,       // Voyage AI API
-    Cohere,         // Cohere API
-    JinaAI,         // Jina AI API
-    Mistral,        // Mistral API
-    TogetherAI,     // Together AI API
+    ONNX,       // Local ONNX Runtime Web
+    OpenAI,     // OpenAI API
+    VoyageAI,   // Voyage AI API
+    Cohere,     // Cohere API
+    JinaAI,     // Jina AI API
+    Mistral,    // Mistral API
+    TogetherAI, // Together AI API
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum LlmProviderType {
-    WebLLM,         // In-browser WebLLM
-    OllamaHTTP,     // Local Ollama server
+    WebLLM,     // In-browser WebLLM
+    OllamaHTTP, // Local Ollama server
 }
 
 impl Default for UserSettings {
@@ -100,8 +100,14 @@ impl EmbeddingProviderType {
                 ("all-mpnet-base-v2", "MPNet base (768 dim, quality)"),
             ],
             EmbeddingProviderType::OpenAI => vec![
-                ("text-embedding-3-small", "Small (1536 dim, $0.02/1M tokens)"),
-                ("text-embedding-3-large", "Large (3072 dim, $0.13/1M tokens)"),
+                (
+                    "text-embedding-3-small",
+                    "Small (1536 dim, $0.02/1M tokens)",
+                ),
+                (
+                    "text-embedding-3-large",
+                    "Large (3072 dim, $0.13/1M tokens)",
+                ),
                 ("text-embedding-ada-002", "Ada-002 (1536 dim, legacy)"),
             ],
             EmbeddingProviderType::VoyageAI => vec![
@@ -118,11 +124,12 @@ impl EmbeddingProviderType {
                 ("jina-embeddings-v2-base-en", "Base EN (768 dim)"),
                 ("jina-embeddings-v2-small-en", "Small EN (512 dim)"),
             ],
-            EmbeddingProviderType::Mistral => vec![
-                ("mistral-embed", "Mistral Embed (1024 dim)"),
-            ],
+            EmbeddingProviderType::Mistral => vec![("mistral-embed", "Mistral Embed (1024 dim)")],
             EmbeddingProviderType::TogetherAI => vec![
-                ("togethercomputer/m2-bert-80M-8k-retrieval", "M2-BERT (768 dim)"),
+                (
+                    "togethercomputer/m2-bert-80M-8k-retrieval",
+                    "M2-BERT (768 dim)",
+                ),
                 ("BAAI/bge-large-en-v1.5", "BGE Large (1024 dim)"),
             ],
         }
@@ -150,9 +157,18 @@ impl LlmProviderType {
     pub fn available_models(&self) -> Vec<(&'static str, &'static str)> {
         match self {
             LlmProviderType::WebLLM => vec![
-                ("Llama-3.2-1B-Instruct-q4f16_1-MLC", "Llama 3.2 1B (1.2GB, 62 tok/s)"),
-                ("Phi-3-mini-4k-instruct-q4f16_1-MLC", "Phi-3 Mini (2.4GB, 40 tok/s)"),
-                ("Qwen2-1.5B-Instruct-q4f16_1-MLC", "Qwen2 1.5B (1.6GB, 50 tok/s)"),
+                (
+                    "Llama-3.2-1B-Instruct-q4f16_1-MLC",
+                    "Llama 3.2 1B (1.2GB, 62 tok/s)",
+                ),
+                (
+                    "Phi-3-mini-4k-instruct-q4f16_1-MLC",
+                    "Phi-3 Mini (2.4GB, 40 tok/s)",
+                ),
+                (
+                    "Qwen2-1.5B-Instruct-q4f16_1-MLC",
+                    "Qwen2 1.5B (1.6GB, 50 tok/s)",
+                ),
                 ("gemma-2b-it-q4f16_1-MLC", "Gemma 2B (2.0GB, 45 tok/s)"),
             ],
             LlmProviderType::OllamaHTTP => vec![
@@ -206,11 +222,11 @@ pub fn SettingsPanel() -> impl IntoView {
                         gloo_timers::future::TimeoutFuture::new(3000).await;
                         status_setter.set(String::new());
                     });
-                }
+                },
                 Err(e) => {
                     set_save_status.set(format!("❌ Error: {}", e));
                     set_saving.set(false);
-                }
+                },
             }
         });
     };

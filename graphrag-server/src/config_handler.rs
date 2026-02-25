@@ -31,8 +31,8 @@ impl ConfigManager {
     /// Set configuration from JSON
     pub async fn set_from_json(&self, json_str: &str) -> Result<(), String> {
         // Parse JSON into Config
-        let config: Config = serde_json::from_str(json_str)
-            .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+        let config: Config =
+            serde_json::from_str(json_str).map_err(|e| format!("Failed to parse JSON: {}", e))?;
 
         // Validate configuration
         let errors = self.validate_config(&config).await;
@@ -98,10 +98,8 @@ impl ConfigManager {
     pub async fn to_json(&self) -> Result<String, String> {
         let config = self.config.read().await;
         match config.as_ref() {
-            Some(cfg) => {
-                serde_json::to_string_pretty(cfg)
-                    .map_err(|e| format!("Failed to serialize config: {}", e))
-            }
+            Some(cfg) => serde_json::to_string_pretty(cfg)
+                .map_err(|e| format!("Failed to serialize config: {}", e)),
             None => Err("No configuration set".to_string()),
         }
     }

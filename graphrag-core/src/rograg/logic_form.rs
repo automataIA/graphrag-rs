@@ -31,7 +31,7 @@ pub enum LogicFormError {
     #[error("Cannot parse query into logic form: {query}")]
     ParseError {
         /// The query text that could not be parsed.
-        query: String
+        query: String,
     },
 
     /// The logic form structure is malformed or invalid.
@@ -41,7 +41,7 @@ pub enum LogicFormError {
     #[error("Invalid logic form structure: {reason}")]
     InvalidStructure {
         /// Description of what makes the structure invalid.
-        reason: String
+        reason: String,
     },
 
     /// Execution of the logic form against the graph failed.
@@ -51,7 +51,7 @@ pub enum LogicFormError {
     #[error("Logic form execution failed: {reason}")]
     ExecutionFailed {
         /// Reason why execution failed.
-        reason: String
+        reason: String,
     },
 
     /// No results found matching the logic form query.
@@ -713,7 +713,7 @@ impl LogicFormExecutor {
                         } else {
                             Some("no embedding".to_string())
                         }
-                    }
+                    },
                     _ => None,
                 };
 
@@ -836,9 +836,7 @@ impl LogicFormExecutor {
                             variable: "T".to_string(),
                             value: format!(
                                 "{} {} {}",
-                                event_name,
-                                rel.relation_type,
-                                time_entity.name
+                                event_name, rel.relation_type, time_entity.name
                             ),
                             entity_id: Some(time_entity.id.to_string()),
                             confidence: rel.confidence,
@@ -878,11 +876,37 @@ impl LogicFormExecutor {
                     // Look for common date patterns in the chunk content
                     let content_lower = chunk.content.to_lowercase();
                     let temporal_keywords = [
-                        "january", "february", "march", "april", "may", "june",
-                        "july", "august", "september", "october", "november", "december",
-                        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
-                        "yesterday", "today", "tomorrow", "morning", "afternoon", "evening", "night",
-                        "spring", "summer", "autumn", "fall", "winter",
+                        "january",
+                        "february",
+                        "march",
+                        "april",
+                        "may",
+                        "june",
+                        "july",
+                        "august",
+                        "september",
+                        "october",
+                        "november",
+                        "december",
+                        "monday",
+                        "tuesday",
+                        "wednesday",
+                        "thursday",
+                        "friday",
+                        "saturday",
+                        "sunday",
+                        "yesterday",
+                        "today",
+                        "tomorrow",
+                        "morning",
+                        "afternoon",
+                        "evening",
+                        "night",
+                        "spring",
+                        "summer",
+                        "autumn",
+                        "fall",
+                        "winter",
                     ];
 
                     for keyword in &temporal_keywords {
@@ -895,7 +919,11 @@ impl LogicFormExecutor {
 
                                 bindings.push(VariableBinding {
                                     variable: "T".to_string(),
-                                    value: format!("{} temporal context: \"{}\"", event_name, context.trim()),
+                                    value: format!(
+                                        "{} temporal context: \"{}\"",
+                                        event_name,
+                                        context.trim()
+                                    ),
                                     entity_id: Some(entity.id.to_string()),
                                     confidence: 0.6,
                                 });
@@ -920,7 +948,10 @@ impl LogicFormExecutor {
 
                         bindings.push(VariableBinding {
                             variable: "T".to_string(),
-                            value: format!("{} occurred {} (position: {:.2})", event_name, temporal_order, position),
+                            value: format!(
+                                "{} occurred {} (position: {:.2})",
+                                event_name, temporal_order, position
+                            ),
                             entity_id: Some(entity.id.to_string()),
                             confidence: 0.5,
                         });
@@ -983,12 +1014,7 @@ impl LogicFormExecutor {
                 {
                     bindings.push(VariableBinding {
                         variable: "C".to_string(),
-                        value: format!(
-                            "{} {} {}",
-                            cause_name,
-                            rel.relation_type,
-                            effect_name
-                        ),
+                        value: format!("{} {} {}", cause_name, rel.relation_type, effect_name),
                         entity_id: None,
                         confidence: rel.confidence,
                     });
@@ -1012,12 +1038,15 @@ impl LogicFormExecutor {
                 Ok(chains) => {
                     for chain in chains {
                         // Build human-readable chain description
-                        let step_descriptions: Vec<String> = chain.steps
+                        let step_descriptions: Vec<String> = chain
+                            .steps
                             .iter()
-                            .map(|step| format!("{} --[{}]--> {}",
-                                step.source.0,
-                                step.relation_type,
-                                step.target.0))
+                            .map(|step| {
+                                format!(
+                                    "{} --[{}]--> {}",
+                                    step.source.0, step.relation_type, step.target.0
+                                )
+                            })
                             .collect();
 
                         let chain_str = if step_descriptions.is_empty() {
@@ -1029,8 +1058,10 @@ impl LogicFormExecutor {
                         // Include temporal consistency information if available
                         let value = if chain.temporal_consistency {
                             if let Some(time_span) = chain.time_span {
-                                format!("Causal chain (temporally consistent, span={}s): {}",
-                                    time_span, chain_str)
+                                format!(
+                                    "Causal chain (temporally consistent, span={}s): {}",
+                                    time_span, chain_str
+                                )
                             } else {
                                 format!("Causal chain (temporally consistent): {}", chain_str)
                             }
@@ -1045,7 +1076,7 @@ impl LogicFormExecutor {
                             confidence: chain.total_confidence,
                         });
                     }
-                }
+                },
                 Err(e) => {
                     #[cfg(feature = "tracing")]
                     tracing::warn!(
@@ -1054,26 +1085,18 @@ impl LogicFormExecutor {
                         error = %e,
                         "Failed to find causal chains with CausalAnalyzer"
                     );
-                }
+                },
             }
 
             // Strategy 3: Analyze co-occurrence in chunks for implicit causality
-            let cause_chunks: std::collections::HashSet<_> = cause_e
-                .mentions
-                .iter()
-                .map(|m| &m.chunk_id)
-                .collect();
+            let cause_chunks: std::collections::HashSet<_> =
+                cause_e.mentions.iter().map(|m| &m.chunk_id).collect();
 
-            let effect_chunks: std::collections::HashSet<_> = effect_e
-                .mentions
-                .iter()
-                .map(|m| &m.chunk_id)
-                .collect();
+            let effect_chunks: std::collections::HashSet<_> =
+                effect_e.mentions.iter().map(|m| &m.chunk_id).collect();
 
             // Find chunks where both entities are mentioned (potential causal context)
-            let common_chunks: Vec<_> = cause_chunks
-                .intersection(&effect_chunks)
-                .collect();
+            let common_chunks: Vec<_> = cause_chunks.intersection(&effect_chunks).collect();
 
             if !common_chunks.is_empty() {
                 for chunk_id in common_chunks {
@@ -1082,9 +1105,18 @@ impl LogicFormExecutor {
 
                         // Look for causal keywords in the chunk content
                         let causal_keywords = [
-                            "because", "therefore", "thus", "hence", "consequently",
-                            "as a result", "due to", "caused by", "leads to",
-                            "resulting in", "triggered by", "produced by",
+                            "because",
+                            "therefore",
+                            "thus",
+                            "hence",
+                            "consequently",
+                            "as a result",
+                            "due to",
+                            "caused by",
+                            "leads to",
+                            "resulting in",
+                            "triggered by",
+                            "produced by",
                         ];
 
                         for keyword in &causal_keywords {
@@ -1097,10 +1129,7 @@ impl LogicFormExecutor {
 
                                     bindings.push(VariableBinding {
                                         variable: "C".to_string(),
-                                        value: format!(
-                                            "Causal context: \"{}\"",
-                                            context.trim()
-                                        ),
+                                        value: format!("Causal context: \"{}\"", context.trim()),
                                         entity_id: None,
                                         confidence: 0.7,
                                     });
@@ -1154,8 +1183,10 @@ impl LogicFormExecutor {
         }
 
         // Try partial match
-        graph.entities().find(|&entity| entity.name.to_lowercase().contains(&name_lower)
-                || name_lower.contains(&entity.name.to_lowercase()))
+        graph.entities().find(|&entity| {
+            entity.name.to_lowercase().contains(&name_lower)
+                || name_lower.contains(&entity.name.to_lowercase())
+        })
     }
 
     /// Calculate name similarity
@@ -1199,7 +1230,8 @@ impl LogicFormRetriever {
     ///
     /// Returns a `LogicFormRetriever` ready for query processing.
     pub fn new() -> Self {
-        let parsers: Vec<Box<dyn LogicFormParser>> = vec![Box::new(PatternBasedParser::new().unwrap())];
+        let parsers: Vec<Box<dyn LogicFormParser>> =
+            vec![Box::new(PatternBasedParser::new().unwrap())];
 
         Self {
             parsers,
@@ -1270,10 +1302,14 @@ impl LogicFormRetriever {
             // These predicates examine relationships
             Predicate::Related | Predicate::Caused | Predicate::Compare => {
                 graph.relationships().count()
-            }
+            },
             // These predicates don't examine relationships
-            Predicate::Is | Predicate::Has | Predicate::Happened | Predicate::Exists
-            | Predicate::Similar | Predicate::Located => 0,
+            Predicate::Is
+            | Predicate::Has
+            | Predicate::Happened
+            | Predicate::Exists
+            | Predicate::Similar
+            | Predicate::Located => 0,
             // For Count and aggregate queries, examine all if needed
             _ => 0,
         };
@@ -1304,25 +1340,25 @@ impl LogicFormRetriever {
                 } else {
                     "No information found.".to_string()
                 }
-            }
+            },
             Predicate::Related => {
                 if let Some(binding) = bindings.first() {
                     binding.value.clone()
                 } else {
                     "No relationship found.".to_string()
                 }
-            }
+            },
             Predicate::Compare => {
                 if let Some(binding) = bindings.first() {
                     binding.value.clone()
                 } else {
                     "Cannot compare the specified entities.".to_string()
                 }
-            }
+            },
             _ => {
                 let values: Vec<String> = bindings.iter().map(|b| b.value.clone()).collect();
                 values.join("; ")
-            }
+            },
         }
     }
 

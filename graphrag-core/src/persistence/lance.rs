@@ -39,7 +39,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 #[cfg(feature = "lancedb")]
-use arrow_array::{Float32Array, RecordBatch, RecordBatchIterator, StringArray, FixedSizeListArray};
+use arrow_array::{
+    FixedSizeListArray, Float32Array, RecordBatch, RecordBatchIterator, StringArray,
+};
 
 #[cfg(feature = "lancedb")]
 use arrow_array::types::Float32Type;
@@ -48,7 +50,7 @@ use arrow_array::types::Float32Type;
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 
 #[cfg(feature = "lancedb")]
-use lancedb::query::{QueryBase, ExecutableQuery};
+use lancedb::query::{ExecutableQuery, QueryBase};
 
 /// Configuration for LanceDB vector store
 #[derive(Debug, Clone)]
@@ -176,7 +178,7 @@ impl LanceVectorStore {
                 #[cfg(feature = "tracing")]
                 tracing::info!("Opened existing LanceDB table at: {:?}", path);
                 table
-            }
+            },
             Err(_) => {
                 // Table doesn't exist, create it with empty data
                 let empty_batches = create_empty_batch(schema.clone())?;
@@ -187,7 +189,7 @@ impl LanceVectorStore {
                     .map_err(|e| GraphRAGError::Config {
                         message: format!("Failed to create LanceDB table: {}", e),
                     })?
-            }
+            },
         };
 
         #[cfg(feature = "tracing")]
@@ -225,13 +227,19 @@ impl LanceVectorStore {
         );
 
         // Create RecordBatch
-        let schema = self.table.schema().await.map_err(|e| GraphRAGError::Config {
-            message: format!("Failed to get table schema: {}", e),
-        })?;
-
-        let batch = RecordBatch::try_new(schema.clone(), vec![id_array, vector_array])
+        let schema = self
+            .table
+            .schema()
+            .await
             .map_err(|e| GraphRAGError::Config {
-                message: format!("Failed to create record batch: {}", e),
+                message: format!("Failed to get table schema: {}", e),
+            })?;
+
+        let batch =
+            RecordBatch::try_new(schema.clone(), vec![id_array, vector_array]).map_err(|e| {
+                GraphRAGError::Config {
+                    message: format!("Failed to create record batch: {}", e),
+                }
             })?;
 
         // Add to table
@@ -304,7 +312,9 @@ impl LanceVectorStore {
 
             for (idx, id) in id_array.iter().enumerate() {
                 // Extract embedding vector
-                let embedding = if let Some(values) = vector_array.value(idx).as_primitive_opt::<Float32Type>() {
+                let embedding = if let Some(values) =
+                    vector_array.value(idx).as_primitive_opt::<Float32Type>()
+                {
                     values.values().to_vec()
                 } else {
                     vec![0.0; self.config.dimension]
@@ -328,10 +338,7 @@ impl LanceVectorStore {
 
     /// Batch store embeddings
     #[cfg(feature = "lancedb")]
-    pub async fn store_embeddings_batch(
-        &self,
-        embeddings: Vec<(String, Vec<f32>)>,
-    ) -> Result<()> {
+    pub async fn store_embeddings_batch(&self, embeddings: Vec<(String, Vec<f32>)>) -> Result<()> {
         if embeddings.is_empty() {
             return Ok(());
         }
@@ -367,13 +374,19 @@ impl LanceVectorStore {
         );
 
         // Create RecordBatch
-        let schema = self.table.schema().await.map_err(|e| GraphRAGError::Config {
-            message: format!("Failed to get table schema: {}", e),
-        })?;
-
-        let batch = RecordBatch::try_new(schema.clone(), vec![id_array, vector_array])
+        let schema = self
+            .table
+            .schema()
+            .await
             .map_err(|e| GraphRAGError::Config {
-                message: format!("Failed to create record batch: {}", e),
+                message: format!("Failed to get table schema: {}", e),
+            })?;
+
+        let batch =
+            RecordBatch::try_new(schema.clone(), vec![id_array, vector_array]).map_err(|e| {
+                GraphRAGError::Config {
+                    message: format!("Failed to create record batch: {}", e),
+                }
             })?;
 
         // Add to table
@@ -472,7 +485,7 @@ fn create_empty_batch(schema: SchemaRef) -> Result<Box<dyn arrow_array::RecordBa
             return Err(GraphRAGError::Config {
                 message: "Expected FixedSizeList data type for vector field".to_string(),
             })
-        }
+        },
     };
 
     let empty_batch = RecordBatch::try_new(

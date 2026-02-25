@@ -332,11 +332,11 @@ impl AsyncBatchUpdater {
                                     );
                                     last_batch_time = std::time::Instant::now();
                                 }
-                            }
+                            },
                             Ok(None) => {
                                 // Channel closed
                                 break;
-                            }
+                            },
                             Err(_) => {
                                 // Timeout: create batch if we have operations
                                 if !current_batch_operations.is_empty()
@@ -351,7 +351,7 @@ impl AsyncBatchUpdater {
                                     );
                                     last_batch_time = std::time::Instant::now();
                                 }
-                            }
+                            },
                         }
                     }
 
@@ -398,7 +398,9 @@ impl AsyncBatchUpdater {
                             batch.started_at = Some(Utc::now());
 
                             let batch_id = batch.batch_id.clone();
-                            processing_batches.write().insert(batch_id.clone(), batch.clone());
+                            processing_batches
+                                .write()
+                                .insert(batch_id.clone(), batch.clone());
 
                             // Process the batch
                             let result = Self::process_batch_operations(&config, &batch).await;
@@ -503,7 +505,7 @@ impl AsyncBatchUpdater {
                     Err(e) => {
                         failed += 1;
                         errors.push(e);
-                    }
+                    },
                 }
             }
         } else {
@@ -514,7 +516,7 @@ impl AsyncBatchUpdater {
                     Err(e) => {
                         failed += 1;
                         errors.push(e);
-                    }
+                    },
                 }
             }
         }
@@ -537,27 +539,27 @@ impl AsyncBatchUpdater {
             OperationType::AddNode => {
                 // graph.add_node(...)
                 Ok(())
-            }
+            },
             OperationType::UpdateNode => {
                 // graph.update_node(...)
                 Ok(())
-            }
+            },
             OperationType::RemoveNode => {
                 // graph.remove_node(...)
                 Ok(())
-            }
+            },
             OperationType::AddEdge => {
                 // graph.add_edge(...)
                 Ok(())
-            }
+            },
             OperationType::UpdateEdge => {
                 // graph.update_edge(...)
                 Ok(())
-            }
+            },
             OperationType::RemoveEdge => {
                 // graph.remove_edge(...)
                 Ok(())
-            }
+            },
         }
     }
 
@@ -572,10 +574,10 @@ impl AsyncBatchUpdater {
         // Update averages
         let total_batches = stats_lock.total_batches_processed as f32;
         stats_lock.avg_batch_size = stats_lock.total_operations_processed as f32 / total_batches;
-        stats_lock.avg_processing_time_ms =
-            ((stats_lock.avg_processing_time_ms * (total_batches - 1.0))
-                + result.processing_time_ms as f32)
-                / total_batches;
+        stats_lock.avg_processing_time_ms = ((stats_lock.avg_processing_time_ms
+            * (total_batches - 1.0))
+            + result.processing_time_ms as f32)
+            / total_batches;
 
         // Calculate throughput (operations per second)
         if stats_lock.avg_processing_time_ms > 0.0 {

@@ -60,13 +60,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Use the convenient API: load config + process document + build graph
     let mut graphrag = GraphRAG::from_config_and_document(
         "config/templates/symposium_graphrag_rs_philosophy.graphrag.json5",
-        "docs-example/Symposium.txt"
-    ).await?;
+        "docs-example/Symposium.txt",
+    )
+    .await?;
 
     let processing_time = start_time.elapsed();
 
     println!("\n   ✅ Knowledge graph built successfully!");
-    println!("   ⏱️ Processing time: {:.2}s (target: 5-10s)", processing_time.as_secs_f64());
+    println!(
+        "   ⏱️ Processing time: {:.2}s (target: 5-10s)",
+        processing_time.as_secs_f64()
+    );
     println!("   💰 API calls made: 0 (100% offline!)");
 
     // === PHASE 2: Knowledge Graph Statistics ===
@@ -137,13 +141,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("      ... and {} more passages", lines.len() - 3);
                 }
 
-                println!("\n   ⏱️ Query time: {:.0}ms (target: 50ms)", query_time.as_millis());
+                println!(
+                    "\n   ⏱️ Query time: {:.0}ms (target: 50ms)",
+                    query_time.as_millis()
+                );
                 println!("   💰 Query cost: $0 (NO API calls!)");
                 println!("   🔒 Privacy: 100% (tutto locale)");
-            }
+            },
             Err(e) => {
                 eprintln!("\n   ❌ Query failed: {}", e);
-            }
+            },
         }
 
         if i < queries.len() - 1 {
@@ -169,8 +176,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   Grand Total (indexing + 4 queries): $0 ✅\n");
 
     println!("⏱️ Performance (da DESIGN_CHOICES_ITALIANO.md):");
-    println!("   - Indexing: {:.2}s (actual) vs 3-5 min LLM (100x faster!)",
-        processing_time.as_secs_f64());
+    println!(
+        "   - Indexing: {:.2}s (actual) vs 3-5 min LLM (100x faster!)",
+        processing_time.as_secs_f64()
+    );
     println!("   - Query: ~50ms vs 2-3s LLM (16x faster!)");
     println!("   - Memory: ~50MB vs 1.2GB Python+SpaCy (24x less!)");
     println!("   - Binary: 10MB vs 3.5GB deployment (350x smaller!)\n");
@@ -225,7 +234,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("|---------------------------|--------------|------------------------|");
     println!("| Costo indexing            | $5-10        | $0 ✅                  |");
     println!("| Costo query               | $0.50        | $0 ✅                  |");
-    println!("| Tempo processing          | 3-5 min      | {:.1}s ✅               |", processing_time.as_secs_f64());
+    println!(
+        "| Tempo processing          | 3-5 min      | {:.1}s ✅               |",
+        processing_time.as_secs_f64()
+    );
     println!("| Tempo query               | 2-3s         | 50ms ✅                |");
     println!("| Accuracy                  | 95%          | 80% (-15%)             |");
     println!("| Entity types              | 18           | 4                      |");

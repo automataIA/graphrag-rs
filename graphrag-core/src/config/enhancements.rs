@@ -191,7 +191,7 @@ impl Default for LightRAGConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            max_keywords: 20,  // LightRAG optimization: <20 keywords
+            max_keywords: 20, // LightRAG optimization: <20 keywords
             high_level_weight: 0.6,
             low_level_weight: 0.4,
             merge_strategy: "weighted".to_string(),
@@ -477,10 +477,10 @@ impl EnhancementsConfig {
                 "adaptive_retrieval" | "adaptive" => self.adaptive_retrieval.enabled = true,
                 "performance_benchmarking" | "benchmark" => {
                     self.performance_benchmarking.enabled = true
-                }
+                },
                 "enhanced_function_registry" | "registry" => {
                     self.enhanced_function_registry.enabled = true
-                }
+                },
                 #[cfg(feature = "lightrag")]
                 "lightrag" | "dual_level" => self.lightrag.enabled = true,
                 #[cfg(feature = "leiden")]
@@ -606,10 +606,7 @@ impl EnhancementsConfig {
                             format!("Max Keywords: {}", self.lightrag.max_keywords),
                             true,
                         ),
-                        (
-                            format!("Merge: {}", self.lightrag.merge_strategy),
-                            true,
-                        ),
+                        (format!("Merge: {}", self.lightrag.merge_strategy), true),
                     ],
                 },
                 #[cfg(feature = "leiden")]
@@ -621,10 +618,7 @@ impl EnhancementsConfig {
                             format!("Max Cluster Size: {}", self.leiden.max_cluster_size),
                             true,
                         ),
-                        (
-                            format!("Resolution: {:.2}", self.leiden.resolution),
-                            true,
-                        ),
+                        (format!("Resolution: {:.2}", self.leiden.resolution), true),
                         (
                             "Refinement Phase".to_string(),
                             true, // Always enabled (KEY difference from Louvain)
@@ -652,14 +646,8 @@ impl EnhancementsConfig {
                     name: "Cross-Encoder Reranking".to_string(),
                     enabled: self.cross_encoder.enabled,
                     features: vec![
-                        (
-                            format!("Model: {}", self.cross_encoder.model_name),
-                            true,
-                        ),
-                        (
-                            format!("Top-K: {}", self.cross_encoder.top_k),
-                            true,
-                        ),
+                        (format!("Model: {}", self.cross_encoder.model_name), true),
+                        (format!("Top-K: {}", self.cross_encoder.top_k), true),
                         (
                             "Score Normalization".to_string(),
                             self.cross_encoder.normalize_scores,

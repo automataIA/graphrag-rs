@@ -83,11 +83,7 @@ impl GraphTraversal {
     ///
     /// # Returns
     /// TraversalResult with entities, relationships, and distances
-    pub fn bfs(
-        &self,
-        graph: &KnowledgeGraph,
-        source: &EntityId,
-    ) -> Result<TraversalResult> {
+    pub fn bfs(&self, graph: &KnowledgeGraph, source: &EntityId) -> Result<TraversalResult> {
         let mut visited = HashSet::new();
         let mut queue = VecDeque::new();
         let mut distances = HashMap::new();
@@ -152,11 +148,7 @@ impl GraphTraversal {
     ///
     /// # Returns
     /// TraversalResult with entities, relationships, and discovered paths
-    pub fn dfs(
-        &self,
-        graph: &KnowledgeGraph,
-        source: &EntityId,
-    ) -> Result<TraversalResult> {
+    pub fn dfs(&self, graph: &KnowledgeGraph, source: &EntityId) -> Result<TraversalResult> {
         let mut visited = HashSet::new();
         let mut distances = HashMap::new();
         let mut discovered_entities = Vec::new();
@@ -545,7 +537,11 @@ impl GraphTraversal {
             }
 
             for rel in ego_result.relationships {
-                let rel_key = (rel.source.clone(), rel.target.clone(), rel.relation_type.clone());
+                let rel_key = (
+                    rel.source.clone(),
+                    rel.target.clone(),
+                    rel.relation_type.clone(),
+                );
                 if !seen_relationships.contains(&rel_key) {
                     seen_relationships.insert(rel_key);
                     combined_relationships.push(rel);
@@ -724,9 +720,7 @@ mod tests {
         let traversal = GraphTraversal::default();
         let seeds = vec![EntityId::new("A".to_string())];
 
-        let result = traversal
-            .query_focused_subgraph(&graph, &seeds, 2)
-            .unwrap();
+        let result = traversal.query_focused_subgraph(&graph, &seeds, 2).unwrap();
 
         // Should extract subgraph around seed entity
         assert!(!result.entities.is_empty());

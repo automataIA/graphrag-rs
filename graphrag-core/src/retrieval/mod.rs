@@ -1,6 +1,8 @@
 pub mod adaptive;
 /// BM25 text retrieval implementation for keyword-based search
 pub mod bm25;
+/// Causal chain analysis for discovering cause-effect paths (Phase 2.3)
+pub mod causal_analysis;
 /// Enriched metadata-aware retrieval
 pub mod enriched;
 /// HippoRAG Personalized PageRank retrieval
@@ -11,8 +13,6 @@ pub mod hybrid;
 pub mod pagerank_retrieval;
 /// Symbolic anchoring for conceptual queries (Phase 2.1 - CatRAG)
 pub mod symbolic_anchoring;
-/// Causal chain analysis for discovering cause-effect paths (Phase 2.3)
-pub mod causal_analysis;
 
 #[cfg(feature = "parallel-processing")]
 use crate::parallel::ParallelProcessor;
@@ -246,11 +246,7 @@ pub struct ReasoningStep {
 
 impl ExplainedAnswer {
     /// Create a new explained answer from search results
-    pub fn from_results(
-        answer: String,
-        search_results: &[SearchResult],
-        query: &str,
-    ) -> Self {
+    pub fn from_results(answer: String, search_results: &[SearchResult], query: &str) -> Self {
         // Calculate overall confidence from result scores
         let confidence = if search_results.is_empty() {
             0.0
@@ -330,7 +326,7 @@ impl ExplainedAnswer {
                         r.content.clone()
                     }
                 }),
-                confidence: confidence,
+                confidence,
             });
             step_num += 1;
         }
@@ -2087,11 +2083,8 @@ mod tests {
             },
         ];
 
-        let explained = ExplainedAnswer::from_results(
-            "Answer".to_string(),
-            &search_results,
-            "Query",
-        );
+        let explained =
+            ExplainedAnswer::from_results("Answer".to_string(), &search_results, "Query");
 
         let source_types: Vec<_> = explained.sources.iter().map(|s| &s.source_type).collect();
         assert!(source_types.contains(&&SourceType::TextChunk));

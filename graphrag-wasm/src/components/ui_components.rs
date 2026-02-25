@@ -12,10 +12,10 @@
 
 #![allow(dead_code)]
 
-use leptos::prelude::*;
-use leptos::ev::SubmitEvent;
-use serde::{Deserialize, Serialize};
 use super::force_layout::{ForceLayout, LayoutConfig};
+use leptos::ev::SubmitEvent;
+use leptos::prelude::*;
+use serde::{Deserialize, Serialize};
 
 /// Message type for chat history
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -307,23 +307,29 @@ pub fn DocumentManager(
             use wasm_bindgen::JsCast;
 
             // Access files through the DOM
-            let files_opt = js_sys::Reflect::get(&input_element, &wasm_bindgen::JsValue::from_str("files"))
-                .ok()
-                .and_then(|v| v.dyn_into::<js_sys::Object>().ok());
+            let files_opt =
+                js_sys::Reflect::get(&input_element, &wasm_bindgen::JsValue::from_str("files"))
+                    .ok()
+                    .and_then(|v| v.dyn_into::<js_sys::Object>().ok());
 
             if let Some(files) = files_opt {
                 // Get length property
-                let length = js_sys::Reflect::get(&files, &wasm_bindgen::JsValue::from_str("length"))
-                    .ok()
-                    .and_then(|v| v.as_f64())
-                    .unwrap_or(0.0) as u32;
+                let length =
+                    js_sys::Reflect::get(&files, &wasm_bindgen::JsValue::from_str("length"))
+                        .ok()
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.0) as u32;
 
                 let mut file_names = Vec::new();
 
                 // Extract file names
                 for i in 0..length {
-                    if let Ok(file) = js_sys::Reflect::get(&files, &wasm_bindgen::JsValue::from_f64(i as f64)) {
-                        if let Ok(name) = js_sys::Reflect::get(&file, &wasm_bindgen::JsValue::from_str("name")) {
+                    if let Ok(file) =
+                        js_sys::Reflect::get(&files, &wasm_bindgen::JsValue::from_f64(i as f64))
+                    {
+                        if let Ok(name) =
+                            js_sys::Reflect::get(&file, &wasm_bindgen::JsValue::from_str("name"))
+                        {
                             if let Some(name_str) = name.as_string() {
                                 file_names.push(name_str);
                             }
@@ -454,7 +460,8 @@ pub fn GraphVisualization(
 ) -> impl IntoView {
     let (selected_node, set_selected_node) = signal(None::<String>);
     let (zoom_level, set_zoom_level) = signal(1.0_f32);
-    let (layout_positions, set_layout_positions) = signal(std::collections::HashMap::<String, (f64, f64)>::new());
+    let (layout_positions, set_layout_positions) =
+        signal(std::collections::HashMap::<String, (f64, f64)>::new());
 
     // Initialize force-directed layout when nodes/edges change
     Effect::new(move |_| {

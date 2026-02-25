@@ -8,7 +8,7 @@ use crate::{
     core::{ChunkId, Entity, EntityId, EntityMention, Relationship, TextChunk},
     entity::prompts::{EntityData, ExtractionOutput, PromptBuilder, RelationshipData},
     ollama::OllamaClient,
-    Result, GraphRAGError,
+    GraphRAGError, Result,
 };
 use serde_json;
 
@@ -18,6 +18,10 @@ pub struct LLMEntityExtractor {
     prompt_builder: PromptBuilder,
     temperature: f32,
     max_tokens: usize,
+    /// keep_alive value forwarded to every Ollama request (e.g. "1h").
+    /// When set, Ollama keeps the model in VRAM between requests so the KV
+    /// cache for the static prompt prefix is preserved across all chunks.
+    keep_alive: Option<String>,
 }
 
 impl LLMEntityExtractor {
@@ -30,8 +34,9 @@ impl LLMEntityExtractor {
         Self {
             ollama_client,
             prompt_builder: PromptBuilder::new(entity_types),
-            temperature: 0.1, // Low temperature for consistent extraction
+            temperature: 0.0, // Zero temperature for deterministic JSON extraction
             max_tokens: 1500,
+            keep_alive: None,
         }
     }
 
@@ -47,6 +52,34 @@ impl LLMEntityExtractor {
         self
     }
 
+    /// Set keep_alive for KV cache persistence (e.g. "1h", "30m").
+    pub fn with_keep_alive(mut self, keep_alive: Option<String>) -> Self {
+        self.keep_alive = keep_alive;
+        self
+    }
+
+    /// Estimate token count from text length (≈ 1 token per 4 chars).
+    pub fn estimate_tokens(text: &str) -> u32 {
+        (text.len() / 4) as u32
+    }
+
+    /// Calculate the required `num_ctx` for one entity-extraction LLM call.
+    ///
+    /// Formula (mirrors `ContextualEnricher::calculate_num_ctx`):
+    /// ```text
+    /// num_ctx = tokens(built_prompt)   // instructions + entity types + chunk text
+    ///         + max_output_tokens       // JSON with entities + relationships
+    ///         + 20% safety margin       // avoids silent truncation
+    /// ```
+    /// Result is rounded up to the nearest 1024 and clamped to [4096, 131072].
+    pub fn calculate_entity_num_ctx(built_prompt: &str, max_output_tokens: u32) -> u32 {
+        let prompt_tokens = Self::estimate_tokens(built_prompt);
+        let total = prompt_tokens + max_output_tokens;
+        let with_margin = (total as f32 * 1.20) as u32;
+        let rounded = ((with_margin + 1023) / 1024) * 1024;
+        rounded.max(4096).min(131_072)
+    }
+
     /// Extract entities and relationships from a text chunk using LLM
     ///
     /// This is the REAL extraction that makes actual LLM API calls.
@@ -56,7 +89,11 @@ impl LLMEntityExtractor {
         &self,
         chunk: &TextChunk,
     ) -> Result<(Vec<Entity>, Vec<Relationship>)> {
-        tracing::debug!("LLM extraction for chunk: {} (size: {} chars)", chunk.id, chunk.content.len());
+        tracing::debug!(
+            "LLM extraction for chunk: {} (size: {} chars)",
+            chunk.id,
+            chunk.content.len()
+        );
 
         // Build extraction prompt
         let prompt = self.prompt_builder.build_extraction_prompt(&chunk.content);
@@ -68,8 +105,10 @@ impl LLMEntityExtractor {
         let extraction_output = self.parse_extraction_response(&llm_response)?;
 
         // Convert to domain entities and relationships
-        let entities = self.convert_to_entities(&extraction_output.entities, &chunk.id, &chunk.content)?;
-        let relationships = self.convert_to_relationships(&extraction_output.relationships, &entities)?;
+        let entities =
+            self.convert_to_entities(&extraction_output.entities, &chunk.id, &chunk.content)?;
+        let relationships =
+            self.convert_to_relationships(&extraction_output.relationships, &entities)?;
 
         tracing::info!(
             "LLM extracted {} entities and {} relationships from chunk {}",
@@ -107,8 +146,10 @@ impl LLMEntityExtractor {
         let extraction_output = self.parse_extraction_response(&llm_response)?;
 
         // Convert to domain entities
-        let entities = self.convert_to_entities(&extraction_output.entities, &chunk.id, &chunk.content)?;
-        let relationships = self.convert_to_relationships(&extraction_output.relationships, &entities)?;
+        let entities =
+            self.convert_to_entities(&extraction_output.entities, &chunk.id, &chunk.content)?;
+        let relationships =
+            self.convert_to_relationships(&extraction_output.relationships, &entities)?;
 
         tracing::info!(
             "LLM gleaning extracted {} additional entities and {} relationships",
@@ -132,11 +173,9 @@ impl LLMEntityExtractor {
         tracing::debug!("LLM completion check for chunk: {}", chunk.id);
 
         // Build completion check prompt
-        let prompt = self.prompt_builder.build_completion_prompt(
-            &chunk.content,
-            entities,
-            relationships,
-        );
+        let prompt =
+            self.prompt_builder
+                .build_completion_prompt(&chunk.content, entities, relationships);
 
         // Call LLM with logit bias for YES/NO response
         let llm_response = self.call_llm_completion_check(&prompt).await?;
@@ -147,35 +186,66 @@ impl LLMEntityExtractor {
 
         tracing::debug!(
             "LLM completion check result: {} (response: {})",
-            if is_complete { "COMPLETE" } else { "INCOMPLETE" },
+            if is_complete {
+                "COMPLETE"
+            } else {
+                "INCOMPLETE"
+            },
             llm_response.trim()
         );
 
         Ok(is_complete)
     }
 
-    /// Call LLM with retry logic for extraction
+    /// Call LLM with dynamic num_ctx and retry logic for extraction.
+    ///
+    /// `num_ctx` is calculated from the built prompt via
+    /// [`calculate_entity_num_ctx`] before this call, ensuring Ollama never
+    /// silently truncates the prompt. `keep_alive` keeps the model loaded in
+    /// VRAM between chunk requests so the KV cache is preserved.
     #[cfg(feature = "async")]
     async fn call_llm_with_retry(&self, prompt: &str) -> Result<String> {
-        // Try to get structured JSON output if supported
-        // Otherwise fall back to regular generation
-        match self.ollama_client.generate(prompt).await {
+        use crate::ollama::OllamaGenerationParams;
+        let num_ctx = Self::calculate_entity_num_ctx(prompt, self.max_tokens as u32);
+        tracing::debug!(
+            "Entity extraction: prompt_len={} num_ctx={} keep_alive={:?}",
+            prompt.len(),
+            num_ctx,
+            self.keep_alive,
+        );
+        let params = OllamaGenerationParams {
+            num_predict: Some(self.max_tokens as u32),
+            temperature: Some(self.temperature),
+            num_ctx: Some(num_ctx),
+            keep_alive: self.keep_alive.clone(),
+            ..Default::default()
+        };
+        match self.ollama_client.generate_with_params(prompt, params.clone()).await {
             Ok(response) => Ok(response),
             Err(e) => {
                 tracing::warn!("LLM call failed, retrying: {}", e);
-                // Retry once
                 tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-                self.ollama_client.generate(prompt).await
-            }
+                self.ollama_client.generate_with_params(prompt, params).await
+            },
         }
     }
 
-    /// Call LLM for completion check with short response
+    /// Call LLM for completion check (expects a short YES/NO answer).
+    ///
+    /// Uses a much smaller `num_predict` (50 tokens) and a deterministic
+    /// temperature of 0.0 to get a reliable YES/NO response.
     #[cfg(feature = "async")]
     async fn call_llm_completion_check(&self, prompt: &str) -> Result<String> {
-        // For completion check, we want a short YES/NO answer
-        // In future, we can use logit bias to force YES/NO tokens
-        self.ollama_client.generate(prompt).await
+        use crate::ollama::OllamaGenerationParams;
+        let num_ctx = Self::calculate_entity_num_ctx(prompt, 50);
+        let params = OllamaGenerationParams {
+            num_predict: Some(50),
+            temperature: Some(0.0),
+            num_ctx: Some(num_ctx),
+            keep_alive: self.keep_alive.clone(),
+            ..Default::default()
+        };
+        self.ollama_client.generate_with_params(prompt, params).await
     }
 
     /// Parse LLM response into structured extraction output
@@ -199,7 +269,7 @@ impl LLMEntityExtractor {
             Ok(output) => return Ok(output),
             Err(e) => {
                 tracing::warn!("JSON repair failed: {}", e);
-            }
+            },
         }
 
         // Strategy 4: Look for JSON anywhere in the response
@@ -215,7 +285,10 @@ impl LLMEntityExtractor {
         }
 
         // If all strategies fail, return empty extraction
-        tracing::error!("Failed to parse LLM response as JSON. Response preview: {}", &response.chars().take(200).collect::<String>());
+        tracing::error!(
+            "Failed to parse LLM response as JSON. Response preview: {}",
+            &response.chars().take(200).collect::<String>()
+        );
         Ok(ExtractionOutput {
             entities: vec![],
             relationships: vec![],
@@ -263,15 +336,16 @@ impl LLMEntityExtractor {
     fn repair_and_parse_json(&self, json_str: &str) -> Result<ExtractionOutput> {
         // jsonfixer::repair_json returns Result<String, Error>
         let options = jsonfixer::JsonRepairOptions::default();
-        let fixed_json = jsonfixer::repair_json(json_str, options)
-            .map_err(|e| GraphRAGError::Generation {
+        let fixed_json =
+            jsonfixer::repair_json(json_str, options).map_err(|e| GraphRAGError::Generation {
                 message: format!("JSON repair failed: {:?}", e),
             })?;
 
-        serde_json::from_str::<ExtractionOutput>(&fixed_json)
-            .map_err(|e| GraphRAGError::Generation {
+        serde_json::from_str::<ExtractionOutput>(&fixed_json).map_err(|e| {
+            GraphRAGError::Generation {
                 message: format!("Failed to parse repaired JSON: {}", e),
-            })
+            }
+        })
     }
 
     /// Convert EntityData to domain Entity objects
@@ -357,7 +431,8 @@ impl LLMEntityExtractor {
         let mut relationships = Vec::new();
 
         // Build entity name to ID mapping
-        let mut name_to_entity: std::collections::HashMap<String, &Entity> = std::collections::HashMap::new();
+        let mut name_to_entity: std::collections::HashMap<String, &Entity> =
+            std::collections::HashMap::new();
         for entity in entities {
             name_to_entity.insert(entity.name.to_lowercase(), entity);
         }
@@ -477,10 +552,7 @@ Here's the extraction:
     fn test_convert_to_entities() {
         let ollama_config = OllamaConfig::default();
         let ollama_client = OllamaClient::new(ollama_config);
-        let extractor = LLMEntityExtractor::new(
-            ollama_client,
-            vec!["PERSON".to_string()],
-        );
+        let extractor = LLMEntityExtractor::new(ollama_client, vec!["PERSON".to_string()]);
 
         let chunk = create_test_chunk();
         let entity_data = vec![EntityData {

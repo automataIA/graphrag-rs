@@ -3,8 +3,11 @@
 //! These tests validate the complete pipeline from document ingestion to query answering.
 //! They run in a headless browser environment using wasm-bindgen-test.
 
+use graphrag_wasm::{
+    storage::{CacheStore, IndexedDBStore},
+    GraphRAG,
+};
 use wasm_bindgen_test::*;
-use graphrag_wasm::{GraphRAG, storage::{IndexedDBStore, CacheStore}};
 
 wasm_bindgen_test_configure!(run_in_browser);
 
@@ -39,25 +42,31 @@ async fn test_add_documents_and_build_index() {
     let embedding3: Vec<f32> = (0..384).map(|i| ((i + 200) as f32) / 384.0).collect();
 
     // Add documents
-    let result1 = graph.add_document(
-        "doc1".to_string(),
-        "GraphRAG is a knowledge graph system".to_string(),
-        embedding1
-    ).await;
+    let result1 = graph
+        .add_document(
+            "doc1".to_string(),
+            "GraphRAG is a knowledge graph system".to_string(),
+            embedding1,
+        )
+        .await;
     assert!(result1.is_ok());
 
-    let result2 = graph.add_document(
-        "doc2".to_string(),
-        "WASM enables client-side ML inference".to_string(),
-        embedding2
-    ).await;
+    let result2 = graph
+        .add_document(
+            "doc2".to_string(),
+            "WASM enables client-side ML inference".to_string(),
+            embedding2,
+        )
+        .await;
     assert!(result2.is_ok());
 
-    let result3 = graph.add_document(
-        "doc3".to_string(),
-        "WebGPU provides GPU acceleration in browsers".to_string(),
-        embedding3
-    ).await;
+    let result3 = graph
+        .add_document(
+            "doc3".to_string(),
+            "WebGPU provides GPU acceleration in browsers".to_string(),
+            embedding3,
+        )
+        .await;
     assert!(result3.is_ok());
 
     // Verify document count
@@ -84,17 +93,23 @@ async fn test_query_graphrag() {
     let embedding1: Vec<f32> = (0..384).map(|i| (i as f32) / 384.0).collect();
     let embedding2: Vec<f32> = (0..384).map(|i| ((i + 100) as f32) / 384.0).collect();
 
-    graph.add_document(
-        "doc1".to_string(),
-        "GraphRAG is a knowledge graph system".to_string(),
-        embedding1.clone()
-    ).await.unwrap();
+    graph
+        .add_document(
+            "doc1".to_string(),
+            "GraphRAG is a knowledge graph system".to_string(),
+            embedding1.clone(),
+        )
+        .await
+        .unwrap();
 
-    graph.add_document(
-        "doc2".to_string(),
-        "WASM enables client-side ML inference".to_string(),
-        embedding2
-    ).await.unwrap();
+    graph
+        .add_document(
+            "doc2".to_string(),
+            "WASM enables client-side ML inference".to_string(),
+            embedding2,
+        )
+        .await
+        .unwrap();
 
     // Build index
     graph.build_index().await.unwrap();
@@ -116,11 +131,10 @@ async fn test_clear_graphrag() {
 
     // Add a document
     let embedding: Vec<f32> = (0..384).map(|i| (i as f32) / 384.0).collect();
-    graph.add_document(
-        "doc1".to_string(),
-        "Test document".to_string(),
-        embedding
-    ).await.unwrap();
+    graph
+        .add_document("doc1".to_string(), "Test document".to_string(), embedding)
+        .await
+        .unwrap();
 
     assert_eq!(graph.document_count(), 1);
 
@@ -222,23 +236,25 @@ async fn test_multiple_document_types() {
 
     // Different document types
     let documents = vec![
-        ("concept1", "Machine learning is a subset of artificial intelligence"),
-        ("concept2", "Neural networks are inspired by biological neurons"),
+        (
+            "concept1",
+            "Machine learning is a subset of artificial intelligence",
+        ),
+        (
+            "concept2",
+            "Neural networks are inspired by biological neurons",
+        ),
         ("fact1", "WASM runs at near-native speed"),
         ("question1", "What is a knowledge graph?"),
     ];
 
     // Add all documents
     for (id, text) in documents {
-        let embedding: Vec<f32> = (0..384).map(|i| {
-            ((i + id.len()) as f32) / 384.0
-        }).collect();
+        let embedding: Vec<f32> = (0..384).map(|i| ((i + id.len()) as f32) / 384.0).collect();
 
-        let result = graph.add_document(
-            id.to_string(),
-            text.to_string(),
-            embedding
-        ).await;
+        let result = graph
+            .add_document(id.to_string(), text.to_string(), embedding)
+            .await;
 
         assert!(result.is_ok());
     }
@@ -259,15 +275,15 @@ async fn test_large_batch_documents() {
 
     // Add 50 documents
     for i in 0..50 {
-        let embedding: Vec<f32> = (0..384).map(|j| {
-            ((j + i * 10) as f32) / 384.0
-        }).collect();
+        let embedding: Vec<f32> = (0..384).map(|j| ((j + i * 10) as f32) / 384.0).collect();
 
-        let result = graph.add_document(
-            format!("doc{}", i),
-            format!("This is test document number {}", i),
-            embedding
-        ).await;
+        let result = graph
+            .add_document(
+                format!("doc{}", i),
+                format!("This is test document number {}", i),
+                embedding,
+            )
+            .await;
 
         assert!(result.is_ok());
     }
@@ -290,11 +306,9 @@ async fn test_dimension_validation() {
     let wrong_embedding: Vec<f32> = vec![0.1, 0.2, 0.3]; // Only 3 dimensions instead of 384
 
     // Currently this won't fail, but should be validated in production
-    let result = graph.add_document(
-        "doc1".to_string(),
-        "Test".to_string(),
-        wrong_embedding
-    ).await;
+    let result = graph
+        .add_document("doc1".to_string(), "Test".to_string(), wrong_embedding)
+        .await;
 
     // TODO: Add dimension validation and expect error here
     // For now, just verify the call completes

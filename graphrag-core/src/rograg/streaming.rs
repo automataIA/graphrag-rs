@@ -29,7 +29,7 @@ pub enum StreamingError {
     #[error("Failed to generate response: {reason}")]
     GenerationFailed {
         /// Description of what failed during generation.
-        reason: String
+        reason: String,
     },
 
     /// Not enough subquery results to synthesize a response.
@@ -38,21 +38,21 @@ pub enum StreamingError {
         /// Number of results available.
         got: usize,
         /// Minimum number of results required.
-        needed: usize
+        needed: usize,
     },
 
     /// Synthesis operation failed to combine subquery results.
     #[error("Response synthesis failed: {reason}")]
     SynthesisFailed {
         /// Description of the synthesis failure.
-        reason: String
+        reason: String,
     },
 
     /// Generic streaming error occurred.
     #[error("Streaming error: {message}")]
     StreamingError {
         /// Error message describing the streaming issue.
-        message: String
+        message: String,
     },
 }
 
@@ -425,7 +425,7 @@ impl StreamingResponseBuilder {
                 } else {
                     TemplateType::Fallback
                 }
-            }
+            },
         }
     }
 
@@ -474,7 +474,7 @@ impl StreamingResponseBuilder {
                 "content" => synthesis_result.content.clone(),
                 "confidence_indicator" => {
                     self.generate_confidence_indicator(synthesis_result.confidence)
-                }
+                },
                 "entity" => self.extract_primary_entity(subquery_results),
                 "entity1" => self.extract_entity_by_index(subquery_results, 0),
                 "entity2" => self.extract_entity_by_index(subquery_results, 1),

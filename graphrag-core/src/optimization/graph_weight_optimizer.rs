@@ -11,7 +11,7 @@
 //! - Performance tracking across iterations
 
 use crate::{
-    core::{KnowledgeGraph, Result, GraphRAGError},
+    core::{GraphRAGError, KnowledgeGraph, Result},
     ollama::OllamaClient,
 };
 use serde::{Deserialize, Serialize};
@@ -100,7 +100,7 @@ impl ObjectiveWeights {
             "relevance" => self.relevance += boost,
             "faithfulness" => self.faithfulness += boost,
             "conciseness" => self.conciseness += boost,
-            _ => {}
+            _ => {},
         }
         self.normalize();
     }
@@ -289,7 +289,8 @@ impl GraphWeightOptimizer {
 
             // Adjust graph weights for next iteration
             if iteration < self.config.max_iterations - 1 {
-                self.adjust_graph_weights(graph, test_queries, &step).await?;
+                self.adjust_graph_weights(graph, test_queries, &step)
+                    .await?;
             }
         }
 
@@ -324,15 +325,14 @@ impl GraphWeightOptimizer {
             // 1. If use_llm_eval=true and ollama_client available: Use LLM evaluation
             // 2. Otherwise: Use heuristic metrics (entity matching, string similarity)
 
-            let (relevance, faithfulness, conciseness) = if self.config.use_llm_eval
-                && self.ollama_client.is_some()
-            {
-                // LLM-based evaluation
-                self.evaluate_with_llm(graph, test_query).await?
-            } else {
-                // Heuristic evaluation (fallback)
-                self.evaluate_with_heuristics(graph, test_query)?
-            };
+            let (relevance, faithfulness, conciseness) =
+                if self.config.use_llm_eval && self.ollama_client.is_some() {
+                    // LLM-based evaluation
+                    self.evaluate_with_llm(graph, test_query).await?
+                } else {
+                    // Heuristic evaluation (fallback)
+                    self.evaluate_with_heuristics(graph, test_query)?
+                };
 
             total_relevance += relevance * test_query.weight;
             total_faithfulness += faithfulness * test_query.weight;
@@ -406,9 +406,10 @@ impl GraphWeightOptimizer {
             let found_in_graph = graph.entities().any(|e| {
                 e.name.to_lowercase().contains(token)
                     || e.entity_type.to_lowercase().contains(token)
-            }) || graph.get_all_relationships().iter().any(|r| {
-                r.relation_type.to_lowercase().contains(token)
-            });
+            }) || graph
+                .get_all_relationships()
+                .iter()
+                .any(|r| r.relation_type.to_lowercase().contains(token));
 
             if found_in_graph {
                 answer_token_found += 1;
@@ -445,11 +446,12 @@ impl GraphWeightOptimizer {
         graph: &KnowledgeGraph,
         test_query: &TestQuery,
     ) -> Result<(f32, f32, f32)> {
-        let ollama_client = self.ollama_client.as_ref().ok_or_else(|| {
-            GraphRAGError::Config {
+        let ollama_client = self
+            .ollama_client
+            .as_ref()
+            .ok_or_else(|| GraphRAGError::Config {
                 message: "LLM evaluation requested but no Ollama client available".to_string(),
-            }
-        })?;
+            })?;
 
         // Build context from graph
         let context = self.build_graph_context(graph, &test_query.query, 5);
@@ -470,11 +472,13 @@ impl GraphWeightOptimizer {
         );
 
         // Call LLM
-        let response = ollama_client.generate(&prompt).await.map_err(|e| {
-            GraphRAGError::LanguageModel {
-                message: format!("LLM evaluation failed: {}", e),
-            }
-        })?;
+        let response =
+            ollama_client
+                .generate(&prompt)
+                .await
+                .map_err(|e| GraphRAGError::LanguageModel {
+                    message: format!("LLM evaluation failed: {}", e),
+                })?;
 
         // Parse JSON response
         self.parse_llm_evaluation(&response)
@@ -749,8 +753,7 @@ mod tests {
         let query = TestQuery::new("test query".to_string(), "expected".to_string());
         assert_eq!(query.weight, 1.0);
 
-        let weighted = TestQuery::new("test".to_string(), "expected".to_string())
-            .with_weight(2.0);
+        let weighted = TestQuery::new("test".to_string(), "expected".to_string()).with_weight(2.0);
         assert_eq!(weighted.weight, 2.0);
     }
 
@@ -855,7 +858,11 @@ mod tests {
             optimizer.evaluate_with_heuristics(&graph, &query).unwrap();
 
         // Check results are in valid range
-        assert!(relevance >= 0.0 && relevance <= 1.0, "Relevance out of range: {}", relevance);
+        assert!(
+            relevance >= 0.0 && relevance <= 1.0,
+            "Relevance out of range: {}",
+            relevance
+        );
         assert!(
             faithfulness >= 0.0 && faithfulness <= 1.0,
             "Faithfulness out of range: {}",
@@ -869,10 +876,18 @@ mod tests {
 
         // Should have some relevance since entities match query tokens
         // Query has "Socrates" and "philosophy" which should match entity names
-        assert!(relevance > 0.0, "Should find some relevant entities (relevance={})", relevance);
+        assert!(
+            relevance > 0.0,
+            "Should find some relevant entities (relevance={})",
+            relevance
+        );
 
         // Should have some faithfulness since expected answer mentions "Socrates", "founded", "philosophy"
-        assert!(faithfulness > 0.0, "Should match expected answer (faithfulness={})", faithfulness);
+        assert!(
+            faithfulness > 0.0,
+            "Should match expected answer (faithfulness={})",
+            faithfulness
+        );
     }
 
     #[test]
@@ -880,10 +895,7 @@ mod tests {
         let graph = KnowledgeGraph::new();
         let optimizer = GraphWeightOptimizer::new();
 
-        let query = TestQuery::new(
-            "test query".to_string(),
-            "test answer".to_string(),
-        );
+        let query = TestQuery::new("test query".to_string(), "test answer".to_string());
 
         let (relevance, faithfulness, conciseness) =
             optimizer.evaluate_with_heuristics(&graph, &query).unwrap();
@@ -931,8 +943,14 @@ mod tests {
         let context = optimizer.build_graph_context(&graph, "entity 0", 3);
 
         // Should include entities and relationships
-        assert!(context.contains("Entities:"), "Context should include entities");
-        assert!(context.contains("Relationships:"), "Context should include relationships");
+        assert!(
+            context.contains("Entities:"),
+            "Context should include entities"
+        );
+        assert!(
+            context.contains("Relationships:"),
+            "Context should include relationships"
+        );
         assert!(context.len() > 0, "Context should not be empty");
     }
 

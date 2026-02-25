@@ -53,7 +53,8 @@ impl CacheStatistics {
     pub fn record_hit(&self, time_saved: Duration) {
         self.total_requests.fetch_add(1, Ordering::Relaxed);
         self.cache_hits.fetch_add(1, Ordering::Relaxed);
-        self.time_saved_us.fetch_add(time_saved.as_micros() as u64, Ordering::Relaxed);
+        self.time_saved_us
+            .fetch_add(time_saved.as_micros() as u64, Ordering::Relaxed);
     }
 
     /// Record a cache miss
@@ -80,9 +81,11 @@ impl CacheStatistics {
     pub fn record_update(&self, old_size: usize, new_size: usize) {
         self.updates.fetch_add(1, Ordering::Relaxed);
         if new_size > old_size {
-            self.total_bytes.fetch_add(new_size - old_size, Ordering::Relaxed);
+            self.total_bytes
+                .fetch_add(new_size - old_size, Ordering::Relaxed);
         } else {
-            self.total_bytes.fetch_sub(old_size - new_size, Ordering::Relaxed);
+            self.total_bytes
+                .fetch_sub(old_size - new_size, Ordering::Relaxed);
         }
     }
 
@@ -268,7 +271,8 @@ impl CacheMetrics {
         if self.avg_time_saved_per_hit.is_zero() {
             return 1.0;
         }
-        avg_llm_latency.as_secs_f64() / (avg_llm_latency.as_secs_f64() - self.avg_time_saved_per_hit.as_secs_f64()).max(0.001)
+        avg_llm_latency.as_secs_f64()
+            / (avg_llm_latency.as_secs_f64() - self.avg_time_saved_per_hit.as_secs_f64()).max(0.001)
     }
 
     /// Get efficiency score (0.0 to 1.0)
@@ -294,7 +298,9 @@ impl CacheMetrics {
         };
         let error_score = (1.0 - error_rate).max(0.0);
 
-        hit_score * hit_rate_weight + memory_score * memory_efficiency_weight + error_score * error_rate_weight
+        hit_score * hit_rate_weight
+            + memory_score * memory_efficiency_weight
+            + error_score * error_rate_weight
     }
 }
 
@@ -360,13 +366,20 @@ impl CacheHealth {
         // Check hit rate
         if metrics.hit_rate < 0.5 {
             alerts.push(HealthAlert {
-                level: if metrics.hit_rate < 0.2 { AlertLevel::Critical } else { AlertLevel::Warning },
+                level: if metrics.hit_rate < 0.2 {
+                    AlertLevel::Critical
+                } else {
+                    AlertLevel::Warning
+                },
                 message: "Low cache hit rate".to_string(),
                 metric: "hit_rate".to_string(),
                 threshold: 0.5,
                 current_value: metrics.hit_rate,
             });
-            recommendations.push("Consider adjusting cache key generation strategy or increasing cache size".to_string());
+            recommendations.push(
+                "Consider adjusting cache key generation strategy or increasing cache size"
+                    .to_string(),
+            );
             if metrics.hit_rate < 0.2 {
                 status = HealthStatus::Critical;
             } else if status == HealthStatus::Healthy {
@@ -385,13 +398,20 @@ impl CacheHealth {
 
         if error_rate > 0.05 {
             alerts.push(HealthAlert {
-                level: if error_rate > 0.2 { AlertLevel::Critical } else { AlertLevel::Warning },
+                level: if error_rate > 0.2 {
+                    AlertLevel::Critical
+                } else {
+                    AlertLevel::Warning
+                },
                 message: "High error rate".to_string(),
                 metric: "error_rate".to_string(),
                 threshold: 0.05,
                 current_value: error_rate,
             });
-            recommendations.push("Investigate cache errors and consider reducing cache size or entry limits".to_string());
+            recommendations.push(
+                "Investigate cache errors and consider reducing cache size or entry limits"
+                    .to_string(),
+            );
             if error_rate > 0.2 {
                 status = HealthStatus::Critical;
             } else if status == HealthStatus::Healthy {
@@ -405,7 +425,11 @@ impl CacheHealth {
         let utilization = metrics.current_size as f64 / max_capacity as f64;
         if utilization > 0.9 {
             alerts.push(HealthAlert {
-                level: if utilization > 0.95 { AlertLevel::Critical } else { AlertLevel::Warning },
+                level: if utilization > 0.95 {
+                    AlertLevel::Critical
+                } else {
+                    AlertLevel::Warning
+                },
                 message: "High cache utilization".to_string(),
                 metric: "utilization".to_string(),
                 threshold: 0.9,
@@ -432,7 +456,10 @@ impl CacheHealth {
                     threshold: 0.3,
                     current_value: eviction_rate,
                 });
-                recommendations.push("Cache is evicting entries frequently; consider increasing capacity".to_string());
+                recommendations.push(
+                    "Cache is evicting entries frequently; consider increasing capacity"
+                        .to_string(),
+                );
                 if status == HealthStatus::Healthy {
                     status = HealthStatus::Warning;
                 }
@@ -565,7 +592,11 @@ mod tests {
         };
 
         let health = CacheHealth::evaluate(metrics, 1000);
-        assert_eq!(health.status, HealthStatus::Critical, "Expected Critical with hit_rate=0.15 and error_rate=0.25");
+        assert_eq!(
+            health.status,
+            HealthStatus::Critical,
+            "Expected Critical with hit_rate=0.15 and error_rate=0.25"
+        );
         assert!(!health.alerts.is_empty());
         assert!(!health.recommendations.is_empty());
     }

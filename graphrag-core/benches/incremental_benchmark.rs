@@ -11,8 +11,7 @@
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use graphrag_core::incremental::{
-    IncrementalGraphManager, IncrementalConfig, GraphNode, NodeType,
-    ConflictResolution,
+    ConflictResolution, GraphNode, IncrementalConfig, IncrementalGraphManager, NodeType,
 };
 use std::collections::HashMap;
 
@@ -25,7 +24,10 @@ fn generate_test_node(id: usize) -> GraphNode {
         attributes: HashMap::from([
             ("type".to_string(), "test_entity".to_string()),
             ("index".to_string(), id.to_string()),
-            ("description".to_string(), format!("This is test node number {}", id)),
+            (
+                "description".to_string(),
+                format!("This is test node number {}", id),
+            ),
             ("category".to_string(), (id % 10).to_string()),
         ]),
         embeddings: None,

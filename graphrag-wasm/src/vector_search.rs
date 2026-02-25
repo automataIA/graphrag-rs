@@ -1,6 +1,5 @@
 ///! Pure Rust vector search implementation using cosine similarity
 ///! This replaces the JavaScript-based Voy bindings with native WASM code
-
 use std::cmp::Ordering;
 
 /// Simple in-memory vector index for semantic search

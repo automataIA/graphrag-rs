@@ -7,6 +7,163 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - GLiNER-Relex Extraction via gline-rs (2026-02-23)
+
+#### GLiNER-Relex Entity + Relation Extractor (`entity/gliner_extractor.rs`, `config/mod.rs`, `config/setconfig.rs`, `lib.rs`)
+- New `GLiNERExtractor`: joint entity + relation extraction in a single forward pass via
+  `gline-rs` v1.0.1 + ONNX Runtime. ~1.5 GB VRAM vs 8+ GB for generative LLMs; zero
+  structural hallucinations.
+- Two-stage pipeline: NER (SpanPipeline or TokenPipeline) → RE (RelationPipeline), both
+  composed on the same `orp::model::Model` with lazy loading via `Arc<RwLock<Option<Model>>>`.
+- Confidence scores propagated natively into `Entity.confidence` and `Relationship.confidence`.
+- Optional feature flag `gliner`: crate compiles and works normally without it.
+- `tokio::task::spawn_blocking` wrapper in `lib.rs` keeps the async runtime unblocked.
+- Config example (JSON5):
+  ```json5
+  gliner: {
+    enabled: true,
+    model_path: "./models/gliner-relex-large-v0.5.onnx",
+    entity_labels: ["person", "organization", "location"],
+    relation_labels: ["controls", "located in", "causes"],
+    entity_threshold: 0.40,
+    relation_threshold: 0.50,
+    mode: "span",   // or "token" for gliner-multitask
+    use_gpu: false,
+  }
+  ```
+
+### Added - Graph Persistence / Storage Choice (2026-02-23)
+
+#### Storage Backend — In-Memory vs Disk (`config/mod.rs`, `config/setconfig.rs`, `lib.rs`)
+- `AutoSaveConfig` (and `AutoSaveSetConfig` in SetConfig) now expose:
+  - `base_dir: Option<String>` — directory where workspace folders are stored (e.g. `"./output"`)
+  - `workspace_name: Option<String>` — sub-folder inside `base_dir` (default: `"default"`)
+  - `enabled: bool` — `false` (default) = in-memory only; `true` = persist to disk
+- `GraphRAG::initialize()` now calls `try_load_from_workspace()`: if `auto_save.enabled = true`
+  and the workspace already exists on disk, the graph is **loaded from disk** instead of starting empty.
+  The second run reuses the previously built graph automatically.
+- `GraphRAG::save_to_workspace()` — new public method; also called automatically at the end of
+  `build_graph()` when persistence is enabled.
+- No-op when `enabled = false`; zero performance cost for in-memory-only deployments.
+- Format hierarchy on disk: Parquet (if `persistent-storage` feature) → JSON fallback (always).
+- JSON5 config usage:
+  ```json5
+  auto_save: {
+    enabled: true,
+    base_dir: "./output",
+    workspace_name: "my_project",
+  }
+  ```
+
+### Fixed - Extraction Temperature (2026-02-23)
+
+#### Zero-Temperature Entity Extraction (`entity/gleaning_extractor.rs`, `entity/llm_extractor.rs`, `config/setconfig.rs`)
+- `GleaningConfig::default()` and `LLMEntityExtractor::new()` now use `temperature: 0.0` (was `0.1`)
+  - Fully deterministic JSON output — eliminates spurious token variation that causes parse failures
+  - Consistent with recommendations for structured extraction models (NuExtract, Triplex, etc.)
+- `EntityExtractionConfig.temperature` in SetConfig now defaults via `default_extraction_temperature() = 0.0`
+  - Separate from `default_temperature() = 0.1` used for general LLM parameters
+  - Users can override in JSON5: `entity_extraction.temperature = 0.0`
+- `ContextualEnricher` retains `0.1` (generates natural language descriptions, not strict JSON)
+
+### Fixed & Improved - Entity Extraction, Query Quality & Sources (2026-02-23)
+
+#### SetConfig `use_gleaning` Bug Fix (`config/setconfig.rs`)
+- **Bug**: when `mode.approach = "semantic"` with no `semantic:` sub-section, the `else` block
+  hardcoded `config.entities.use_gleaning = true` regardless of the top-level `entity_extraction.use_gleaning` field
+- **Fix**: the `else` block now reads from `self.entity_extraction.use_gleaning` and `max_gleaning_rounds` directly
+- This affected ALL JSON5 configs using `mode.approach = "semantic"` without an explicit `semantic:` block
+
+#### LLM Single-Pass Entity Extraction (`lib.rs`, `entity/llm_extractor.rs`, `ollama/mod.rs`)
+- New **LLM single-pass path** in `lib.rs`: `ollama.enabled && !use_gleaning` now uses `LLMEntityExtractor`
+  instead of falling through to pattern-based regex extraction
+- **Dynamic `num_ctx`** per chunk: `(prompt_tokens + max_output_tokens) × 1.20`, rounded to 1024,
+  clamped `[4096, 131072]` — mirrors the `ContextualEnricher` formula
+- `LLMEntityExtractor` now carries `keep_alive: Option<String>` and `with_keep_alive()` builder
+- `call_llm_with_retry` and `call_llm_completion_check` use `generate_with_params` instead of `generate()`
+  to pass `num_ctx` and `keep_alive` — activates Ollama KV cache during entity extraction
+- `GleaningEntityExtractor::new` extracts `keep_alive` before consuming the client and threads it through
+- `OllamaClient::config()` getter added for field access without moving
+- **Result on Symposium (274 chunks, mistral-nemo, no gleaning)**: **1,139 entities, 670 relationships**
+  (vs 0 relationships previously due to pattern-based fallback)
+
+#### JSON Parse Resilience — Missing `description` Field (`entity/prompts.rs`)
+- `EntityData.description` is now annotated `#[serde(default)]`
+- When the LLM returns JSON with a missing `description` field (e.g. for Project Gutenberg license chunks),
+  parsing succeeds with an empty string instead of falling through to the error path and losing all entities
+  from that chunk
+- Fixes the `"JSON repair failed: missing field 'description'"` errors seen in the last ~10 chunks of
+  Project Gutenberg books
+
+#### Multi-Chunk Semantic Answer Generation (`lib.rs`, `handlers/bench.rs`)
+- `generate_semantic_answer_from_results`: reworked context assembly
+  - **Removed 400-char truncation**: full chunk content is now passed to the LLM for each result
+  - **Deduplication**: tracks seen chunk IDs to avoid repeating the same chunk from multiple entity hits
+  - **Relevance sorting**: context sections sorted by score descending before joining
+  - **Synthesis prompt**: updated instructions to ask the LLM to synthesize across ALL context sections
+  - **Dynamic `num_ctx`**: prompt size calculated at runtime with 20% margin — activates KV cache for answering
+  - **`generate_with_params`** used instead of `generate()` — passes `num_ctx`, `keep_alive`, `temperature`
+- `bench.rs`: switched from `graphrag.ask()` to `graphrag.ask_explained()`
+  - `sources` in the JSON output now populated with actual chunk IDs and excerpts (was always `[]`)
+
+#### E2E Config — No-Gleaning Mistral Pipeline
+- New config `tests/e2e/configs/kv_no_gleaning_mistral__symposium.json5`
+  - `use_gleaning: false`, `keep_alive: "1h"`, `chunk_size: 1000`, `chunk_overlap: 200`
+  - Uses mistral-nemo:latest for entity extraction and nomic-embed-text for embeddings
+
+### Added - Ollama KV Cache & Contextual Retrieval (2026-02-22)
+
+#### Ollama KV Cache Parameters (`ollama/mod.rs`, `config/mod.rs`, `config/setconfig.rs`)
+- **`keep_alive`** field added to `OllamaConfig` and `OllamaGenerationParams`
+  - Keeps the Ollama model loaded in VRAM between requests (prevents KV cache eviction)
+  - Critical for multi-chunk document processing: without it, the model unloads between each chunk
+  - Default: `None` (uses Ollama's built-in 5-minute default)
+  - Example: `"1h"` for book-length document processing sessions
+- **`num_ctx`** field added to `OllamaConfig` and `OllamaGenerationParams`
+  - Explicitly sets the context window size (Ollama silently truncates to 2k-8k without this)
+  - Goes into the `options` object in Ollama API requests; `keep_alive` is a top-level field
+  - Default: `None` (uses Ollama's default, usually 2048-8192 tokens)
+  - Example: `32768` for documents up to ~130k characters
+- Both fields wired through the full config stack: JSON5 parser, `OllamaSetConfig`, request body
+
+#### Contextual Chunk Enricher (`text/contextual_enricher.rs`)
+- New module implementing [Anthropic's Contextual Retrieval](https://www.anthropic.com/news/contextual-retrieval) pattern
+- `ContextualEnricher`: augments each chunk with 2-3 sentences of document-level context before embedding
+- **KV Cache optimization**: static prefix (full document) is cached by Ollama; only the chunk suffix is re-evaluated per request
+  - First chunk: ~2 min (loads document into KV cache on RTX 4070 with Mistral-NeMo 12B)
+  - Subsequent chunks: ~3-5 sec each (only chunk tokens evaluated)
+  - ~100 chunks from a 45k-token book: **5-10 minutes total** vs hours without KV cache
+- `calculate_num_ctx()`: dynamic context window calculation per document
+  - Formula: `tokens(instructions) + tokens(document) + tokens(largest_chunk) + output_budget + 5% margin`
+  - Rounded to nearest 1024, clamped to `[4096, 131072]`
+- `enrich_document_chunks()` and `enrich_chunks()`: async, groups chunks by source document
+- Output format: `[LLM context]\n\n[original chunk text]` — preserves original text verbatim
+
+#### Late Chunking Strategy (`text/late_chunking.rs`)
+- New `LateChunkingStrategy` implementing `ChunkingStrategy` trait (Jina AI technique)
+- Produces chunks annotated with `position_in_document` metadata (byte spans) for post-hoc pooling
+- `JinaLateChunkingClient`: calls Jina Embeddings API v2 with `late_chunking: true`
+- `split_into_sections()`: handles documents exceeding model context window (8192 tokens for Jina v3)
+- `LateChunkingConfig`: configurable chunk size, overlap, max document tokens, position annotation
+
+#### E2E Benchmark KV Cache Support (`tests/e2e/run_benchmarks.sh`)
+- Three new pipeline dimensions: `keep_alive`, `num_ctx`, `ollama_timeout`
+- All existing pipelines updated with explicit defaults (`keep_alive=none`, `num_ctx=0`)
+- Semantic/hybrid pipelines with Ollama now default to `keep_alive=30m` (model stays loaded during build phase)
+- **Three new KV cache pipelines** targeting long document processing:
+  - `kv_semantic_mistral`: semantic approach, Mistral-NeMo, `keep_alive=1h`, `num_ctx=32768`, timeout=300s
+  - `kv_hybrid_mistral`: hybrid approach, Mistral-NeMo, `keep_alive=1h`, `num_ctx=32768`, timeout=300s
+  - `kv_semantic_qwen3`: semantic approach, Qwen3 8B Q4, `keep_alive=1h`, `num_ctx=16384`, timeout=300s
+- KV Cache settings shown in run header when active
+- Generated JSON5 configs include `keep_alive` and `num_ctx` in the `ollama` section
+
+#### Tests
+- `tests/contextual_enricher_e2e.rs`: 4 tests for `ContextualEnricher`
+  - `test_enriched_chunk_contains_original_and_context` (`#[ignore]`, requires `ENABLE_OLLAMA_TESTS=1`)
+  - `test_kv_cache_speedup` (`#[ignore]`) — measures per-chunk timing and speedup ratio
+  - `test_num_ctx_calculation_sanity` — always-run, validates num_ctx formula bounds
+  - `test_disabled_enricher_returns_chunks_unchanged` — always-run no-op safety check
+
 ### Added - Service Registry Completion (2025-02-11)
 
 #### Core Infrastructure

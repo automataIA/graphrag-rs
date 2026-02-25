@@ -2,12 +2,12 @@
 //!
 //! Extracted from bin/graphrag_server for testability
 
+use crate::{GraphRAG, GraphRAGError};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Json},
 };
-use crate::{GraphRAG, GraphRAGError};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -75,8 +75,7 @@ pub async fn handle_query(
     let start = std::time::Instant::now();
 
     let graphrag = state.graphrag.read().await;
-    let results = graphrag.query(&req.query)
-        .map_err(AppError::GraphRAG)?;
+    let results = graphrag.query(&req.query).map_err(AppError::GraphRAG)?;
 
     let query_time = start.elapsed().as_millis() as u64;
 
@@ -116,7 +115,8 @@ pub async fn add_document(
     let start = std::time::Instant::now();
 
     let mut graphrag = state.graphrag.write().await;
-    graphrag.add_document_from_text(&req.content)
+    graphrag
+        .add_document_from_text(&req.content)
         .map_err(|e| AppError::Internal(format!("Failed to add document: {}", e)))?;
 
     let processing_time = start.elapsed().as_millis() as u64;
@@ -235,8 +235,12 @@ pub struct ListEntitiesQuery {
     pub entity_type: Option<String>,
 }
 
-fn default_page() -> usize { 1 }
-fn default_page_size() -> usize { 20 }
+fn default_page() -> usize {
+    1
+}
+fn default_page_size() -> usize {
+    20
+}
 
 pub async fn list_entities(
     State(state): State<AppState>,
@@ -248,7 +252,9 @@ pub async fn list_entities(
         let mut entities: Vec<serde_json::Value> = graph
             .entities()
             .filter(|entity| {
-                params.entity_type.as_ref()
+                params
+                    .entity_type
+                    .as_ref()
                     .map_or(true, |t| entity.entity_type == *t)
             })
             .map(|entity| {
@@ -263,7 +269,11 @@ pub async fn list_entities(
 
         let total = entities.len();
         let start = (params.page - 1) * params.page_size;
-        entities = entities.into_iter().skip(start).take(params.page_size).collect();
+        entities = entities
+            .into_iter()
+            .skip(start)
+            .take(params.page_size)
+            .collect();
 
         Ok(Json(serde_json::json!({
             "entities": entities,

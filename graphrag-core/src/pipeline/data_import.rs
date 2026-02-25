@@ -17,11 +17,11 @@
 //!   Files      Check     Fields      Format
 //! ```
 
+use csv::ReaderBuilder;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use csv::ReaderBuilder;
+use std::path::Path;
 
 /// Supported data formats
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -145,7 +145,9 @@ impl std::fmt::Display for ImportError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             ImportError::FileNotFound(path) => write!(f, "File not found: {}", path),
-            ImportError::ParseError(msg, line) => write!(f, "Parse error at line {}: {}", line, msg),
+            ImportError::ParseError(msg, line) => {
+                write!(f, "Parse error at line {}: {}", line, msg)
+            },
             ImportError::ValidationError(msg) => write!(f, "Validation error: {}", msg),
             ImportError::MissingField(field) => write!(f, "Missing required field: {}", field),
             ImportError::InvalidFormat(msg) => write!(f, "Invalid format: {}", msg),
@@ -202,7 +204,11 @@ impl DataImporter {
     }
 
     /// Import CSV/TSV with custom delimiter
-    fn import_csv_with_delimiter(&self, path: &Path, delimiter: u8) -> Result<ImportResult, ImportError> {
+    fn import_csv_with_delimiter(
+        &self,
+        path: &Path,
+        delimiter: u8,
+    ) -> Result<ImportResult, ImportError> {
         let mut entities = Vec::new();
         let mut relationships = Vec::new();
         let mut errors = Vec::new();
@@ -216,27 +222,41 @@ impl DataImporter {
             .from_reader(file);
 
         // Get headers
-        let headers = reader.headers()
+        let headers = reader
+            .headers()
             .map_err(|e| ImportError::ParseError(format!("Failed to read headers: {}", e), 0))?
             .clone();
 
-        let mappings = self.config.column_mappings.as_ref()
-            .ok_or_else(|| ImportError::ValidationError("Column mappings required for CSV import".to_string()))?;
+        let mappings = self.config.column_mappings.as_ref().ok_or_else(|| {
+            ImportError::ValidationError("Column mappings required for CSV import".to_string())
+        })?;
 
         // Find column indices
-        let entity_id_idx = headers.iter().position(|h| h == mappings.entity_id)
+        let entity_id_idx = headers
+            .iter()
+            .position(|h| h == mappings.entity_id)
             .ok_or_else(|| ImportError::MissingField(mappings.entity_id.clone()))?;
-        let entity_name_idx = headers.iter().position(|h| h == mappings.entity_name)
+        let entity_name_idx = headers
+            .iter()
+            .position(|h| h == mappings.entity_name)
             .ok_or_else(|| ImportError::MissingField(mappings.entity_name.clone()))?;
-        let entity_type_idx = headers.iter().position(|h| h == mappings.entity_type)
+        let entity_type_idx = headers
+            .iter()
+            .position(|h| h == mappings.entity_type)
             .ok_or_else(|| ImportError::MissingField(mappings.entity_type.clone()))?;
 
         // Optional relationship columns
-        let rel_source_idx = mappings.relationship_source.as_ref()
+        let rel_source_idx = mappings
+            .relationship_source
+            .as_ref()
             .and_then(|col| headers.iter().position(|h| h == col));
-        let rel_target_idx = mappings.relationship_target.as_ref()
+        let rel_target_idx = mappings
+            .relationship_target
+            .as_ref()
             .and_then(|col| headers.iter().position(|h| h == col));
-        let rel_type_idx = mappings.relationship_type.as_ref()
+        let rel_type_idx = mappings
+            .relationship_type
+            .as_ref()
             .and_then(|col| headers.iter().position(|h| h == col));
 
         // Process records
@@ -252,19 +272,13 @@ impl DataImporter {
                         break;
                     }
                     continue;
-                }
+                },
             };
 
             // Extract entity
-            let entity_id = record.get(entity_id_idx)
-                .unwrap_or("")
-                .to_string();
-            let entity_name = record.get(entity_name_idx)
-                .unwrap_or("")
-                .to_string();
-            let entity_type = record.get(entity_type_idx)
-                .unwrap_or("")
-                .to_string();
+            let entity_id = record.get(entity_id_idx).unwrap_or("").to_string();
+            let entity_name = record.get(entity_name_idx).unwrap_or("").to_string();
+            let entity_type = record.get(entity_type_idx).unwrap_or("").to_string();
 
             if !entity_id.is_empty() && !entity_name.is_empty() && !entity_type.is_empty() {
                 // Collect additional attributes
@@ -302,11 +316,13 @@ impl DataImporter {
 
             // Extract relationship if columns present
             if let (Some(src_idx), Some(tgt_idx), Some(type_idx)) =
-                (rel_source_idx, rel_target_idx, rel_type_idx) {
-
-                if let (Some(source), Some(target), Some(rel_type)) =
-                    (record.get(src_idx), record.get(tgt_idx), record.get(type_idx)) {
-
+                (rel_source_idx, rel_target_idx, rel_type_idx)
+            {
+                if let (Some(source), Some(target), Some(rel_type)) = (
+                    record.get(src_idx),
+                    record.get(tgt_idx),
+                    record.get(type_idx),
+                ) {
                     if !source.is_empty() && !target.is_empty() && !rel_type.is_empty() {
                         let relationship = ImportedRelationship {
                             source: source.to_string(),
@@ -458,7 +474,7 @@ impl DataImporter {
                         break;
                     }
                     continue;
-                }
+                },
             };
 
             // Skip empty lines
@@ -477,11 +493,16 @@ impl DataImporter {
                         break;
                     }
                     continue;
-                }
+                },
             };
 
             match parsed {
-                JsonLine::Entity { id, name, entity_type, attributes } => {
+                JsonLine::Entity {
+                    id,
+                    name,
+                    entity_type,
+                    attributes,
+                } => {
                     let entity = ImportedEntity {
                         id,
                         name,
@@ -500,8 +521,13 @@ impl DataImporter {
                     }
 
                     entities.push(entity);
-                }
-                JsonLine::Relationship { source, target, relation_type, attributes } => {
+                },
+                JsonLine::Relationship {
+                    source,
+                    target,
+                    relation_type,
+                    attributes,
+                } => {
                     let rel = ImportedRelationship {
                         source,
                         target,
@@ -520,7 +546,7 @@ impl DataImporter {
                     }
 
                     relationships.push(rel);
-                }
+                },
             }
         }
 
@@ -570,13 +596,20 @@ impl DataImporter {
                         let object = triple.object.to_string();
 
                         // Extract entity from subject
-                        entity_map.entry(subject.clone()).or_insert_with(HashMap::new);
+                        entity_map
+                            .entry(subject.clone())
+                            .or_insert_with(HashMap::new);
 
                         // Check if object is a URI (entity) or literal (property)
                         if object.starts_with('<') && object.ends_with('>') {
                             // Object is an entity - create relationship
-                            let object_id = object.trim_start_matches('<').trim_end_matches('>').to_string();
-                            entity_map.entry(object_id.clone()).or_insert_with(HashMap::new);
+                            let object_id = object
+                                .trim_start_matches('<')
+                                .trim_end_matches('>')
+                                .to_string();
+                            entity_map
+                                .entry(object_id.clone())
+                                .or_insert_with(HashMap::new);
 
                             // Extract relation type from predicate URI
                             let relation_type = Self::extract_local_name(&predicate);
@@ -599,22 +632,24 @@ impl DataImporter {
                                 attrs.insert(prop_name, value);
                             }
                         }
-                    }
+                    },
                     Err(e) => {
                         errors.push(format!("RDF parse error: {}", e));
-                    }
+                    },
                 }
             }
 
             // Convert entity_map to ImportedEntity list
             for (uri, attributes) in entity_map {
                 let id = Self::extract_local_name(&uri);
-                let name = attributes.get("label")
+                let name = attributes
+                    .get("label")
                     .or_else(|| attributes.get("name"))
                     .cloned()
                     .unwrap_or_else(|| id.clone());
 
-                let entity_type = attributes.get("type")
+                let entity_type = attributes
+                    .get("type")
                     .or_else(|| attributes.get("rdf:type"))
                     .cloned()
                     .unwrap_or_else(|| "resource".to_string());
@@ -660,7 +695,7 @@ impl DataImporter {
 
         #[cfg(feature = "graphml-import")]
         {
-            use crate::core::{Entity, EntityId, EntityMention, Relationship, ChunkId};
+            use crate::core::{ChunkId, Entity, EntityId, EntityMention, Relationship};
             use quick_xml::events::Event;
             use quick_xml::Reader;
             use std::collections::HashMap;
@@ -700,11 +735,12 @@ impl DataImporter {
                                 for attr in e.attributes() {
                                     if let Ok(attr) = attr {
                                         if attr.key.as_ref() == b"id" {
-                                            current_node_id = String::from_utf8_lossy(&attr.value).to_string();
+                                            current_node_id =
+                                                String::from_utf8_lossy(&attr.value).to_string();
                                         }
                                     }
                                 }
-                            }
+                            },
                             b"edge" => {
                                 in_edge = true;
                                 current_edge_source.clear();
@@ -715,28 +751,30 @@ impl DataImporter {
                                 for attr in e.attributes() {
                                     if let Ok(attr) = attr {
                                         let key = attr.key.as_ref();
-                                        let value = String::from_utf8_lossy(&attr.value).to_string();
+                                        let value =
+                                            String::from_utf8_lossy(&attr.value).to_string();
                                         match key {
                                             b"source" => current_edge_source = value,
                                             b"target" => current_edge_target = value,
-                                            _ => {}
+                                            _ => {},
                                         }
                                     }
                                 }
-                            }
+                            },
                             b"data" => {
                                 // Read data key attribute
                                 for attr in e.attributes() {
                                     if let Ok(attr) = attr {
                                         if attr.key.as_ref() == b"key" {
-                                            current_data_key = String::from_utf8_lossy(&attr.value).to_string();
+                                            current_data_key =
+                                                String::from_utf8_lossy(&attr.value).to_string();
                                         }
                                     }
                                 }
-                            }
-                            _ => {}
+                            },
+                            _ => {},
                         }
-                    }
+                    },
                     Ok(Event::Text(e)) => {
                         if !current_data_key.is_empty() {
                             let value = e.unescape().unwrap_or_default().to_string();
@@ -746,18 +784,20 @@ impl DataImporter {
                                 current_edge_attributes.insert(current_data_key.clone(), value);
                             }
                         }
-                    }
+                    },
                     Ok(Event::End(e)) => {
                         match e.name().as_ref() {
                             b"node" => {
                                 if in_node && !current_node_id.is_empty() {
                                     // Extract name and type from attributes
-                                    let name = current_node_attributes.get("name")
+                                    let name = current_node_attributes
+                                        .get("name")
                                         .or_else(|| current_node_attributes.get("label"))
                                         .cloned()
                                         .unwrap_or_else(|| current_node_id.clone());
 
-                                    let entity_type = current_node_attributes.get("type")
+                                    let entity_type = current_node_attributes
+                                        .get("type")
                                         .or_else(|| current_node_attributes.get("category"))
                                         .cloned()
                                         .unwrap_or_else(|| "node".to_string());
@@ -770,10 +810,14 @@ impl DataImporter {
                                     });
                                 }
                                 in_node = false;
-                            }
+                            },
                             b"edge" => {
-                                if in_edge && !current_edge_source.is_empty() && !current_edge_target.is_empty() {
-                                    let relation_type = current_edge_attributes.get("type")
+                                if in_edge
+                                    && !current_edge_source.is_empty()
+                                    && !current_edge_target.is_empty()
+                                {
+                                    let relation_type = current_edge_attributes
+                                        .get("type")
                                         .or_else(|| current_edge_attributes.get("label"))
                                         .cloned()
                                         .unwrap_or_else(|| "related".to_string());
@@ -786,18 +830,18 @@ impl DataImporter {
                                     });
                                 }
                                 in_edge = false;
-                            }
+                            },
                             b"data" => {
                                 current_data_key.clear();
-                            }
-                            _ => {}
+                            },
+                            _ => {},
                         }
-                    }
+                    },
                     Ok(Event::Eof) => break,
                     Err(e) => {
                         errors.push(format!("XML parse error: {}", e));
-                    }
-                    _ => {}
+                    },
+                    _ => {},
                 }
                 buf.clear();
             }
@@ -890,13 +934,13 @@ impl StreamingImporter {
                             }
                         }
                     }
-                }
+                },
                 Err(e) => {
                     errors.push(e);
                     if errors.len() >= self.config.max_errors {
                         break;
                     }
-                }
+                },
             }
         }
 

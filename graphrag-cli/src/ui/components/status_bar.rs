@@ -1,6 +1,10 @@
 //! Status bar component with color-coded indicators
 
-use crate::{action::{Action, StatusType}, theme::Theme, ui::Spinner};
+use crate::{
+    action::{Action, StatusType},
+    theme::Theme,
+    ui::Spinner,
+};
 use ratatui::{
     layout::{Alignment, Rect},
     style::{Modifier, Style},
@@ -71,19 +75,19 @@ impl super::Component for StatusBar {
             Action::SetStatus(status_type, message) => {
                 self.set_status(*status_type, message.clone());
                 None
-            }
+            },
             Action::ClearStatus => {
                 self.clear();
                 None
-            }
+            },
             Action::StartProgress(message) => {
                 self.start_progress(message.clone());
                 None
-            }
+            },
             Action::StopProgress => {
                 self.stop_progress();
                 None
-            }
+            },
             _ => None,
         }
     }
@@ -96,32 +100,32 @@ impl super::Component for StatusBar {
         let display_message = if self.progress_active {
             // Update spinner animation and show with progress message
             let spinner_frame = self.spinner.tick();
-            format!("{} {} {}", spinner_frame, self.status_type.icon(), self.progress_message)
+            format!(
+                "{} {} {}",
+                spinner_frame,
+                self.status_type.icon(),
+                self.progress_message
+            )
         } else {
             format!("{} {}", self.status_type.icon(), self.message)
         };
 
-        let style = Style::default()
-            .fg(self.status_type.color())
-            .add_modifier(if matches!(self.status_type, StatusType::Error | StatusType::Warning) {
+        let style = Style::default().fg(self.status_type.color()).add_modifier(
+            if matches!(self.status_type, StatusType::Error | StatusType::Warning) {
                 Modifier::BOLD
             } else {
                 Modifier::empty()
-            });
+            },
+        );
 
         let help_hint = Span::styled(
             " | Press ? for help | Esc to focus input | Ctrl+C to quit",
             self.theme.dimmed(),
         );
 
-        let line = Line::from(vec![
-            Span::styled(display_message, style),
-            help_hint,
-        ]);
+        let line = Line::from(vec![Span::styled(display_message, style), help_hint]);
 
-        let paragraph = Paragraph::new(line)
-            .block(block)
-            .alignment(Alignment::Left);
+        let paragraph = Paragraph::new(line).block(block).alignment(Alignment::Left);
 
         f.render_widget(paragraph, area);
     }

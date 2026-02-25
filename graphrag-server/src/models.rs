@@ -2,12 +2,12 @@
 //!
 //! All request/response models with automatic OpenAPI schema generation
 
+use actix_web::{error::ResponseError, http::StatusCode, HttpResponse};
 use apistos::ApiComponent;
 use apistos_gen::ApiErrorComponent;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use actix_web::{error::ResponseError, HttpResponse, http::StatusCode};
 
 // ============================================================================
 // Query Models
@@ -318,9 +318,15 @@ pub struct ApiKeyRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, ApiErrorComponent)]
 #[openapi_error(
     status(code = 400, description = "Bad Request - Invalid input or parameters"),
-    status(code = 401, description = "Unauthorized - Authentication required or failed"),
+    status(
+        code = 401,
+        description = "Unauthorized - Authentication required or failed"
+    ),
     status(code = 404, description = "Not Found - Resource does not exist"),
-    status(code = 500, description = "Internal Server Error - Server encountered an error")
+    status(
+        code = 500,
+        description = "Internal Server Error - Server encountered an error"
+    )
 )]
 pub enum ApiError {
     /// Bad request error

@@ -11,7 +11,7 @@ pub enum GraphRAGError {
     /// Configuration-related errors
     Config {
         /// Error message
-        message: String
+        message: String,
     },
 
     /// System not initialized error with helpful guidance
@@ -40,91 +40,91 @@ pub enum GraphRAGError {
     /// Text processing errors
     TextProcessing {
         /// Error message
-        message: String
+        message: String,
     },
 
     /// Graph construction and manipulation errors
     GraphConstruction {
         /// Error message
-        message: String
+        message: String,
     },
 
     /// Vector search and embedding errors
     VectorSearch {
         /// Error message
-        message: String
+        message: String,
     },
 
     /// Entity extraction errors
     EntityExtraction {
         /// Error message
-        message: String
+        message: String,
     },
 
     /// Retrieval system errors
     Retrieval {
         /// Error message
-        message: String
+        message: String,
     },
 
     /// Answer generation errors
     Generation {
         /// Error message
-        message: String
+        message: String,
     },
 
     /// Function calling errors
     FunctionCall {
         /// Error message
-        message: String
+        message: String,
     },
 
     /// Storage backend errors
     Storage {
         /// Error message
-        message: String
+        message: String,
     },
 
     /// Embedding model errors
     Embedding {
         /// Error message
-        message: String
+        message: String,
     },
 
     /// Language model errors
     LanguageModel {
         /// Error message
-        message: String
+        message: String,
     },
 
     /// Parallel processing errors
     Parallel {
         /// Error message
-        message: String
+        message: String,
     },
 
     /// Serialization errors
     Serialization {
         /// Error message
-        message: String
+        message: String,
     },
 
     /// Validation errors
     Validation {
         /// Error message
-        message: String
+        message: String,
     },
 
     /// Network connectivity errors
     Network {
         /// Error message
-        message: String
+        message: String,
     },
 
     /// Authentication/authorization errors
     Auth {
         /// Error message
-        message: String
+        message: String,
     },
 
     /// Resource not found errors
@@ -132,7 +132,7 @@ pub enum GraphRAGError {
         /// Resource type
         resource: String,
         /// Resource identifier
-        id: String
+        id: String,
     },
 
     /// Already exists errors
@@ -140,7 +140,7 @@ pub enum GraphRAGError {
         /// Resource type
         resource: String,
         /// Resource identifier
-        id: String
+        id: String,
     },
 
     /// Operation timeout errors
@@ -156,13 +156,13 @@ pub enum GraphRAGError {
         /// Resource name
         resource: String,
         /// Limit value
-        limit: usize
+        limit: usize,
     },
 
     /// Data corruption or integrity errors
     DataCorruption {
         /// Error message
-        message: String
+        message: String,
     },
 
     /// Unsupported operation errors
@@ -170,25 +170,25 @@ pub enum GraphRAGError {
         /// Operation name
         operation: String,
         /// Reason for not supporting
-        reason: String
+        reason: String,
     },
 
     /// Rate limiting errors
     RateLimit {
         /// Error message
-        message: String
+        message: String,
     },
 
     /// Conflict resolution errors
     ConflictResolution {
         /// Error message
-        message: String
+        message: String,
     },
 
     /// Incremental update errors
     IncrementalUpdate {
         /// Error message
-        message: String
+        message: String,
     },
 }
 
@@ -198,25 +198,25 @@ impl fmt::Display for GraphRAGError {
             GraphRAGError::Config { message } => {
                 write!(f, "Configuration error: {message}. \
                           Solution: Check your config file or use default settings with GraphRAG::builder()")
-            }
+            },
             GraphRAGError::NotInitialized => {
                 write!(
                     f,
                     "GraphRAG not initialized. \
                           Solution: Call .initialize() or use .ask() which auto-initializes"
                 )
-            }
+            },
             GraphRAGError::NoDocuments => {
                 write!(f, "No documents added. \
                           Solution: Use .add_document(), .add_document_from_text(), or .from_file() to add content")
-            }
+            },
             GraphRAGError::Io(err) => {
                 write!(
                     f,
                     "I/O error: {err}. \
                           Solution: Check file permissions and that paths exist"
                 )
-            }
+            },
             #[cfg(feature = "ureq")]
             GraphRAGError::Http(err) => {
                 write!(
@@ -224,7 +224,7 @@ impl fmt::Display for GraphRAGError {
                     "HTTP request error: {err}. \
                           Solution: Check network connectivity and service availability"
                 )
-            }
+            },
             #[cfg(not(feature = "ureq"))]
             GraphRAGError::Http(msg) => {
                 write!(
@@ -232,111 +232,111 @@ impl fmt::Display for GraphRAGError {
                     "HTTP request error: {msg}. \
                           Solution: Check network connectivity and service availability"
                 )
-            }
+            },
             GraphRAGError::Json(err) => {
                 write!(
                     f,
                     "JSON parsing error: {err}. \
                           Solution: Verify JSON format or use default configuration"
                 )
-            }
+            },
             GraphRAGError::SerdeJson(err) => {
                 write!(
                     f,
                     "JSON serialization error: {err}. \
                           Solution: Verify data structure compatibility"
                 )
-            }
+            },
             GraphRAGError::TextProcessing { message } => {
                 write!(
                     f,
                     "Text processing error: {message}. \
                           Solution: Check text content and chunk size configuration"
                 )
-            }
+            },
             GraphRAGError::GraphConstruction { message } => {
                 write!(
                     f,
                     "Graph construction error: {message}. \
                           Solution: Initialize GraphRAG system and add documents first"
                 )
-            }
+            },
             GraphRAGError::VectorSearch { message } => {
                 write!(f, "Vector search error: {message}. \
                           Solution: Ensure embeddings are initialized with .initialize_embeddings()")
-            }
+            },
             GraphRAGError::EntityExtraction { message } => {
                 write!(f, "Entity extraction error: {message}. \
                           Solution: Check entity extraction configuration or use lower confidence threshold")
-            }
+            },
             GraphRAGError::Retrieval { message } => {
                 write!(
                     f,
                     "Retrieval error: {message}. \
                           Solution: Ensure documents are added and graph is built"
                 )
-            }
+            },
             GraphRAGError::Generation { message } => {
                 write!(f, "Answer generation error: {message}. \
                           Solution: Check LLM provider configuration or use GraphRAG::builder().auto_detect_llm()")
-            }
+            },
             GraphRAGError::FunctionCall { message } => {
                 write!(f, "Function call error: {message}")
-            }
+            },
             GraphRAGError::Storage { message } => {
                 write!(f, "Storage error: {message}")
-            }
+            },
             GraphRAGError::Embedding { message } => {
                 write!(f, "Embedding error: {message}")
-            }
+            },
             GraphRAGError::LanguageModel { message } => {
                 write!(f, "Language model error: {message}")
-            }
+            },
             GraphRAGError::Parallel { message } => {
                 write!(f, "Parallel processing error: {message}")
-            }
+            },
             GraphRAGError::Serialization { message } => {
                 write!(f, "Serialization error: {message}")
-            }
+            },
             GraphRAGError::Validation { message } => {
                 write!(f, "Validation error: {message}")
-            }
+            },
             GraphRAGError::Network { message } => {
                 write!(f, "Network error: {message}")
-            }
+            },
             GraphRAGError::Auth { message } => {
                 write!(f, "Authentication error: {message}")
-            }
+            },
             GraphRAGError::NotFound { resource, id } => {
                 write!(f, "{resource} not found: {id}")
-            }
+            },
             GraphRAGError::AlreadyExists { resource, id } => {
                 write!(f, "{resource} already exists: {id}")
-            }
+            },
             GraphRAGError::Timeout {
                 operation,
                 duration,
             } => {
                 write!(f, "Operation '{operation}' timed out after {duration:?}")
-            }
+            },
             GraphRAGError::ResourceLimit { resource, limit } => {
                 write!(f, "Resource limit exceeded for {resource}: {limit}")
-            }
+            },
             GraphRAGError::DataCorruption { message } => {
                 write!(f, "Data corruption detected: {message}")
-            }
+            },
             GraphRAGError::Unsupported { operation, reason } => {
                 write!(f, "Unsupported operation '{operation}': {reason}")
-            }
+            },
             GraphRAGError::RateLimit { message } => {
                 write!(f, "Rate limit error: {message}")
-            }
+            },
             GraphRAGError::ConflictResolution { message } => {
                 write!(f, "Conflict resolution error: {message}")
-            }
+            },
             GraphRAGError::IncrementalUpdate { message } => {
                 write!(f, "Incremental update error: {message}")
-            }
+            },
         }
     }
 }
@@ -508,7 +508,7 @@ where
                     GraphRAGError::ConflictResolution {
                         message: format!("{context}: {message}"),
                     }
-                }
+                },
                 GraphRAGError::IncrementalUpdate { message } => GraphRAGError::IncrementalUpdate {
                     message: format!("{context}: {message}"),
                 },
@@ -526,7 +526,7 @@ where
             Err(e) => {
                 let context = f();
                 Err(e).with_context(&context)
-            }
+            },
         }
     }
 }

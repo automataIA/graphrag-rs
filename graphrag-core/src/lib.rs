@@ -336,9 +336,19 @@ impl GraphRAG {
         crate::builder::GraphRAGBuilder::new()
     }
 
-    /// Initialize the GraphRAG system
+    /// Initialize the GraphRAG system.
+    ///
+    /// When `auto_save.enabled = true` and a `base_dir` is configured, attempts to
+    /// load an existing graph from the workspace on disk before starting fresh.
+    /// This means a second run reuses the previously built graph automatically.
     pub fn initialize(&mut self) -> Result<()> {
-        self.knowledge_graph = Some(KnowledgeGraph::new());
+        // Try to restore from workspace if persistent storage is configured
+        let loaded = self.try_load_from_workspace();
+
+        if !loaded {
+            self.knowledge_graph = Some(KnowledgeGraph::new());
+        }
+
         self.retrieval_system = Some(retrieval::RetrievalSystem::new(&self.config)?);
 
         if self.config.ollama.enabled {
@@ -346,6 +356,82 @@ impl GraphRAG {
             self.query_planner = Some(query::planner::QueryPlanner::new(client));
         }
 
+        Ok(())
+    }
+
+    /// Attempt to load the knowledge graph from a workspace on disk.
+    /// Returns `true` if the graph was loaded successfully, `false` otherwise.
+    fn try_load_from_workspace(&mut self) -> bool {
+        if !self.config.auto_save.enabled {
+            return false;
+        }
+        let base_dir = match &self.config.auto_save.base_dir {
+            Some(d) => d.clone(),
+            None => return false,
+        };
+        let workspace_name = self.config.auto_save.workspace_name
+            .as_deref()
+            .unwrap_or("default");
+
+        let manager = match persistence::WorkspaceManager::new(&base_dir) {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::warn!("Could not open workspace base dir '{}': {}", base_dir, e);
+                return false;
+            }
+        };
+
+        if !manager.workspace_exists(workspace_name) {
+            return false;
+        }
+
+        match manager.load_graph(workspace_name) {
+            Ok(graph) => {
+                tracing::info!(
+                    "Loaded graph from workspace '{}' ({} entities, {} relationships)",
+                    workspace_name,
+                    graph.entity_count(),
+                    graph.relationship_count(),
+                );
+                self.knowledge_graph = Some(graph);
+                true
+            }
+            Err(e) => {
+                tracing::warn!("Failed to load graph from workspace '{}': {}", workspace_name, e);
+                false
+            }
+        }
+    }
+
+    /// Save the current knowledge graph to the configured workspace on disk.
+    /// No-op when `auto_save.enabled = false` or `base_dir` is not set.
+    pub fn save_to_workspace(&self) -> Result<()> {
+        if !self.config.auto_save.enabled {
+            return Ok(());
+        }
+        let base_dir = match &self.config.auto_save.base_dir {
+            Some(d) => d,
+            None => return Ok(()),
+        };
+        let workspace_name = self.config.auto_save.workspace_name
+            .as_deref()
+            .unwrap_or("default");
+
+        let graph = self.knowledge_graph.as_ref()
+            .ok_or_else(|| GraphRAGError::Config {
+                message: "Knowledge graph not initialized".to_string(),
+            })?;
+
+        let manager = persistence::WorkspaceManager::new(base_dir)?;
+        manager.save_graph(graph, workspace_name)?;
+
+        tracing::info!(
+            "Saved graph to workspace '{}' in '{}' ({} entities, {} relationships)",
+            workspace_name,
+            base_dir,
+            graph.entity_count(),
+            graph.relationship_count(),
+        );
         Ok(())
     }
 
@@ -510,6 +596,9 @@ impl GraphRAG {
                         self.config.entities.max_gleaning_rounds
                     ));
 
+                    #[cfg(feature = "tracing")]
+                    tracing::info!("Processing chunk {}/{} (LLM)", idx + 1, total_chunks);
+
                     let (entities, relationships) = extractor.extract_with_gleaning(chunk).await?;
 
                     // Build entity ID to name mapping for validation
@@ -663,6 +752,9 @@ impl GraphRAG {
                             total_chunks
                         ));
 
+                        #[cfg(feature = "tracing")]
+                        tracing::info!("Processing chunk {}/{} (Atomic)", idx + 1, total_chunks);
+
                         match atomic_extractor.extract_atomic_facts(chunk).await {
                             Ok(facts) => {
                                 total_facts += facts.len();
@@ -717,6 +809,171 @@ impl GraphRAG {
                     );
                 }
             }
+        } else if self.config.ollama.enabled {
+            // LLM single-pass extraction (Ollama enabled, gleaning disabled)
+            //
+            // Uses LLMEntityExtractor directly for one extraction round per chunk.
+            // num_ctx is calculated dynamically from the built prompt + 20% margin,
+            // and keep_alive is forwarded so Ollama preserves the KV cache between chunks.
+            #[cfg(feature = "async")]
+            {
+                use crate::entity::llm_extractor::LLMEntityExtractor;
+                use crate::ollama::OllamaClient;
+
+                #[cfg(feature = "tracing")]
+                tracing::info!(
+                    "Using LLM single-pass entity extraction (no gleaning, keep_alive={:?})",
+                    self.config.ollama.keep_alive,
+                );
+
+                let client = OllamaClient::new(self.config.ollama.clone());
+                let entity_types = if self.config.entities.entity_types.is_empty() {
+                    vec![
+                        "PERSON".to_string(),
+                        "ORGANIZATION".to_string(),
+                        "LOCATION".to_string(),
+                    ]
+                } else {
+                    self.config.entities.entity_types.clone()
+                };
+
+                let extractor = LLMEntityExtractor::new(client, entity_types)
+                    .with_temperature(self.config.ollama.temperature.unwrap_or(0.1))
+                    .with_max_tokens(self.config.ollama.max_tokens.unwrap_or(1500) as usize)
+                    .with_keep_alive(self.config.ollama.keep_alive.clone());
+
+                let pb = ProgressBar::new(total_chunks as u64);
+                pb.set_style(
+                    ProgressStyle::default_bar()
+                        .template("   [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} chunks ({eta})")
+                        .expect("Invalid progress bar template")
+                        .progress_chars("=>-"),
+                );
+                pb.set_message("Extracting entities with LLM (single-pass)");
+
+                for (idx, chunk) in chunks.iter().enumerate() {
+                    pb.set_message(format!(
+                        "Chunk {}/{} (LLM single-pass)",
+                        idx + 1,
+                        total_chunks
+                    ));
+
+                    #[cfg(feature = "tracing")]
+                    tracing::info!("Processing chunk {}/{} (LLM single-pass)", idx + 1, total_chunks);
+
+                    match extractor.extract_from_chunk(chunk).await {
+                        Ok((entities, relationships)) => {
+                            for entity in entities {
+                                if let Err(e) = graph.add_entity(entity) {
+                                    #[cfg(feature = "tracing")]
+                                    tracing::debug!("Failed to add entity: {}", e);
+                                }
+                            }
+                            for relationship in relationships {
+                                if let Err(e) = graph.add_relationship(relationship) {
+                                    #[cfg(feature = "tracing")]
+                                    tracing::debug!("Failed to add relationship: {}", e);
+                                }
+                            }
+                        },
+                        Err(e) => {
+                            #[cfg(feature = "tracing")]
+                            tracing::warn!(
+                                chunk_id = %chunk.id,
+                                error = %e,
+                                "LLM extraction failed for chunk, skipping"
+                            );
+                        },
+                    }
+
+                    pb.inc(1);
+                }
+
+                pb.finish_with_message("LLM single-pass extraction complete");
+            }
+        } else if self.config.gliner.enabled {
+            // GLiNER-Relex joint NER + RE extraction
+            //
+            // gline-rs is synchronous (ONNX Runtime blocks the calling thread),
+            // so we wrap each chunk in `spawn_blocking` to avoid stalling the
+            // Tokio runtime.  A new `GLiNERExtractor` (with lazy model loading)
+            // is created once outside the loop; the `Arc` inside it makes it
+            // cheaply cloneable across blocking tasks.
+            #[cfg(feature = "gliner")]
+            {
+                use crate::entity::GLiNERExtractor;
+                use std::sync::Arc;
+
+                let extractor = Arc::new(
+                    GLiNERExtractor::new(self.config.gliner.clone()).map_err(|e| {
+                        crate::core::error::GraphRAGError::EntityExtraction {
+                            message: format!("GLiNER init failed: {e}"),
+                        }
+                    })?,
+                );
+
+                let pb = ProgressBar::new(total_chunks as u64);
+                pb.set_style(
+                    ProgressStyle::default_bar()
+                        .template(
+                            "   [{elapsed_precise}] [{bar:40.magenta/blue}] {pos}/{len} chunks ({eta})",
+                        )
+                        .expect("Invalid progress bar template")
+                        .progress_chars("=>-"),
+                );
+                pb.set_message("Extracting entities with GLiNER-Relex");
+
+                for (idx, chunk) in chunks.iter().enumerate() {
+                    pb.set_message(format!(
+                        "Chunk {}/{} (GLiNER-Relex)",
+                        idx + 1,
+                        total_chunks
+                    ));
+
+                    let ext = Arc::clone(&extractor);
+                    let ch = chunk.clone();
+                    let result =
+                        tokio::task::spawn_blocking(move || ext.extract_from_chunk(&ch))
+                            .await
+                            .map_err(|e| crate::core::error::GraphRAGError::EntityExtraction {
+                                message: format!("spawn_blocking join error: {e}"),
+                            })?;
+
+                    match result {
+                        Ok((entities, relationships)) => {
+                            for entity in entities {
+                                if let Err(e) = graph.add_entity(entity) {
+                                    #[cfg(feature = "tracing")]
+                                    tracing::debug!("GLiNER: failed to add entity: {}", e);
+                                }
+                            }
+                            for rel in relationships {
+                                if let Err(e) = graph.add_relationship(rel) {
+                                    #[cfg(feature = "tracing")]
+                                    tracing::debug!("GLiNER: failed to add relationship: {}", e);
+                                }
+                            }
+                        },
+                        Err(e) => {
+                            #[cfg(feature = "tracing")]
+                            tracing::warn!(
+                                chunk_id = %chunk.id,
+                                error = %e,
+                                "GLiNER extraction failed for chunk, skipping"
+                            );
+                        },
+                    }
+
+                    pb.inc(1);
+                }
+
+                pb.finish_with_message("GLiNER-Relex extraction complete");
+            }
+            #[cfg(not(feature = "gliner"))]
+            return Err(crate::core::error::GraphRAGError::Config {
+                message: "GLiNER enabled in config but crate compiled without --features gliner"
+                    .into(),
+            });
         } else {
             // Pattern-based extraction (regex + capitalization)
             use crate::entity::EntityExtractor;
@@ -744,6 +1001,9 @@ impl GraphRAG {
                     idx + 1,
                     total_chunks
                 ));
+
+                #[cfg(feature = "tracing")]
+                tracing::info!("Processing chunk {}/{} (Pattern)", idx + 1, total_chunks);
 
                 let entities = extractor.extract_from_chunk(chunk)?;
                 for entity in entities {
@@ -825,6 +1085,9 @@ impl GraphRAG {
                 rel_pb.finish_with_message("Relationship extraction complete");
             } // End of extract_relationships check
         } // End of pattern-based extraction
+
+        // Persist to workspace if storage is configured
+        self.save_to_workspace()?;
 
         Ok(())
     }
@@ -1197,60 +1460,70 @@ impl GraphRAG {
                 message: "Knowledge graph not initialized".to_string(),
             })?;
 
-        // Build context from search results by fetching actual chunk content
+        // Build context from search results by fetching actual chunk content.
+        // We track chunk IDs to avoid duplicating the same chunk from multiple entity results.
         let mut context_parts = Vec::new();
+        let mut seen_chunk_ids = std::collections::HashSet::new();
 
-        for result in search_results.iter().take(5) {
+        for result in search_results.iter() {
             // For entity results, fetch the chunks where the entity appears
             if result.result_type == retrieval::ResultType::Entity
                 && !result.source_chunks.is_empty()
             {
-                // Get the first few chunks where this entity is mentioned
-                for chunk_id_str in result.source_chunks.iter().take(2) {
+                let entity_label = result
+                    .content
+                    .split(" (score:")
+                    .next()
+                    .unwrap_or(&result.content);
+                for chunk_id_str in &result.source_chunks {
+                    if seen_chunk_ids.contains(chunk_id_str) {
+                        continue;
+                    }
                     let chunk_id = ChunkId::new(chunk_id_str.clone());
                     if let Some(chunk) = graph.chunks().find(|c| c.id == chunk_id) {
-                        let chunk_excerpt = if chunk.content.len() > 400 {
-                            format!("{}...", &chunk.content[..400])
-                        } else {
-                            chunk.content.clone()
-                        };
-
-                        context_parts.push(format!(
-                            "[Entity: {} | Relevance: {:.2}]\n{}",
-                            result
-                                .content
-                                .split(" (score:")
-                                .next()
-                                .unwrap_or(&result.content),
+                        seen_chunk_ids.insert(chunk_id_str.clone());
+                        context_parts.push((
                             result.score,
-                            chunk_excerpt
+                            format!(
+                                "[Entity: {} | Relevance: {:.2}]\n{}",
+                                entity_label, result.score, chunk.content
+                            ),
                         ));
                     }
                 }
             }
-            // For chunk results, use the content directly
+            // For chunk results, use the full content directly
             else if result.result_type == retrieval::ResultType::Chunk {
-                let chunk_excerpt = if result.content.len() > 400 {
-                    format!("{}...", &result.content[..400])
-                } else {
-                    result.content.clone()
-                };
-
-                context_parts.push(format!(
-                    "[Chunk | Relevance: {:.2}]\n{}",
-                    result.score, chunk_excerpt
-                ));
+                if !seen_chunk_ids.contains(&result.id) {
+                    seen_chunk_ids.insert(result.id.clone());
+                    context_parts.push((
+                        result.score,
+                        format!(
+                            "[Chunk | Relevance: {:.2}]\n{}",
+                            result.score, result.content
+                        ),
+                    ));
+                }
             }
             // For other result types, use content as-is
             else {
-                context_parts.push(format!(
-                    "[{:?} | Relevance: {:.2}]\n{}",
-                    result.result_type, result.score, result.content
+                context_parts.push((
+                    result.score,
+                    format!(
+                        "[{:?} | Relevance: {:.2}]\n{}",
+                        result.result_type, result.score, result.content
+                    ),
                 ));
             }
         }
 
-        let context = context_parts.join("\n\n---\n\n");
+        // Sort by relevance descending, then join
+        context_parts.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        let context = context_parts
+            .into_iter()
+            .map(|(_, text)| text)
+            .collect::<Vec<_>>()
+            .join("\n\n---\n\n");
 
         if context.trim().is_empty() {
             return Ok("No relevant information found in the knowledge graph.".to_string());
@@ -1264,10 +1537,11 @@ impl GraphRAG {
             "You are a knowledgeable assistant specialized in answering questions based on a knowledge graph.\n\n\
             IMPORTANT INSTRUCTIONS:\n\
             - Answer ONLY using information from the provided context below\n\
+            - Synthesize information from ALL context sections to give a comprehensive answer\n\
             - Provide direct, conversational, and natural responses\n\
             - Do NOT show your reasoning process or use <think> tags\n\
             - If the context lacks sufficient information, clearly state: \"I don't have enough information to answer this question.\"\n\
-            - Keep answers concise but complete (2-4 sentences)\n\
+            - Aim for a complete answer (3-6 sentences) that covers different aspects found across the context\n\
             - Use a natural, helpful tone as if speaking to a person\n\n\
             CONTEXT:\n\
             {}\n\n\
@@ -1276,8 +1550,23 @@ impl GraphRAG {
             context, query
         );
 
-        // Generate answer using LLM
-        match client.generate(&prompt).await {
+        // Dynamic num_ctx: prompt tokens + generous output budget + 20% margin
+        let max_answer_tokens: u32 = 800;
+        let prompt_tokens = (prompt.len() / 4) as u32;
+        let total = prompt_tokens + max_answer_tokens;
+        let with_margin = (total as f32 * 1.20) as u32;
+        let num_ctx = (((with_margin + 1023) / 1024) * 1024).max(4096).min(131_072);
+
+        let params = crate::ollama::OllamaGenerationParams {
+            num_predict: Some(max_answer_tokens),
+            temperature: self.config.ollama.temperature,
+            num_ctx: Some(num_ctx),
+            keep_alive: self.config.ollama.keep_alive.clone(),
+            ..Default::default()
+        };
+
+        // Generate answer using LLM with dynamic context window
+        match client.generate_with_params(&prompt, params).await {
             Ok(answer) => {
                 // Post-processing: Remove <think> tags if present (Qwen3)
                 let cleaned_answer = Self::remove_thinking_tags(&answer);

@@ -49,11 +49,11 @@ pub async fn check_webgpu_available() -> bool {
             Ok(_) => {
                 web_sys::console::log_1(&"✅ WebGPU is available".into());
                 true
-            }
+            },
             Err(e) => {
                 web_sys::console::warn_1(&format!("⚠️ WebGPU not available: {}", e).into());
                 false
-            }
+            },
         }
     }
 
@@ -92,7 +92,9 @@ pub async fn example_basic_gpu_embedding() -> Result<js_sys::Float32Array, JsVal
             .await
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-        web_sys::console::log_1(&format!("✅ Generated embedding: {} dimensions", embedding.len()).into());
+        web_sys::console::log_1(
+            &format!("✅ Generated embedding: {} dimensions", embedding.len()).into(),
+        );
 
         Ok(js_sys::Float32Array::from(&embedding[..]))
     }
@@ -127,7 +129,9 @@ pub async fn example_batch_gpu_embeddings() -> Result<js_sys::Array, JsValue> {
             "WebGPU brings GPU to the browser",
         ];
 
-        web_sys::console::log_1(&format!("Generating embeddings for {} texts...", texts.len()).into());
+        web_sys::console::log_1(
+            &format!("Generating embeddings for {} texts...", texts.len()).into(),
+        );
 
         // Generate batch embeddings
         let embeddings = embedder
@@ -189,26 +193,24 @@ pub async fn example_performance_comparison() -> Result<JsValue, JsValue> {
         let gpu_time = end_gpu - start_gpu;
 
         web_sys::console::log_1(&format!("⚡ GPU time: {:.2}ms", gpu_time).into());
-        web_sys::console::log_1(&format!("📊 Expected CPU time: {:.2}ms (20-40x slower)", gpu_time * 30.0).into());
-        web_sys::console::log_1(&format!("🚀 Speedup: ~30x faster with GPU", ).into());
+        web_sys::console::log_1(
+            &format!(
+                "📊 Expected CPU time: {:.2}ms (20-40x slower)",
+                gpu_time * 30.0
+            )
+            .into(),
+        );
+        web_sys::console::log_1(&format!("🚀 Speedup: ~30x faster with GPU",).into());
 
         // Return results as JSON
         let result = js_sys::Object::new();
-        js_sys::Reflect::set(
-            &result,
-            &"gpu_time_ms".into(),
-            &JsValue::from_f64(gpu_time),
-        )?;
+        js_sys::Reflect::set(&result, &"gpu_time_ms".into(), &JsValue::from_f64(gpu_time))?;
         js_sys::Reflect::set(
             &result,
             &"estimated_cpu_time_ms".into(),
             &JsValue::from_f64(gpu_time * 30.0),
         )?;
-        js_sys::Reflect::set(
-            &result,
-            &"speedup".into(),
-            &JsValue::from_f64(30.0),
-        )?;
+        js_sys::Reflect::set(&result, &"speedup".into(), &JsValue::from_f64(30.0))?;
 
         Ok(result.into())
     }
@@ -261,13 +263,23 @@ pub async fn example_large_batch() -> Result<JsValue, JsValue> {
 
         web_sys::console::log_1(&format!("✅ Processed 50 texts in {:.2}ms", time).into());
         web_sys::console::log_1(&format!("⚡ {:.2}ms per text (GPU-accelerated)", per_text).into());
-        web_sys::console::log_1(&format!("📊 CPU would take ~{:.2}s for same batch", time * 30.0 / 1000.0).into());
+        web_sys::console::log_1(
+            &format!(
+                "📊 CPU would take ~{:.2}s for same batch",
+                time * 30.0 / 1000.0
+            )
+            .into(),
+        );
 
         let result = js_sys::Object::new();
         js_sys::Reflect::set(&result, &"batch_size".into(), &JsValue::from_f64(50.0))?;
         js_sys::Reflect::set(&result, &"total_time_ms".into(), &JsValue::from_f64(time))?;
         js_sys::Reflect::set(&result, &"per_text_ms".into(), &JsValue::from_f64(per_text))?;
-        js_sys::Reflect::set(&result, &"embeddings_generated".into(), &JsValue::from_f64(embeddings.len() as f64))?;
+        js_sys::Reflect::set(
+            &result,
+            &"embeddings_generated".into(),
+            &JsValue::from_f64(embeddings.len() as f64),
+        )?;
 
         Ok(result.into())
     }
@@ -356,6 +368,8 @@ pub fn main() {
 
     #[cfg(not(feature = "webgpu"))]
     {
-        web_sys::console::warn_1(&"⚠️ WebGPU feature not enabled - rebuild with --features webgpu".into());
+        web_sys::console::warn_1(
+            &"⚠️ WebGPU feature not enabled - rebuild with --features webgpu".into(),
+        );
     }
 }

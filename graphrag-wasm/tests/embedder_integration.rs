@@ -2,8 +2,8 @@
 //!
 //! Tests the complete embedder pipeline including model loading from Cache API.
 
+use graphrag_wasm::embedder::{create_embedder, CandleEmbedder, EmbedderBackend, WasmEmbedder};
 use wasm_bindgen_test::*;
-use graphrag_wasm::embedder::{WasmEmbedder, create_embedder, EmbedderBackend, CandleEmbedder};
 
 wasm_bindgen_test_configure!(run_in_browser);
 
@@ -20,7 +20,9 @@ async fn test_create_wasm_embedder() {
 /// Test: Check GPU acceleration status
 #[wasm_bindgen_test]
 async fn test_gpu_acceleration_check() {
-    let embedder = WasmEmbedder::new("test-model".to_string(), 384).await.unwrap();
+    let embedder = WasmEmbedder::new("test-model".to_string(), 384)
+        .await
+        .unwrap();
 
     // Should return false for CPU-only Candle embedder
     // (or true if WebGPU is available and feature is enabled)
@@ -82,10 +84,16 @@ async fn test_model_loading_infrastructure() {
 /// Test: Batch embedding structure
 #[wasm_bindgen_test]
 async fn test_batch_embedding_structure() {
-    let embedder = WasmEmbedder::new("test-model".to_string(), 384).await.unwrap();
+    let embedder = WasmEmbedder::new("test-model".to_string(), 384)
+        .await
+        .unwrap();
 
     // Note: This will fail with ModelNotLoaded, but tests the API structure
-    let texts = vec!["text1".to_string(), "text2".to_string(), "text3".to_string()];
+    let texts = vec![
+        "text1".to_string(),
+        "text2".to_string(),
+        "text3".to_string(),
+    ];
     let result = embedder.embed_batch(texts).await;
 
     // Expecting error due to model not loaded, but API should work
@@ -147,13 +155,13 @@ async fn test_embedder_error_handling() {
         Err(EmbedderError::ModelNotLoaded) => {
             // Expected error type
             assert!(true);
-        }
+        },
         Err(e) => {
             panic!("Unexpected error type: {:?}", e);
-        }
+        },
         Ok(_) => {
             panic!("Expected ModelNotLoaded error");
-        }
+        },
     }
 }
 
@@ -173,10 +181,8 @@ async fn test_cache_api_available_for_models() {
 #[wasm_bindgen_test]
 async fn test_model_name_handling() {
     // Test with HuggingFace format
-    let embedder1 = WasmEmbedder::new(
-        "sentence-transformers/all-MiniLM-L6-v2".to_string(),
-        384
-    ).await;
+    let embedder1 =
+        WasmEmbedder::new("sentence-transformers/all-MiniLM-L6-v2".to_string(), 384).await;
     assert!(embedder1.is_ok());
 
     // Test with simple name

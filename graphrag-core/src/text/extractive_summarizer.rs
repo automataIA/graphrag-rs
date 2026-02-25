@@ -156,7 +156,11 @@ impl ExtractiveSummarizer {
         let all_words: Vec<String> = all_sentences
             .iter()
             .flat_map(|s| s.split_whitespace())
-            .map(|w| w.to_lowercase().trim_matches(|c: char| !c.is_alphanumeric()).to_string())
+            .map(|w| {
+                w.to_lowercase()
+                    .trim_matches(|c: char| !c.is_alphanumeric())
+                    .to_string()
+            })
             .filter(|w| !w.is_empty() && !self.stopwords.contains(w))
             .collect();
 
@@ -169,7 +173,11 @@ impl ExtractiveSummarizer {
         // Score sentence based on its words' frequencies
         let sentence_words: Vec<String> = sentence
             .split_whitespace()
-            .map(|w| w.to_lowercase().trim_matches(|c: char| !c.is_alphanumeric()).to_string())
+            .map(|w| {
+                w.to_lowercase()
+                    .trim_matches(|c: char| !c.is_alphanumeric())
+                    .to_string()
+            })
             .filter(|w| !w.is_empty() && !self.stopwords.contains(w))
             .collect();
 
@@ -305,9 +313,9 @@ impl ExtractiveSummarizer {
             "on", "with", "he", "as", "you", "do", "at", "this", "but", "his", "by", "from",
             "they", "we", "say", "her", "she", "or", "an", "will", "my", "one", "all", "would",
             "there", "their", "what", "so", "up", "out", "if", "about", "who", "get", "which",
-            "go", "me", "when", "make", "can", "like", "time", "no", "just", "him", "know",
-            "take", "people", "into", "year", "your", "good", "some", "could", "them", "see",
-            "other", "than", "then", "now", "look", "only", "come", "its", "over", "think",
+            "go", "me", "when", "make", "can", "like", "time", "no", "just", "him", "know", "take",
+            "people", "into", "year", "your", "good", "some", "could", "them", "see", "other",
+            "than", "then", "now", "look", "only", "come", "its", "over", "think",
         ];
 
         stopwords_list.into_iter().map(|s| s.to_string()).collect()
@@ -392,7 +400,9 @@ mod tests {
         assert!(!summary.is_empty());
         assert!(summary.len() <= 100);
         // Summary should contain content from the original text
-        assert!(summary.contains("machine learning") || summary.contains("artificial intelligence"));
+        assert!(
+            summary.contains("machine learning") || summary.contains("artificial intelligence")
+        );
     }
 
     #[test]
@@ -405,7 +415,9 @@ mod tests {
         let summary = summarizer.summarize_sentences(text, 1).unwrap();
 
         // Should select one sentence (likely the first or third based on content)
-        let sentence_count = summary.matches('.').count() + summary.matches('!').count() + summary.matches('?').count();
+        let sentence_count = summary.matches('.').count()
+            + summary.matches('!').count()
+            + summary.matches('?').count();
         assert!(sentence_count <= 2); // Allow for edge cases
     }
 

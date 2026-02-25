@@ -1,11 +1,11 @@
 //! PageRank implementation for GraphRAG
-//! 
+//!
 //! This module is only available when the "pagerank" feature is enabled.
 
 use crate::core::{EntityId, Result};
+use lru::LruCache;
 use nalgebra::{DMatrix, DVector};
 use parking_lot::RwLock;
-use lru::LruCache;
 use rayon::prelude::*;
 use sprs::CsMat;
 use std::collections::HashMap;
@@ -82,7 +82,8 @@ impl PersonalizedPageRank {
         reverse_mapping: HashMap<usize, EntityId>,
     ) -> Self {
         let n = adjacency_matrix.rows();
-        let cache_size = NonZeroUsize::new(config.cache_size).unwrap_or(NonZeroUsize::new(1000).unwrap());
+        let cache_size =
+            NonZeroUsize::new(config.cache_size).unwrap_or(NonZeroUsize::new(1000).unwrap());
 
         // Compute out-degrees for normalization
         let out_degrees = Self::compute_out_degrees(&adjacency_matrix);
@@ -96,7 +97,10 @@ impl PersonalizedPageRank {
 
         // Precompute transition matrix if beneficial
         let transition_matrix = if config.parallel_enabled && n > 100 {
-            Some(Self::build_transition_matrix(&adjacency_matrix, &out_degrees))
+            Some(Self::build_transition_matrix(
+                &adjacency_matrix,
+                &out_degrees,
+            ))
         } else {
             None
         };
@@ -218,7 +222,10 @@ impl PersonalizedPageRank {
     }
 
     /// High-performance dense matrix computation for small graphs
-    fn calculate_scores_dense(&self, reset_probabilities: &HashMap<EntityId, f64>) -> Result<HashMap<EntityId, f64>> {
+    fn calculate_scores_dense(
+        &self,
+        reset_probabilities: &HashMap<EntityId, f64>,
+    ) -> Result<HashMap<EntityId, f64>> {
         let n = self.adjacency_matrix.rows();
         let reset_vector = self.build_reset_vector(reset_probabilities)?;
 
@@ -227,8 +234,8 @@ impl PersonalizedPageRank {
             let reset_vec = DVector::from_vec(reset_vector);
 
             for _iteration in 0..self.config.max_iterations {
-                let new_scores = &reset_vec * (1.0 - self.config.damping_factor) +
-                                dense_matrix * &scores * self.config.damping_factor;
+                let new_scores = &reset_vec * (1.0 - self.config.damping_factor)
+                    + dense_matrix * &scores * self.config.damping_factor;
 
                 let diff = (&new_scores - &scores).abs().max();
                 if diff < self.config.tolerance {
@@ -245,7 +252,10 @@ impl PersonalizedPageRank {
     }
 
     /// Parallel sparse computation for large graphs
-    fn calculate_scores_parallel(&self, reset_probabilities: &HashMap<EntityId, f64>) -> Result<HashMap<EntityId, f64>> {
+    fn calculate_scores_parallel(
+        &self,
+        reset_probabilities: &HashMap<EntityId, f64>,
+    ) -> Result<HashMap<EntityId, f64>> {
         let n = self.adjacency_matrix.rows();
         let mut scores = vec![1.0 / n as f64; n];
         let mut new_scores = vec![0.0; n];
@@ -268,7 +278,10 @@ impl PersonalizedPageRank {
     }
 
     /// Optimized sequential sparse computation
-    fn calculate_scores_sparse_optimized(&self, reset_probabilities: &HashMap<EntityId, f64>) -> Result<HashMap<EntityId, f64>> {
+    fn calculate_scores_sparse_optimized(
+        &self,
+        reset_probabilities: &HashMap<EntityId, f64>,
+    ) -> Result<HashMap<EntityId, f64>> {
         let n = self.adjacency_matrix.rows();
         let mut scores = vec![1.0 / n as f64; n];
         let mut new_scores = vec![0.0; n];
@@ -277,7 +290,12 @@ impl PersonalizedPageRank {
         // Use precomputed transition matrix if available
         if let Some(transition_matrix) = &self.transition_matrix {
             for _iteration in 0..self.config.max_iterations {
-                self.pagerank_iteration_with_transition_matrix(&scores, &mut new_scores, &reset_vector, transition_matrix);
+                self.pagerank_iteration_with_transition_matrix(
+                    &scores,
+                    &mut new_scores,
+                    &reset_vector,
+                    transition_matrix,
+                );
 
                 let diff = self.calculate_difference(&scores, &new_scores);
                 if diff < self.config.tolerance {
@@ -314,9 +332,12 @@ impl PersonalizedPageRank {
         let n = current_scores.len();
 
         // Initialize with reset probability component in parallel
-        new_scores.par_iter_mut().zip(reset_vector.par_iter()).for_each(|(new_score, &reset_prob)| {
-            *new_score = (1.0 - d) * reset_prob;
-        });
+        new_scores
+            .par_iter_mut()
+            .zip(reset_vector.par_iter())
+            .for_each(|(new_score, &reset_prob)| {
+                *new_score = (1.0 - d) * reset_prob;
+            });
 
         // For parallel accumulation, we'll use a safer approach with chunking
         // This avoids unsafe operations while maintaining good performance

@@ -1,10 +1,10 @@
 use crate::core::{GraphRAGError, Result};
 use crate::vector::store::{SearchResult, VectorStore};
 use async_trait::async_trait;
-use qdrant_client::Qdrant;
 use qdrant_client::qdrant::{
     CreateCollectionBuilder, Distance, PointStruct, SearchPointsBuilder, VectorParamsBuilder,
 };
+use qdrant_client::Qdrant;
 use std::collections::HashMap;
 
 /// Qdrant vector store implementation
@@ -59,11 +59,9 @@ impl VectorStore for QdrantStore {
         {
             self.client
                 .create_collection(
-                    CreateCollectionBuilder::new(&self.collection_name)
-                        .vectors_config(VectorParamsBuilder::new(
-                            self.dimension as u64,
-                            Distance::Cosine,
-                        )),
+                    CreateCollectionBuilder::new(&self.collection_name).vectors_config(
+                        VectorParamsBuilder::new(self.dimension as u64, Distance::Cosine),
+                    ),
                 )
                 .await
                 .map_err(|e| GraphRAGError::VectorSearch {
@@ -93,19 +91,18 @@ impl VectorStore for QdrantStore {
             .into_iter()
             .map(|(id, emb, meta)| {
                 // Convert HashMap<String, String> to HashMap<String, Value>
-                let payload: HashMap<String, Value> = meta
-                    .into_iter()
-                    .map(|(k, v)| (k, Value::from(v)))
-                    .collect();
+                let payload: HashMap<String, Value> =
+                    meta.into_iter().map(|(k, v)| (k, Value::from(v))).collect();
 
                 PointStruct::new(id.to_string(), emb, payload)
             })
             .collect();
 
         self.client
-            .upsert_points(
-                qdrant_client::qdrant::UpsertPointsBuilder::new(&self.collection_name, points)
-            )
+            .upsert_points(qdrant_client::qdrant::UpsertPointsBuilder::new(
+                &self.collection_name,
+                points,
+            ))
             .await
             .map_err(|e| GraphRAGError::VectorSearch {
                 message: format!("Qdrant upsert failed: {}", e),
@@ -118,8 +115,12 @@ impl VectorStore for QdrantStore {
         let search_result = self
             .client
             .search_points(
-                SearchPointsBuilder::new(&self.collection_name, query_embedding.to_vec(), top_k as u64)
-                    .with_payload(true)
+                SearchPointsBuilder::new(
+                    &self.collection_name,
+                    query_embedding.to_vec(),
+                    top_k as u64,
+                )
+                .with_payload(true),
             )
             .await
             .map_err(|e| GraphRAGError::VectorSearch {
@@ -167,10 +168,7 @@ impl VectorStore for QdrantStore {
             .unwrap_or_else(|_| id.to_string().into());
 
         self.client
-            .delete_points(
-                DeletePointsBuilder::new(&self.collection_name)
-                    .points(vec![point_id])
-            )
+            .delete_points(DeletePointsBuilder::new(&self.collection_name).points(vec![point_id]))
             .await
             .map_err(|e| GraphRAGError::VectorSearch {
                 message: format!("Qdrant delete failed: {}", e),

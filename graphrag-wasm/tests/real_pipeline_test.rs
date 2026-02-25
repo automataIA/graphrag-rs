@@ -6,7 +6,7 @@
 //! 3. Vector search returns ranked results
 //! 4. Similar documents score higher than dissimilar ones
 
-use graphrag_wasm::{GraphRAG, embedder::CandleEmbedder};
+use graphrag_wasm::{embedder::CandleEmbedder, GraphRAG};
 use wasm_bindgen_test::*;
 
 wasm_bindgen_test_configure!(run_in_browser);
@@ -45,7 +45,13 @@ async fn test_real_embeddings_generation() {
     assert!(sum2.abs() > 0.01, "Embedding 2 should be non-zero");
     assert!(sum3.abs() > 0.01, "Embedding 3 should be non-zero");
 
-    web_sys::console::log_1(&format!("✓ Embeddings are non-zero: {:.4}, {:.4}, {:.4}", sum1, sum2, sum3).into());
+    web_sys::console::log_1(
+        &format!(
+            "✓ Embeddings are non-zero: {:.4}, {:.4}, {:.4}",
+            sum1, sum2, sum3
+        )
+        .into(),
+    );
 }
 
 #[wasm_bindgen_test]
@@ -54,16 +60,28 @@ async fn test_real_vector_search() {
 
     // Add documents with real embeddings
     let docs = vec![
-        ("doc1", "Machine learning is a subset of artificial intelligence"),
+        (
+            "doc1",
+            "Machine learning is a subset of artificial intelligence",
+        ),
         ("doc2", "Baking cookies requires flour, sugar, and eggs"),
-        ("doc3", "Deep learning uses neural networks for pattern recognition"),
+        (
+            "doc3",
+            "Deep learning uses neural networks for pattern recognition",
+        ),
         ("doc4", "Italian pasta dishes are delicious"),
-        ("doc5", "Natural language processing enables computers to understand text"),
+        (
+            "doc5",
+            "Natural language processing enables computers to understand text",
+        ),
     ];
 
     for (id, text) in &docs {
         let embedding = hash_embedding(text, 384);
-        graph.add_document(id.to_string(), text.to_string(), embedding).await.unwrap();
+        graph
+            .add_document(id.to_string(), text.to_string(), embedding)
+            .await
+            .unwrap();
     }
 
     // Build index
@@ -84,23 +102,34 @@ async fn test_real_vector_search() {
         let similarity = result["similarity"].as_f64().unwrap();
         let text = result["text"].as_str().unwrap();
 
-        web_sys::console::log_1(&format!(
-            "Result {}: similarity={:.4}, text={}",
-            i + 1, similarity, &text[..60]
-        ).into());
+        web_sys::console::log_1(
+            &format!(
+                "Result {}: similarity={:.4}, text={}",
+                i + 1,
+                similarity,
+                &text[..60]
+            )
+            .into(),
+        );
 
         // Similarity should be between 0 and 1
-        assert!(similarity >= 0.0 && similarity <= 1.0,
-            "Similarity should be in [0,1] range");
+        assert!(
+            similarity >= 0.0 && similarity <= 1.0,
+            "Similarity should be in [0,1] range"
+        );
     }
 
     // Top result should have highest similarity
     let top_similarity = results[0]["similarity"].as_f64().unwrap();
     let second_similarity = results[1]["similarity"].as_f64().unwrap();
-    assert!(top_similarity >= second_similarity,
-        "Results should be sorted by similarity");
+    assert!(
+        top_similarity >= second_similarity,
+        "Results should be sorted by similarity"
+    );
 
-    web_sys::console::log_1(&"✓ Vector search returns ranked results with real similarities".into());
+    web_sys::console::log_1(
+        &"✓ Vector search returns ranked results with real similarities".into(),
+    );
 }
 
 #[wasm_bindgen_test]
@@ -117,7 +146,10 @@ async fn test_semantic_similarity() {
 
     for (id, text) in &docs {
         let embedding = hash_embedding(text, 384);
-        graph.add_document(id.to_string(), text.to_string(), embedding).await.unwrap();
+        graph
+            .add_document(id.to_string(), text.to_string(), embedding)
+            .await
+            .unwrap();
     }
 
     graph.build_index().await.unwrap();
@@ -143,13 +175,18 @@ async fn test_semantic_similarity() {
     let avg_ml_score = ml_scores.iter().sum::<f64>() / ml_scores.len() as f64;
     let avg_food_score = food_scores.iter().sum::<f64>() / food_scores.len() as f64;
 
-    web_sys::console::log_1(&format!(
-        "Avg ML similarity: {:.4}, Avg Food similarity: {:.4}",
-        avg_ml_score, avg_food_score
-    ).into());
+    web_sys::console::log_1(
+        &format!(
+            "Avg ML similarity: {:.4}, Avg Food similarity: {:.4}",
+            avg_ml_score, avg_food_score
+        )
+        .into(),
+    );
 
-    assert!(avg_ml_score > avg_food_score,
-        "ML documents should score higher for ML query");
+    assert!(
+        avg_ml_score > avg_food_score,
+        "ML documents should score higher for ML query"
+    );
 
     web_sys::console::log_1(&"✓ Semantic similarity works correctly".into());
 }
@@ -160,7 +197,10 @@ async fn test_empty_query_handling() {
 
     // Add a document
     let embedding = hash_embedding("test document", 384);
-    graph.add_document("doc1".to_string(), "test".to_string(), embedding).await.unwrap();
+    graph
+        .add_document("doc1".to_string(), "test".to_string(), embedding)
+        .await
+        .unwrap();
 
     // Query with empty embedding (all zeros)
     let empty_embedding = vec![0.0; 384];
@@ -182,15 +222,21 @@ async fn test_identical_documents() {
     let text = "This is a test document with some words";
     let embedding = hash_embedding(text, 384);
 
-    graph.add_document("doc1".to_string(), text.to_string(), embedding.clone()).await.unwrap();
+    graph
+        .add_document("doc1".to_string(), text.to_string(), embedding.clone())
+        .await
+        .unwrap();
 
     // Query with same text (should have similarity ~1.0)
     let results_json = graph.query(embedding, 1).await.unwrap();
     let results: Vec<serde_json::Value> = serde_json::from_str(&results_json).unwrap();
 
     let similarity = results[0]["similarity"].as_f64().unwrap();
-    assert!((similarity - 1.0).abs() < 0.01,
-        "Identical documents should have similarity near 1.0, got {}", similarity);
+    assert!(
+        (similarity - 1.0).abs() < 0.01,
+        "Identical documents should have similarity near 1.0, got {}",
+        similarity
+    );
 
     web_sys::console::log_1(&format!("✓ Identical document similarity: {:.6}", similarity).into());
 }

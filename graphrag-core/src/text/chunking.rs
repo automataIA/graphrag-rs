@@ -16,15 +16,15 @@ impl HierarchicalChunker {
         Self {
             // Following 2024 research best practices - hierarchical separators
             separators: vec![
-                "\n\n".to_string(),     // Paragraph breaks (highest priority)
-                "\n".to_string(),       // Line breaks
-                ". ".to_string(),       // Sentence endings with space
-                "! ".to_string(),       // Exclamation sentences
-                "? ".to_string(),       // Question sentences
-                "; ".to_string(),       // Semicolon clauses
-                ": ".to_string(),       // Colon clauses
-                " ".to_string(),        // Word boundaries
-                "".to_string(),         // Character level (fallback)
+                "\n\n".to_string(), // Paragraph breaks (highest priority)
+                "\n".to_string(),   // Line breaks
+                ". ".to_string(),   // Sentence endings with space
+                "! ".to_string(),   // Exclamation sentences
+                "? ".to_string(),   // Question sentences
+                "; ".to_string(),   // Semicolon clauses
+                ": ".to_string(),   // Colon clauses
+                " ".to_string(),    // Word boundaries
+                "".to_string(),     // Character level (fallback)
             ],
             min_chunk_size: 50,
         }
@@ -152,7 +152,12 @@ impl HierarchicalChunker {
     }
 
     /// Advanced sentence boundary detection
-    pub fn find_sentence_boundary(&self, text: &str, start: usize, preferred_end: usize) -> Option<usize> {
+    pub fn find_sentence_boundary(
+        &self,
+        text: &str,
+        start: usize,
+        preferred_end: usize,
+    ) -> Option<usize> {
         let safe_start = self.find_char_boundary(text, start);
         let safe_end = self.find_char_boundary(text, preferred_end);
 
@@ -179,8 +184,7 @@ impl HierarchicalChunker {
                     last_boundary = Some(safe_start + safe_search_start + next_pos);
                 } else if let Some(next_char) = search_text.chars().nth(next_pos) {
                     // More sophisticated sentence boundary detection
-                    if next_char.is_whitespace() &&
-                       (next_char == '\n' || next_char == ' ') {
+                    if next_char.is_whitespace() && (next_char == '\n' || next_char == ' ') {
                         // Make sure this isn't an abbreviation or decimal
                         if !self.is_likely_abbreviation(search_text, i) {
                             last_boundary = Some(safe_start + safe_search_start + next_pos);
@@ -209,17 +213,23 @@ impl HierarchicalChunker {
 
             // Common abbreviations
             let abbreviations = [
-                "Dr", "Mr", "Mrs", "Ms", "Prof", "Jr", "Sr", "Inc", "Corp",
-                "Ltd", "Co", "etc", "vs", "e.g", "i.e", "cf", "pp"
+                "Dr", "Mr", "Mrs", "Ms", "Prof", "Jr", "Sr", "Inc", "Corp", "Ltd", "Co", "etc",
+                "vs", "e.g", "i.e", "cf", "pp",
             ];
 
-            return abbreviations.iter().any(|&abbrev|
-                potential_abbrev.eq_ignore_ascii_case(abbrev)
-            );
+            return abbreviations
+                .iter()
+                .any(|&abbrev| potential_abbrev.eq_ignore_ascii_case(abbrev));
         }
 
         // Single letter followed by period (likely initial)
-        if period_pos == 1 && before_period.chars().next().unwrap_or(' ').is_ascii_uppercase() {
+        if period_pos == 1
+            && before_period
+                .chars()
+                .next()
+                .unwrap_or(' ')
+                .is_ascii_uppercase()
+        {
             return true;
         }
 
@@ -273,24 +283,34 @@ mod tests {
         assert!(chunks.len() >= 1, "Should have at least one chunk");
 
         // First chunk should start from second paragraph
-        assert!(chunks[0].contains("multiple paragraphs") ||
-                chunks[0].contains("preserved") ||
-                chunks[0].contains("coherence"),
-                "Chunks should contain content from second paragraph. Got: {:?}", chunks);
+        assert!(
+            chunks[0].contains("multiple paragraphs")
+                || chunks[0].contains("preserved")
+                || chunks[0].contains("coherence"),
+            "Chunks should contain content from second paragraph. Got: {:?}",
+            chunks
+        );
 
         // Verify chunks respect semantic boundaries (don't split in middle of words)
         for (i, chunk) in chunks.iter().enumerate() {
             let trimmed = chunk.trim();
             if !trimmed.is_empty() {
                 // Should have substantial content (above min_chunk_size)
-                assert!(trimmed.len() >= 50,
-                       "Chunk {} should be >= min_chunk_size (50): length={}", i, trimmed.len());
+                assert!(
+                    trimmed.len() >= 50,
+                    "Chunk {} should be >= min_chunk_size (50): length={}",
+                    i,
+                    trimmed.len()
+                );
 
                 let last_char = trimmed.chars().last().unwrap();
-                assert!(last_char.is_whitespace() ||
-                       last_char.is_ascii_punctuation() ||
-                       trimmed == text.trim(),
-                       "Chunk {} should end at word/sentence boundary", i);
+                assert!(
+                    last_char.is_whitespace()
+                        || last_char.is_ascii_punctuation()
+                        || trimmed == text.trim(),
+                    "Chunk {} should end at word/sentence boundary",
+                    i
+                );
             }
         }
     }
@@ -320,9 +340,11 @@ mod tests {
             if !trimmed.is_empty() {
                 let last_char = trimmed.chars().last().unwrap();
                 // Should end with whitespace, punctuation, or be the complete text
-                assert!(last_char.is_whitespace() ||
-                       last_char.is_ascii_punctuation() ||
-                       chunk.trim() == text.trim());
+                assert!(
+                    last_char.is_whitespace()
+                        || last_char.is_ascii_punctuation()
+                        || chunk.trim() == text.trim()
+                );
             }
         }
     }

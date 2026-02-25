@@ -2,18 +2,16 @@
 //!
 //! These endpoints allow dynamic configuration of the GraphRAG pipeline via JSON REST API
 
+use super::{config_handler, AppState};
+use crate::models::ApiError;
 use actix_web::web::{Data, Json};
 use serde_json::json;
-use super::{AppState, config_handler};
-use crate::models::ApiError;
 
 /// GET /api/config - Get current configuration
-pub async fn get_config(
-    state: Data<AppState>,
-) -> Result<Json<serde_json::Value>, ApiError> {
+pub async fn get_config(state: Data<AppState>) -> Result<Json<serde_json::Value>, ApiError> {
     if !state.config_manager.is_configured().await {
         return Err(ApiError::NotFound(
-            "No configuration set. Use POST /api/config to initialize.".to_string()
+            "No configuration set. Use POST /api/config to initialize.".to_string(),
         ));
     }
 
@@ -27,7 +25,7 @@ pub async fn get_config(
                 "config": config,
                 "graphrag_initialized": state.graphrag.read().await.is_some()
             })))
-        }
+        },
         Err(e) => Err(ApiError::InternalError(e)),
     }
 }
@@ -44,13 +42,15 @@ pub async fn set_config(
         .map_err(|e| ApiError::BadRequest(format!("Invalid JSON: {}", e)))?;
 
     // Set configuration via ConfigManager
-    state.config_manager
+    state
+        .config_manager
         .set_from_json(&config_json)
         .await
         .map_err(|e| ApiError::BadRequest(e))?;
 
     // Get the validated config
-    let config = state.config_manager
+    let config = state
+        .config_manager
         .get_config()
         .await
         .ok_or(ApiError::InternalError("Failed to get config".to_string()))?;
@@ -61,7 +61,8 @@ pub async fn set_config(
     let mut graphrag = graphrag_core::GraphRAG::new(config)
         .map_err(|e| ApiError::InternalError(format!("GraphRAG init failed: {}", e)))?;
 
-    graphrag.initialize()
+    graphrag
+        .initialize()
         .map_err(|e| ApiError::InternalError(format!("GraphRAG initialization failed: {}", e)))?;
 
     // Store the initialized GraphRAG
@@ -85,8 +86,7 @@ pub async fn get_config_template() -> Json<config_handler::ConfigTemplateRespons
 /// GET /api/config/default - Get default configuration
 pub async fn get_default_config() -> Json<serde_json::Value> {
     let default_json = config_handler::ConfigManager::default_config_json();
-    let config: serde_json::Value = serde_json::from_str(&default_json)
-        .unwrap_or(json!({}));
+    let config: serde_json::Value = serde_json::from_str(&default_json).unwrap_or(json!({}));
 
     Json(json!({
         "config": config,

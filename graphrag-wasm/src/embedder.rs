@@ -40,14 +40,13 @@
 //! console.log(embedding.length); // 384
 //! ```
 
+use crate::storage::CacheStore;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
-use crate::storage::CacheStore;
 
 /// Helper function to fetch URL and return bytes
 async fn fetch_url(url: &str) -> Result<Vec<u8>, JsValue> {
-    let window = web_sys::window()
-        .ok_or_else(|| JsValue::from_str("No window object"))?;
+    let window = web_sys::window().ok_or_else(|| JsValue::from_str("No window object"))?;
 
     let request = web_sys::Request::new_with_str(url)?;
     let response_promise = window.fetch_with_request(&request);
@@ -92,7 +91,9 @@ impl std::fmt::Display for EmbedderError {
 impl From<JsValue> for EmbedderError {
     fn from(value: JsValue) -> Self {
         EmbedderError::InferenceFailed(
-            value.as_string().unwrap_or_else(|| "Unknown error".to_string())
+            value
+                .as_string()
+                .unwrap_or_else(|| "Unknown error".to_string()),
         )
     }
 }
@@ -192,17 +193,25 @@ impl CandleEmbedder {
             return Ok(());
         }
 
-        let cache = self.cache_store.as_ref()
-            .ok_or(EmbedderError::InferenceFailed("Cache API not available".to_string()))?;
+        let cache = self
+            .cache_store
+            .as_ref()
+            .ok_or(EmbedderError::InferenceFailed(
+                "Cache API not available".to_string(),
+            ))?;
 
         // Check if model is already cached
         let model_key = format!("{}/model.safetensors", self.model_name);
         let tokenizer_key = format!("{}/tokenizer.json", self.model_name);
 
-        let has_model = cache.has(&model_key).await
+        let has_model = cache
+            .has(&model_key)
+            .await
             .map_err(|e| EmbedderError::InferenceFailed(format!("Cache check failed: {:?}", e)))?;
 
-        let has_tokenizer = cache.has(&tokenizer_key).await
+        let has_tokenizer = cache
+            .has(&tokenizer_key)
+            .await
             .map_err(|e| EmbedderError::InferenceFailed(format!("Cache check failed: {:?}", e)))?;
 
         // Download model if not cached
@@ -211,17 +220,22 @@ impl CandleEmbedder {
         }
 
         // Load model weights from cache
-        let model_data = cache.get(&model_key).await
-            .map_err(|e| EmbedderError::InferenceFailed(format!("Failed to load model: {:?}", e)))?;
+        let model_data = cache.get(&model_key).await.map_err(|e| {
+            EmbedderError::InferenceFailed(format!("Failed to load model: {:?}", e))
+        })?;
 
-        let tokenizer_data = cache.get(&tokenizer_key).await
-            .map_err(|e| EmbedderError::InferenceFailed(format!("Failed to load tokenizer: {:?}", e)))?;
+        let tokenizer_data = cache.get(&tokenizer_key).await.map_err(|e| {
+            EmbedderError::InferenceFailed(format!("Failed to load tokenizer: {:?}", e))
+        })?;
 
-        web_sys::console::log_1(&format!(
-            "Model loaded: {} bytes, tokenizer: {} bytes",
-            model_data.len(),
-            tokenizer_data.len()
-        ).into());
+        web_sys::console::log_1(
+            &format!(
+                "Model loaded: {} bytes, tokenizer: {} bytes",
+                model_data.len(),
+                tokenizer_data.len()
+            )
+            .into(),
+        );
 
         // TODO: Initialize Candle model with loaded weights
         // This requires:
@@ -236,8 +250,12 @@ impl CandleEmbedder {
 
     /// Download model files from HuggingFace
     async fn download_model(&self) -> Result<(), EmbedderError> {
-        let cache = self.cache_store.as_ref()
-            .ok_or(EmbedderError::InferenceFailed("Cache API not available".to_string()))?;
+        let cache = self
+            .cache_store
+            .as_ref()
+            .ok_or(EmbedderError::InferenceFailed(
+                "Cache API not available".to_string(),
+            ))?;
 
         // Model URLs (using HuggingFace Hub)
         let base_url = format!("https://huggingface.co/{}/resolve/main", self.model_name);
@@ -247,18 +265,34 @@ impl CandleEmbedder {
         web_sys::console::log_1(&format!("Downloading model from {}", base_url).into());
 
         // Download model weights
-        let model_response = fetch_url(&model_url).await
-            .map_err(|e| EmbedderError::InferenceFailed(format!("Failed to download model: {:?}", e)))?;
+        let model_response = fetch_url(&model_url).await.map_err(|e| {
+            EmbedderError::InferenceFailed(format!("Failed to download model: {:?}", e))
+        })?;
 
-        cache.put(&format!("{}/model.safetensors", self.model_name), &model_response).await
-            .map_err(|e| EmbedderError::InferenceFailed(format!("Failed to cache model: {:?}", e)))?;
+        cache
+            .put(
+                &format!("{}/model.safetensors", self.model_name),
+                &model_response,
+            )
+            .await
+            .map_err(|e| {
+                EmbedderError::InferenceFailed(format!("Failed to cache model: {:?}", e))
+            })?;
 
         // Download tokenizer
-        let tokenizer_response = fetch_url(&tokenizer_url).await
-            .map_err(|e| EmbedderError::InferenceFailed(format!("Failed to download tokenizer: {:?}", e)))?;
+        let tokenizer_response = fetch_url(&tokenizer_url).await.map_err(|e| {
+            EmbedderError::InferenceFailed(format!("Failed to download tokenizer: {:?}", e))
+        })?;
 
-        cache.put(&format!("{}/tokenizer.json", self.model_name), &tokenizer_response).await
-            .map_err(|e| EmbedderError::InferenceFailed(format!("Failed to cache tokenizer: {:?}", e)))?;
+        cache
+            .put(
+                &format!("{}/tokenizer.json", self.model_name),
+                &tokenizer_response,
+            )
+            .await
+            .map_err(|e| {
+                EmbedderError::InferenceFailed(format!("Failed to cache tokenizer: {:?}", e))
+            })?;
 
         web_sys::console::log_1(&"Model downloaded and cached successfully".into());
         Ok(())
@@ -375,8 +409,7 @@ impl BurnEmbedder {
     /// * `dimension` - Embedding dimension
     pub async fn new(model_name: &str, dimension: usize) -> Result<Self, EmbedderError> {
         // Check WebGPU availability
-        let window = web_sys::window()
-            .ok_or(EmbedderError::GPUNotAvailable)?;
+        let window = web_sys::window().ok_or(EmbedderError::GPUNotAvailable)?;
         let navigator = window.navigator();
         let gpu = js_sys::Reflect::get(&navigator, &JsValue::from_str("gpu"))
             .map_err(|_| EmbedderError::GPUNotAvailable)?;
@@ -393,7 +426,8 @@ impl BurnEmbedder {
             .call0(&gpu)
             .map_err(|_| EmbedderError::GPUNotAvailable)?;
 
-        let adapter = JsFuture::from(js_sys::Promise::from(adapter_promise)).await
+        let adapter = JsFuture::from(js_sys::Promise::from(adapter_promise))
+            .await
             .map_err(|_| EmbedderError::GPUNotAvailable)?;
 
         if adapter.is_null() {
@@ -408,7 +442,8 @@ impl BurnEmbedder {
             .call0(&adapter)
             .map_err(|_| EmbedderError::GPUNotAvailable)?;
 
-        let device = JsFuture::from(js_sys::Promise::from(device_promise)).await
+        let device = JsFuture::from(js_sys::Promise::from(device_promise))
+            .await
             .map_err(|_| EmbedderError::GPUNotAvailable)?;
 
         Ok(Self {
@@ -478,12 +513,17 @@ impl BurnEmbedder {
 ///
 /// # Returns
 /// EmbedderBackend with the best available backend
-pub async fn create_embedder(model_name: &str, dimension: usize) -> Result<EmbedderBackend, EmbedderError> {
+pub async fn create_embedder(
+    model_name: &str,
+    dimension: usize,
+) -> Result<EmbedderBackend, EmbedderError> {
     #[cfg(feature = "webgpu")]
     {
         // Try WebGPU first
         if let Ok(embedder) = BurnEmbedder::new(model_name, dimension).await {
-            web_sys::console::log_1(&JsValue::from_str("Using Burn WebGPU embedder (20-40x speedup)"));
+            web_sys::console::log_1(&JsValue::from_str(
+                "Using Burn WebGPU embedder (20-40x speedup)",
+            ));
             return Ok(EmbedderBackend::Burn(embedder));
         }
     }
@@ -510,7 +550,8 @@ impl WasmEmbedder {
     /// * `model_name` - Model name (e.g., "sentence-transformers/all-MiniLM-L6-v2")
     /// * `dimension` - Embedding dimension (384 for MiniLM, 768 for BERT)
     pub async fn new(model_name: String, dimension: usize) -> Result<WasmEmbedder, JsValue> {
-        let embedder = create_embedder(&model_name, dimension).await
+        let embedder = create_embedder(&model_name, dimension)
+            .await
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
         Ok(WasmEmbedder {
@@ -527,7 +568,9 @@ impl WasmEmbedder {
     /// Float32Array with embedding vector
     pub async fn embed(&self, text: String) -> Result<Vec<f32>, JsValue> {
         if let Some(embedder) = &self.inner {
-            embedder.embed(&text).await
+            embedder
+                .embed(&text)
+                .await
                 .map_err(|e| JsValue::from_str(&e.to_string()))
         } else {
             Err(JsValue::from_str("Embedder not initialized"))
@@ -544,7 +587,9 @@ impl WasmEmbedder {
     pub async fn embed_batch(&self, texts: Vec<String>) -> Result<JsValue, JsValue> {
         if let Some(embedder) = &self.inner {
             let text_refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
-            let results = embedder.embed_batch(&text_refs).await
+            let results = embedder
+                .embed_batch(&text_refs)
+                .await
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
             // Convert Vec<Vec<f32>> to JsValue
@@ -566,7 +611,10 @@ impl WasmEmbedder {
 
     /// Check if GPU acceleration is active
     pub fn is_gpu_accelerated(&self) -> bool {
-        self.inner.as_ref().map(|e| e.is_gpu_accelerated()).unwrap_or(false)
+        self.inner
+            .as_ref()
+            .map(|e| e.is_gpu_accelerated())
+            .unwrap_or(false)
     }
 
     /// Load model from Cache API
@@ -582,7 +630,9 @@ impl WasmEmbedder {
     /// ```
     pub async fn load_model(&mut self) -> Result<(), JsValue> {
         if let Some(embedder) = &mut self.inner {
-            embedder.load_model().await
+            embedder
+                .load_model()
+                .await
                 .map_err(|e| JsValue::from_str(&e.to_string()))
         } else {
             Err(JsValue::from_str("Embedder not initialized"))

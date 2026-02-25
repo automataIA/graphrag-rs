@@ -160,9 +160,7 @@ impl QueryOptimizer {
     fn rewrite_query(&self, query: QueryOp) -> Result<QueryOp> {
         match query {
             // Push filters down through joins
-            QueryOp::Filter { property, value } => {
-                Ok(QueryOp::Filter { property, value })
-            }
+            QueryOp::Filter { property, value } => Ok(QueryOp::Filter { property, value }),
 
             // Reorder joins based on selectivity
             QueryOp::Join {
@@ -191,7 +189,7 @@ impl QueryOptimizer {
                         join_type,
                     })
                 }
-            }
+            },
 
             // Recursively optimize subqueries
             QueryOp::Neighbors {
@@ -205,7 +203,7 @@ impl QueryOptimizer {
                     relation_type,
                     max_hops,
                 })
-            }
+            },
 
             QueryOp::Union { left, right } => {
                 let left_opt = self.rewrite_query(*left)?;
@@ -214,7 +212,7 @@ impl QueryOptimizer {
                     left: Box::new(left_opt),
                     right: Box::new(right_opt),
                 })
-            }
+            },
 
             QueryOp::Limit { source, count } => {
                 let source_opt = self.rewrite_query(*source)?;
@@ -222,7 +220,7 @@ impl QueryOptimizer {
                     source: Box::new(source_opt),
                     count,
                 })
-            }
+            },
 
             // Base case: entity scans
             QueryOp::EntityScan { entity_type } => Ok(QueryOp::EntityScan { entity_type }),
@@ -257,7 +255,7 @@ impl QueryOptimizer {
                         join_type,
                     })
                 }
-            }
+            },
 
             // Recursively process other operations
             QueryOp::Neighbors {
@@ -271,7 +269,7 @@ impl QueryOptimizer {
                     relation_type,
                     max_hops,
                 })
-            }
+            },
 
             QueryOp::Union { left, right } => {
                 let left_opt = self.optimize_joins(*left)?;
@@ -280,7 +278,7 @@ impl QueryOptimizer {
                     left: Box::new(left_opt),
                     right: Box::new(right_opt),
                 })
-            }
+            },
 
             QueryOp::Limit { source, count } => {
                 let source_opt = self.optimize_joins(*source)?;
@@ -288,7 +286,7 @@ impl QueryOptimizer {
                     source: Box::new(source_opt),
                     count,
                 })
-            }
+            },
 
             // Leaf operations
             _ => Ok(query),
@@ -301,10 +299,10 @@ impl QueryOptimizer {
             QueryOp::Join { left, right, .. } => {
                 Self::collect_join_operands(left, operands);
                 Self::collect_join_operands(right, operands);
-            }
+            },
             _ => {
                 operands.push(op.clone());
-            }
+            },
         }
     }
 
@@ -349,11 +347,7 @@ impl QueryOptimizer {
 
             // Create join of best pair
             let left = operands.remove(best_i);
-            let right = operands.remove(if best_j > best_i {
-                best_j - 1
-            } else {
-                best_j
-            });
+            let right = operands.remove(if best_j > best_i { best_j - 1 } else { best_j });
 
             let joined = QueryOp::Join {
                 left: Box::new(left),
@@ -387,9 +381,12 @@ impl QueryOptimizer {
                         0.0
                     },
                 })
-            }
+            },
 
-            QueryOp::Filter { property: _, value: _ } => {
+            QueryOp::Filter {
+                property: _,
+                value: _,
+            } => {
                 // Assume filter has 10% selectivity (can be improved with histograms)
                 let selectivity = 0.1;
                 let cardinality = (self.stats.total_entities as f64 * selectivity) as usize;
@@ -399,18 +396,22 @@ impl QueryOptimizer {
                     cost: self.stats.total_entities as f64, // Must scan all
                     selectivity,
                 })
-            }
+            },
 
-            QueryOp::Join { left, right, join_type } => {
+            QueryOp::Join {
+                left,
+                right,
+                join_type,
+            } => {
                 let left_cost = self.estimate_cost(left)?;
                 let right_cost = self.estimate_cost(right)?;
 
                 let cardinality = match join_type {
                     JoinType::Inner => {
                         // Estimate as geometric mean of inputs
-                        ((left_cost.cardinality as f64) * (right_cost.cardinality as f64))
-                            .sqrt() as usize
-                    }
+                        ((left_cost.cardinality as f64) * (right_cost.cardinality as f64)).sqrt()
+                            as usize
+                    },
                     JoinType::LeftOuter => left_cost.cardinality,
                     JoinType::Cross => left_cost.cardinality * right_cost.cardinality,
                 };
@@ -424,7 +425,7 @@ impl QueryOptimizer {
                     cost,
                     selectivity: left_cost.selectivity * right_cost.selectivity,
                 })
-            }
+            },
 
             QueryOp::Neighbors {
                 source,
@@ -435,15 +436,16 @@ impl QueryOptimizer {
 
                 // Estimate neighbors as source_cardinality * avg_degree^hops
                 let expansion_factor = self.stats.average_degree.powi(*max_hops as i32);
-                let cardinality =
-                    (source_cost.cardinality as f64 * expansion_factor).min(self.stats.total_entities as f64) as usize;
+                let cardinality = (source_cost.cardinality as f64 * expansion_factor)
+                    .min(self.stats.total_entities as f64)
+                    as usize;
 
                 Ok(OperationCost {
                     cardinality,
                     cost: source_cost.cost + (cardinality as f64),
                     selectivity: cardinality as f64 / self.stats.total_entities as f64,
                 })
-            }
+            },
 
             QueryOp::Union { left, right } => {
                 let left_cost = self.estimate_cost(left)?;
@@ -457,7 +459,7 @@ impl QueryOptimizer {
                     cost: left_cost.cost + right_cost.cost,
                     selectivity: (left_cost.selectivity + right_cost.selectivity).min(1.0),
                 })
-            }
+            },
 
             QueryOp::Limit { source, count } => {
                 let source_cost = self.estimate_cost(source)?;
@@ -467,7 +469,7 @@ impl QueryOptimizer {
                     cost: source_cost.cost,
                     selectivity: (*count as f64 / self.stats.total_entities as f64).min(1.0),
                 })
-            }
+            },
         }
     }
 
@@ -499,13 +501,13 @@ impl QueryOptimizer {
                     "{}EntityScan({}) [cost={:.0}, rows={}]\n",
                     indent, entity_type, cost.cost, cost.cardinality
                 ));
-            }
+            },
             QueryOp::Filter { property, value } => {
                 plan.push_str(&format!(
                     "{}Filter({}={}) [cost={:.0}, rows={}]\n",
                     indent, property, value, cost.cost, cost.cardinality
                 ));
-            }
+            },
             QueryOp::Join {
                 left,
                 right,
@@ -517,7 +519,7 @@ impl QueryOptimizer {
                 ));
                 self.explain_recursive(left, depth + 1, plan)?;
                 self.explain_recursive(right, depth + 1, plan)?;
-            }
+            },
             QueryOp::Neighbors {
                 source,
                 relation_type,
@@ -529,7 +531,7 @@ impl QueryOptimizer {
                     indent, rel_str, max_hops, cost.cost, cost.cardinality
                 ));
                 self.explain_recursive(source, depth + 1, plan)?;
-            }
+            },
             QueryOp::Union { left, right } => {
                 plan.push_str(&format!(
                     "{}Union [cost={:.0}, rows={}]\n",
@@ -537,14 +539,14 @@ impl QueryOptimizer {
                 ));
                 self.explain_recursive(left, depth + 1, plan)?;
                 self.explain_recursive(right, depth + 1, plan)?;
-            }
+            },
             QueryOp::Limit { source, count } => {
                 plan.push_str(&format!(
                     "{}Limit({}) [cost={:.0}, rows={}]\n",
                     indent, count, cost.cost, cost.cardinality
                 ));
                 self.explain_recursive(source, depth + 1, plan)?;
-            }
+            },
         }
 
         Ok(())

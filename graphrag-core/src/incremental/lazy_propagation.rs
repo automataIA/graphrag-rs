@@ -17,11 +17,11 @@
 //! ```
 
 use crate::core::Result;
+use chrono::{DateTime, Utc};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
-use chrono::{DateTime, Utc};
 
 /// Configuration for lazy propagation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -162,7 +162,8 @@ impl DirtyTracker {
 
     /// Check if an edge is dirty
     pub fn is_edge_dirty(&self, source: &str, target: &str) -> bool {
-        self.dirty_edges.contains(&(source.to_string(), target.to_string()))
+        self.dirty_edges
+            .contains(&(source.to_string(), target.to_string()))
     }
 
     /// Get all dirty nodes
@@ -182,7 +183,8 @@ impl DirtyTracker {
 
     /// Clear dirty status for an edge
     pub fn clear_edge(&mut self, source: &str, target: &str) {
-        self.dirty_edges.remove(&(source.to_string(), target.to_string()));
+        self.dirty_edges
+            .remove(&(source.to_string(), target.to_string()));
     }
 
     /// Clear all dirty markers
@@ -277,7 +279,11 @@ impl LazyPropagationEngine {
     }
 
     /// Queue a node update for lazy propagation
-    pub fn queue_node_update(&self, node_id: String, affected_relationships: Vec<String>) -> Result<String> {
+    pub fn queue_node_update(
+        &self,
+        node_id: String,
+        affected_relationships: Vec<String>,
+    ) -> Result<String> {
         let update_id = uuid::Uuid::new_v4().to_string();
 
         let pending = PendingUpdate {
@@ -311,7 +317,12 @@ impl LazyPropagationEngine {
     }
 
     /// Queue an edge update
-    pub fn queue_edge_update(&self, source_id: String, target_id: String, edge_type: String) -> Result<String> {
+    pub fn queue_edge_update(
+        &self,
+        source_id: String,
+        target_id: String,
+        edge_type: String,
+    ) -> Result<String> {
         let update_id = uuid::Uuid::new_v4().to_string();
 
         let pending = PendingUpdate {
@@ -329,7 +340,9 @@ impl LazyPropagationEngine {
         };
 
         self.pending_updates.write().push_back(pending);
-        self.dirty_tracker.write().mark_edge_dirty(source_id, target_id);
+        self.dirty_tracker
+            .write()
+            .mark_edge_dirty(source_id, target_id);
         self.stats.write().total_queued += 1;
 
         if self.should_propagate() {
@@ -398,14 +411,18 @@ impl LazyPropagationEngine {
                                 PendingUpdateType::NodeUpdate { node_id, .. } => {
                                     self.dirty_tracker.write().clear_node(node_id);
                                     result.dirty_nodes_cleared += 1;
-                                }
-                                PendingUpdateType::EdgeUpdate { source_id, target_id, .. } => {
+                                },
+                                PendingUpdateType::EdgeUpdate {
+                                    source_id,
+                                    target_id,
+                                    ..
+                                } => {
                                     self.dirty_tracker.write().clear_edge(source_id, target_id);
                                     result.dirty_edges_cleared += 1;
-                                }
-                                _ => {}
+                                },
+                                _ => {},
                             }
-                        }
+                        },
                         Err(e) => {
                             pending.status = UpdateStatus::Failed;
                             pending.retry_count += 1;
@@ -415,11 +432,16 @@ impl LazyPropagationEngine {
                             if pending.retry_count < 3 {
                                 self.pending_updates.write().push_back(pending);
                             } else {
-                                tracing::error!("Update {} failed after {} retries: {}", pending.id, pending.retry_count, e);
+                                tracing::error!(
+                                    "Update {} failed after {} retries: {}",
+                                    pending.id,
+                                    pending.retry_count,
+                                    e
+                                );
                             }
-                        }
+                        },
                     }
-                }
+                },
                 None => break,
             }
         }
@@ -439,7 +461,8 @@ impl LazyPropagationEngine {
 
         // Update average propagation time
         let total_time = stats.avg_propagation_time_ms * stats.auto_propagations as f64;
-        stats.avg_propagation_time_ms = (total_time + time_taken as f64) / (stats.auto_propagations + 1) as f64;
+        stats.avg_propagation_time_ms =
+            (total_time + time_taken as f64) / (stats.auto_propagations + 1) as f64;
 
         Ok(result)
     }
@@ -545,7 +568,9 @@ mod tests {
 
         // Queue some updates
         for i in 0..3 {
-            engine.queue_node_update(format!("node_{}", i), vec![]).unwrap();
+            engine
+                .queue_node_update(format!("node_{}", i), vec![])
+                .unwrap();
         }
 
         assert_eq!(engine.pending_count(), 3);
@@ -566,14 +591,20 @@ mod tests {
         let engine = LazyPropagationEngine::new(config);
 
         // Queue updates below threshold
-        engine.queue_node_update("node_1".to_string(), vec![]).unwrap();
-        engine.queue_node_update("node_2".to_string(), vec![]).unwrap();
+        engine
+            .queue_node_update("node_1".to_string(), vec![])
+            .unwrap();
+        engine
+            .queue_node_update("node_2".to_string(), vec![])
+            .unwrap();
 
         // Should still have pending (below threshold)
         assert!(engine.pending_count() > 0 || engine.pending_count() == 0); // May auto-propagate
 
         // Queue one more to hit threshold
-        engine.queue_node_update("node_3".to_string(), vec![]).unwrap();
+        engine
+            .queue_node_update("node_3".to_string(), vec![])
+            .unwrap();
 
         // Should have auto-propagated
         // (Note: might be 0 if auto-propagation kicked in)
@@ -611,7 +642,9 @@ mod tests {
     fn test_propagation_stats() {
         let engine = LazyPropagationEngine::new(LazyPropagationConfig::default());
 
-        engine.queue_node_update("node_1".to_string(), vec![]).unwrap();
+        engine
+            .queue_node_update("node_1".to_string(), vec![])
+            .unwrap();
         engine.force_propagate().unwrap();
 
         let stats = engine.propagation_stats();

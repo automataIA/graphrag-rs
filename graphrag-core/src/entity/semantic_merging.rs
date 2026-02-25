@@ -103,7 +103,7 @@ impl SemanticEntityMerger {
                 Err(_) => {
                     tracing::warn!("LLM merge decision failed, falling back to heuristics");
                     Ok(self.heuristic_merge_decision(entity_group))
-                }
+                },
             }
         } else {
             Ok(self.heuristic_merge_decision(entity_group))

@@ -215,14 +215,14 @@ impl HybridRetriever {
         match self.config.fusion_method {
             FusionMethod::RRF => {
                 self.reciprocal_rank_fusion(semantic_results, keyword_results, limit)
-            }
+            },
             FusionMethod::Weighted => {
                 self.weighted_combination(semantic_results, keyword_results, limit)
-            }
+            },
             FusionMethod::CombSum => self.comb_sum_fusion(semantic_results, keyword_results, limit),
             FusionMethod::MaxScore => {
                 self.max_score_fusion(semantic_results, keyword_results, limit)
-            }
+            },
         }
     }
 

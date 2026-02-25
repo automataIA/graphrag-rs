@@ -2,8 +2,8 @@
 //!
 //! Tests for WebGPU support detection and validation.
 
-use wasm_bindgen_test::*;
 use graphrag_wasm::check_webgpu_support;
+use wasm_bindgen_test::*;
 
 wasm_bindgen_test_configure!(run_in_browser);
 
@@ -86,15 +86,15 @@ async fn test_webgpu_fallback() {
     match result {
         Ok(true) => {
             web_sys::console::log_1(&"✅ WebGPU is available".into());
-        }
+        },
         Ok(false) => {
             web_sys::console::log_1(&"⚠️  WebGPU not available (expected in some browsers)".into());
-        }
+        },
         Err(e) => {
             web_sys::console::error_1(&format!("❌ Detection failed: {:?}", e).into());
             // Fail the test if detection itself errors
             panic!("WebGPU detection should not error");
-        }
+        },
     }
 }
 
@@ -120,8 +120,8 @@ async fn test_webgpu_adapter_info() {
 /// Validates that concurrent detection calls work correctly.
 #[wasm_bindgen_test]
 async fn test_concurrent_webgpu_detection() {
-    use std::rc::Rc;
     use std::cell::RefCell;
+    use std::rc::Rc;
 
     let results = Rc::new(RefCell::new(Vec::new()));
 

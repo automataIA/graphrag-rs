@@ -135,7 +135,7 @@ impl VoyIndex {
         let inner = js_sys::Reflect::apply(
             from_embeddings_fn,
             &JsValue::NULL,
-            &js_sys::Array::of2(&embeddings, &JsValue::from_f64(dimension as f64))
+            &js_sys::Array::of2(&embeddings, &JsValue::from_f64(dimension as f64)),
         )?;
 
         // Cast to VoyClass
@@ -172,7 +172,7 @@ impl VoyIndex {
         embedding: JsValue,
         id: &str,
         title: &str,
-        url: &str
+        url: &str,
     ) -> Result<(), JsValue> {
         // Create resource object
         let resource_obj = js_sys::Object::new();
@@ -230,7 +230,9 @@ impl VoyIndex {
                 let neighbors = js_sys::Reflect::get(&item, &"neighbors".into()).ok();
 
                 if let Some(neighbors_val) = neighbors {
-                    if let Ok(neighbors_arr) = js_sys::Array::from(&neighbors_val).dyn_into::<js_sys::Array>() {
+                    if let Ok(neighbors_arr) =
+                        js_sys::Array::from(&neighbors_val).dyn_into::<js_sys::Array>()
+                    {
                         for j in 0..neighbors_arr.length() {
                             let neighbor = neighbors_arr.get(j);
 
@@ -246,9 +248,21 @@ impl VoyIndex {
                             // Create result object
                             if let (Some(id_str), Some(sim)) = (id, similarity) {
                                 let obj = js_sys::Object::new();
-                                js_sys::Reflect::set(&obj, &"id".into(), &JsValue::from_str(&id_str))?;
-                                js_sys::Reflect::set(&obj, &"distance".into(), &JsValue::from_f64(1.0 - sim))?; // Convert similarity to distance
-                                js_sys::Reflect::set(&obj, &"similarity".into(), &JsValue::from_f64(sim))?;
+                                js_sys::Reflect::set(
+                                    &obj,
+                                    &"id".into(),
+                                    &JsValue::from_str(&id_str),
+                                )?;
+                                js_sys::Reflect::set(
+                                    &obj,
+                                    &"distance".into(),
+                                    &JsValue::from_f64(1.0 - sim),
+                                )?; // Convert similarity to distance
+                                js_sys::Reflect::set(
+                                    &obj,
+                                    &"similarity".into(),
+                                    &JsValue::from_f64(sim),
+                                )?;
 
                                 result_array.push(&obj);
                             }
@@ -305,7 +319,7 @@ pub fn check_voy_available() -> bool {
         None => {
             console::error_1(&"No window object found".into());
             return false;
-        }
+        },
     };
 
     // Check for window.Voy (modern API)
@@ -313,7 +327,7 @@ pub fn check_voy_available() -> bool {
         Ok(val) if !val.is_undefined() && !val.is_null() => {
             console::log_1(&"✅ Voy v0.6+ is available (modern API)".into());
             true
-        }
+        },
         _ => {
             // Check if it's still loading
             let voy_ready = js_sys::Reflect::get(&window, &"voyReady".into())
@@ -326,9 +340,12 @@ pub fn check_voy_available() -> bool {
                 return true;
             }
 
-            console::warn_1(&"⚠️  Voy not found. It may still be loading. Please wait or refresh the page.".into());
+            console::warn_1(
+                &"⚠️  Voy not found. It may still be loading. Please wait or refresh the page."
+                    .into(),
+            );
             false
-        }
+        },
     }
 }
 

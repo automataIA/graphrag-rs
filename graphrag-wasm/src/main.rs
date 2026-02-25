@@ -16,26 +16,21 @@ use web_sys::{Event, HtmlInputElement, HtmlTextAreaElement};
 
 // Import graphrag-core WASM-compatible components
 // Note: We only import concrete types, not async traits
-use graphrag_core::{
-    Config, GraphRAG,
-    core::GraphRAGError,
-};
+use graphrag_core::{core::GraphRAGError, Config, GraphRAG};
 
 // Import ONNX embedder, vector search, and entity extraction
-mod onnx_embedder;
-mod vector_search;
-mod entity_extractor;
-mod webllm;
-mod storage;
 mod components;
+mod entity_extractor;
+mod onnx_embedder;
+mod storage;
+mod vector_search;
+mod webllm;
 
+use components::{CommunityData, HierarchyExplorer, SettingsPanel};
+use entity_extractor::{extract_entities, extract_entities_simple, Entity, Relationship};
 use onnx_embedder::OnnxEmbedder;
 use vector_search::VectorIndex;
-use entity_extractor::{extract_entities, extract_entities_simple, Entity, Relationship};
 use webllm::WebLLM;
-use components::{
-    SettingsPanel, HierarchyExplorer, CommunityData,
-};
 
 // Type alias for Result (currently unused but reserved for future use)
 #[allow(dead_code)]
@@ -63,10 +58,24 @@ enum BuildStatus {
 /// Build pipeline stages
 #[derive(Clone, Debug, PartialEq)]
 enum BuildStage {
-    Chunking { progress: f32, current: usize, total: usize },
-    Extracting { progress: f32, current: usize, total: usize },
-    Embedding { progress: f32, current: usize, total: usize },
-    Indexing { progress: f32 },
+    Chunking {
+        progress: f32,
+        current: usize,
+        total: usize,
+    },
+    Extracting {
+        progress: f32,
+        current: usize,
+        total: usize,
+    },
+    Embedding {
+        progress: f32,
+        current: usize,
+        total: usize,
+    },
+    Indexing {
+        progress: f32,
+    },
 }
 
 /// Graph statistics
@@ -107,7 +116,9 @@ fn App() -> impl IntoView {
 
     // Query interface state
     let (query, set_query) = signal(String::new());
-    let (results, set_results) = signal(String::from("Add documents and build the knowledge graph to start querying."));
+    let (results, set_results) = signal(String::from(
+        "Add documents and build the knowledge graph to start querying.",
+    ));
     let (loading, set_loading) = signal(false);
 
     // Hierarchy interface state
@@ -409,7 +420,8 @@ fn BuildTab(
                                     set_documents.set(docs);
                                 }
                             }
-                        }) as Box<dyn Fn(Event)>);
+                        })
+                            as Box<dyn Fn(Event)>);
 
                         reader.set_onload(Some(onload.as_ref().unchecked_ref()));
                         onload.forget();
@@ -426,34 +438,33 @@ fn BuildTab(
         spawn_local(async move {
             web_sys::console::log_1(&"📖 Loading Symposium demo...".into());
 
-            match gloo_net::http::Request::get("./Symposium.txt")
-                .send()
-                .await
-            {
-                Ok(response) => {
-                    match response.text().await {
-                        Ok(text) => {
-                            let doc = Document {
-                                id: format!("doc-{}", js_sys::Date::now()),
-                                name: "Plato's Symposium".to_string(),
-                                content: text.clone(),
-                                size_bytes: text.len(),
-                                added_at: js_sys::Date::now(),
-                            };
+            match gloo_net::http::Request::get("./Symposium.txt").send().await {
+                Ok(response) => match response.text().await {
+                    Ok(text) => {
+                        let doc = Document {
+                            id: format!("doc-{}", js_sys::Date::now()),
+                            name: "Plato's Symposium".to_string(),
+                            content: text.clone(),
+                            size_bytes: text.len(),
+                            added_at: js_sys::Date::now(),
+                        };
 
-                            let mut docs = documents.get_untracked();
-                            docs.push(doc);
-                            set_documents.set(docs);
-                            web_sys::console::log_1(&"✅ Symposium loaded successfully".into());
-                        }
-                        Err(e) => {
-                            web_sys::console::error_1(&format!("Failed to read Symposium text: {:?}", e).into());
-                        }
-                    }
-                }
+                        let mut docs = documents.get_untracked();
+                        docs.push(doc);
+                        set_documents.set(docs);
+                        web_sys::console::log_1(&"✅ Symposium loaded successfully".into());
+                    },
+                    Err(e) => {
+                        web_sys::console::error_1(
+                            &format!("Failed to read Symposium text: {:?}", e).into(),
+                        );
+                    },
+                },
                 Err(e) => {
-                    web_sys::console::error_1(&format!("Failed to fetch Symposium.txt: {:?}", e).into());
-                }
+                    web_sys::console::error_1(
+                        &format!("Failed to fetch Symposium.txt: {:?}", e).into(),
+                    );
+                },
             }
         });
     };
@@ -466,7 +477,7 @@ fn BuildTab(
         set_build_status.set(BuildStatus::Building(BuildStage::Chunking {
             progress: 0.0,
             current: 0,
-            total: total_docs
+            total: total_docs,
         }));
 
         spawn_local(async move {
@@ -477,9 +488,12 @@ fn BuildTab(
             let mut graphrag = match GraphRAG::new(config) {
                 Ok(g) => g,
                 Err(e) => {
-                    set_build_status.set(BuildStatus::Error(format!("Failed to create GraphRAG: {}", e)));
+                    set_build_status.set(BuildStatus::Error(format!(
+                        "Failed to create GraphRAG: {}",
+                        e
+                    )));
                     return;
-                }
+                },
             };
 
             // Initialize the system
@@ -499,7 +513,9 @@ fn BuildTab(
 
                 // Add document using GraphRAG (automatically chunks)
                 if let Err(e) = graphrag.add_document_from_text(&doc.content) {
-                    web_sys::console::warn_1(&format!("Failed to add document {}: {}", doc.name, e).into());
+                    web_sys::console::warn_1(
+                        &format!("Failed to add document {}: {}", doc.name, e).into(),
+                    );
                 }
 
                 gloo_timers::future::TimeoutFuture::new(50).await;
@@ -536,21 +552,29 @@ fn BuildTab(
                         total: docs.len(),
                     }));
 
-                    web_sys::console::log_1(&format!("📄 Extracting from document {}/{}...", idx + 1, docs.len()).into());
+                    web_sys::console::log_1(
+                        &format!("📄 Extracting from document {}/{}...", idx + 1, docs.len())
+                            .into(),
+                    );
 
                     match extract_entities(&llm, &doc.content).await {
                         Ok(result) => {
-                            web_sys::console::log_1(&format!(
-                                "  ✅ Found {} entities, {} relationships",
-                                result.entities.len(),
-                                result.relationships.len()
-                            ).into());
+                            web_sys::console::log_1(
+                                &format!(
+                                    "  ✅ Found {} entities, {} relationships",
+                                    result.entities.len(),
+                                    result.relationships.len()
+                                )
+                                .into(),
+                            );
                             all_entities.extend(result.entities);
                             all_relationships.extend(result.relationships);
-                        }
+                        },
                         Err(e) => {
-                            web_sys::console::warn_1(&format!("  ⚠️  Extraction failed: {}", e).into());
-                        }
+                            web_sys::console::warn_1(
+                                &format!("  ⚠️  Extraction failed: {}", e).into(),
+                            );
+                        },
                     }
 
                     gloo_timers::future::TimeoutFuture::new(200).await;
@@ -560,7 +584,9 @@ fn BuildTab(
                 all_entities.sort_by(|a, b| a.name.cmp(&b.name));
                 all_entities.dedup_by(|a, b| a.name == b.name);
             } else {
-                web_sys::console::warn_1(&"⚠️  WebLLM not available, using simple rule-based extraction".into());
+                web_sys::console::warn_1(
+                    &"⚠️  WebLLM not available, using simple rule-based extraction".into(),
+                );
 
                 // Fallback to simple rule-based extraction
                 for doc in docs.iter() {
@@ -577,7 +603,13 @@ fn BuildTab(
             let entity_count = all_entities.len();
             let relationship_count = all_relationships.len();
 
-            web_sys::console::log_1(&format!("✅ Extracted {} entities, {} relationships", entity_count, relationship_count).into());
+            web_sys::console::log_1(
+                &format!(
+                    "✅ Extracted {} entities, {} relationships",
+                    entity_count, relationship_count
+                )
+                .into(),
+            );
 
             // Stage 3: Generate embeddings with ONNX
             set_build_status.set(BuildStatus::Building(BuildStage::Embedding {
@@ -597,38 +629,48 @@ fn BuildTab(
 
             let embedder_result = if let Ok(response) = tokenizer_result {
                 if let Ok(tokenizer_json) = response.text().await {
-                    web_sys::console::log_1(&format!("✅ Fetched tokenizer.json ({} bytes)",
-                        tokenizer_json.len()).into());
+                    web_sys::console::log_1(
+                        &format!("✅ Fetched tokenizer.json ({} bytes)", tokenizer_json.len())
+                            .into(),
+                    );
 
                     // Create ONNX embedder from fetched tokenizer JSON (WASM-compatible!)
                     OnnxEmbedder::from_tokenizer_json(384, &tokenizer_json)
                 } else {
                     Err(onnx_embedder::OnnxEmbedderError::InvalidInput(
-                        "Failed to read tokenizer.json response as text".to_string()
+                        "Failed to read tokenizer.json response as text".to_string(),
                     ))
                 }
             } else {
                 Err(onnx_embedder::OnnxEmbedderError::InvalidInput(
-                    "Failed to fetch tokenizer.json from server".to_string()
+                    "Failed to fetch tokenizer.json from server".to_string(),
                 ))
             };
 
             let mut embedder = match embedder_result {
                 Ok(e) => {
-                    web_sys::console::log_1(&"✅ ONNX embedder created with HuggingFace tokenizer".into());
+                    web_sys::console::log_1(
+                        &"✅ ONNX embedder created with HuggingFace tokenizer".into(),
+                    );
                     Some(e)
-                }
+                },
                 Err(e) => {
                     web_sys::console::warn_1(&format!("⚠️  ONNX embedder not available: {}. Using simple hash-based embeddings.", e).into());
                     None
-                }
+                },
             };
 
             // Load ONNX model if embedder was created successfully
             if let Some(ref mut emb) = embedder {
                 web_sys::console::log_1(&"📦 Loading ONNX model...".into());
                 if let Err(e) = emb.load_model("./models/minilm-l6.onnx", true).await {
-                    web_sys::console::warn_1(&format!("⚠️  Failed to load ONNX model: {}. Falling back to simple embeddings.", e).into());
+                    web_sys::console::warn_1(
+                        &format!(
+                            "⚠️  Failed to load ONNX model: {}. Falling back to simple embeddings.",
+                            e
+                        )
+                        .into(),
+                    );
                     embedder = None; // Clear embedder if model load failed
                 }
             }
@@ -641,7 +683,9 @@ fn BuildTab(
                 }
             }
 
-            web_sys::console::log_1(&format!("📦 Collected {} chunks for embedding", chunk_data.len()).into());
+            web_sys::console::log_1(
+                &format!("📦 Collected {} chunks for embedding", chunk_data.len()).into(),
+            );
 
             // Generate embeddings
             let mut embeddings = Vec::new();
@@ -661,10 +705,12 @@ fn BuildTab(
                     match emb.embed(content).await {
                         Ok(embedding) => {
                             embeddings.push(embedding);
-                        }
+                        },
                         Err(e) => {
-                            web_sys::console::warn_1(&format!("Failed to embed chunk {}: {}", i, e).into());
-                        }
+                            web_sys::console::warn_1(
+                                &format!("Failed to embed chunk {}: {}", i, e).into(),
+                            );
+                        },
                     }
 
                     // Small delay for UI updates (every 10 embeddings)
@@ -673,10 +719,14 @@ fn BuildTab(
                     }
                 }
 
-                web_sys::console::log_1(&format!("✅ Generated {} ONNX embeddings", embeddings.len()).into());
+                web_sys::console::log_1(
+                    &format!("✅ Generated {} ONNX embeddings", embeddings.len()).into(),
+                );
             } else {
                 // Fallback to simple hash-based embeddings
-                web_sys::console::warn_1(&"⚠️  Using simple hash-based embeddings (ONNX not available)".into());
+                web_sys::console::warn_1(
+                    &"⚠️  Using simple hash-based embeddings (ONNX not available)".into(),
+                );
 
                 for (i, (_id, content)) in chunk_data.iter().enumerate() {
                     set_build_status.set(BuildStatus::Building(BuildStage::Embedding {
@@ -690,7 +740,9 @@ fn BuildTab(
                     let bytes = content.as_bytes();
 
                     for (idx, chunk) in bytes.chunks(4).enumerate() {
-                        let hash = chunk.iter().fold(0u32, |acc, &b| acc.wrapping_mul(31).wrapping_add(b as u32));
+                        let hash = chunk
+                            .iter()
+                            .fold(0u32, |acc, &b| acc.wrapping_mul(31).wrapping_add(b as u32));
                         let normalized = (hash as f32) / (u32::MAX as f32) * 2.0 - 1.0; // Range: -1 to 1
                         embedding[idx % embedding_dim] += normalized;
                     }
@@ -711,7 +763,9 @@ fn BuildTab(
                     }
                 }
 
-                web_sys::console::log_1(&format!("✅ Generated {} simple embeddings", embeddings.len()).into());
+                web_sys::console::log_1(
+                    &format!("✅ Generated {} simple embeddings", embeddings.len()).into(),
+                );
             }
 
             // Stage 4: Build pure Rust vector index with proper chunk IDs
@@ -754,8 +808,13 @@ fn BuildTab(
                 embeddings: embeddings.len(),
             });
 
-            web_sys::console::log_1(&format!("✅ Graph built: {} docs, {} chunks, {} entities, {} relationships",
-                total_docs, all_chunks, entity_count, relationship_count).into());
+            web_sys::console::log_1(
+                &format!(
+                    "✅ Graph built: {} docs, {} chunks, {} entities, {} relationships",
+                    total_docs, all_chunks, entity_count, relationship_count
+                )
+                .into(),
+            );
         });
     };
 
@@ -1232,7 +1291,10 @@ fn StatCard(
         _ => "badge-neutral",
     };
 
-    let class_str = format!("stats shadow border border-base-300 hover:border-{} transition-all hover:scale-105", color);
+    let class_str = format!(
+        "stats shadow border border-base-300 hover:border-{} transition-all hover:scale-105",
+        color
+    );
 
     view! {
         <div class=class_str>
@@ -1325,12 +1387,12 @@ fn QueryTab(
                         OnnxEmbedder::from_tokenizer_json(384, &tokenizer_json)
                     } else {
                         Err(onnx_embedder::OnnxEmbedderError::InvalidInput(
-                            "Failed to read tokenizer.json".to_string()
+                            "Failed to read tokenizer.json".to_string(),
                         ))
                     }
                 } else {
                     Err(onnx_embedder::OnnxEmbedderError::InvalidInput(
-                        "Failed to fetch tokenizer.json".to_string()
+                        "Failed to fetch tokenizer.json".to_string(),
                     ))
                 };
 
@@ -1352,16 +1414,18 @@ fn QueryTab(
                                             None
                                         }
                                     })
-                                }
+                                },
                                 Err(e) => {
-                                    web_sys::console::warn_1(&format!("Failed to embed query: {}", e).into());
+                                    web_sys::console::warn_1(
+                                        &format!("Failed to embed query: {}", e).into(),
+                                    );
                                     None
-                                }
+                                },
                             }
                         } else {
                             None
                         }
-                    }
+                    },
                     Err(_) => None,
                 }
             } else {
@@ -1374,21 +1438,25 @@ fn QueryTab(
                     "Query: \"{}\"\n\n\
                     ✅ Graph Search Complete\n\
                     📊 Searched {} chunks across {} documents\n",
-                    query_text,
-                    stats.chunks,
-                    stats.documents
+                    query_text, stats.chunks, stats.documents
                 );
 
                 // Add vector search results with chunk content and entities
                 if !vec_res.is_empty() {
-                    result_text.push_str(&format!("\n🎯 Top {} Relevant Text Chunks:\n\n", vec_res.len()));
+                    result_text.push_str(&format!(
+                        "\n🎯 Top {} Relevant Text Chunks:\n\n",
+                        vec_res.len()
+                    ));
 
                     // Get chunk details from GraphRAG
                     graphrag_instance.update_value(|graphrag_opt| {
                         if let Some(ref graphrag) = graphrag_opt {
                             for (idx, (chunk_id, similarity)) in vec_res.iter().enumerate() {
-                                result_text.push_str(&format!("{}. Similarity: {:.3}\n",
-                                    idx + 1, similarity));
+                                result_text.push_str(&format!(
+                                    "{}. Similarity: {:.3}\n",
+                                    idx + 1,
+                                    similarity
+                                ));
 
                                 // Get chunk content
                                 if let Some(chunk) = graphrag.get_chunk(chunk_id) {
@@ -1398,32 +1466,48 @@ fn QueryTab(
                                     } else {
                                         chunk.content.clone()
                                     };
-                                    result_text.push_str(&format!("   📄 \"{}\"\n\n",
-                                        content_preview.replace('\n', " ")));
+                                    result_text.push_str(&format!(
+                                        "   📄 \"{}\"\n\n",
+                                        content_preview.replace('\n', " ")
+                                    ));
 
                                     // Show entities found in this chunk
                                     if !chunk.entities.is_empty() {
-                                        result_text.push_str(&format!("   🏷️  Entities ({}):\n",
-                                            chunk.entities.len()));
+                                        result_text.push_str(&format!(
+                                            "   🏷️  Entities ({}):\n",
+                                            chunk.entities.len()
+                                        ));
 
                                         for entity_id in chunk.entities.iter().take(5) {
-                                            if let Some(entity) = graphrag.get_entity(&entity_id.0) {
-                                                result_text.push_str(&format!("      • {}: {} (confidence: {:.2})\n",
-                                                    entity.entity_type, entity.name, entity.confidence));
+                                            if let Some(entity) = graphrag.get_entity(&entity_id.0)
+                                            {
+                                                result_text.push_str(&format!(
+                                                    "      • {}: {} (confidence: {:.2})\n",
+                                                    entity.entity_type,
+                                                    entity.name,
+                                                    entity.confidence
+                                                ));
 
                                                 // Show relationships for this entity
-                                                let relationships = graphrag.get_entity_relationships(&entity_id.0);
+                                                let relationships =
+                                                    graphrag.get_entity_relationships(&entity_id.0);
                                                 if !relationships.is_empty() {
                                                     for rel in relationships.iter().take(2) {
-                                                        let other_entity_id = if &rel.source == entity_id {
-                                                            &rel.target.0
-                                                        } else {
-                                                            &rel.source.0
-                                                        };
+                                                        let other_entity_id =
+                                                            if &rel.source == entity_id {
+                                                                &rel.target.0
+                                                            } else {
+                                                                &rel.source.0
+                                                            };
 
-                                                        if let Some(other_entity) = graphrag.get_entity(other_entity_id) {
-                                                            result_text.push_str(&format!("        → {} {}\n",
-                                                                rel.relation_type, other_entity.name));
+                                                        if let Some(other_entity) =
+                                                            graphrag.get_entity(other_entity_id)
+                                                        {
+                                                            result_text.push_str(&format!(
+                                                                "        → {} {}\n",
+                                                                rel.relation_type,
+                                                                other_entity.name
+                                                            ));
                                                         }
                                                     }
                                                 }
@@ -1431,8 +1515,10 @@ fn QueryTab(
                                         }
 
                                         if chunk.entities.len() > 5 {
-                                            result_text.push_str(&format!("      ... and {} more entities\n",
-                                                chunk.entities.len() - 5));
+                                            result_text.push_str(&format!(
+                                                "      ... and {} more entities\n",
+                                                chunk.entities.len() - 5
+                                            ));
                                         }
                                     }
                                 }
@@ -1454,8 +1540,10 @@ fn QueryTab(
                                 // Add entity info
                                 for entity_id in chunk.entities.iter().take(3) {
                                     if let Some(entity) = graphrag.get_entity(&entity_id.0) {
-                                        context_for_llm.push_str(&format!("[Entity: {} - {}] ",
-                                            entity.entity_type, entity.name));
+                                        context_for_llm.push_str(&format!(
+                                            "[Entity: {} - {}] ",
+                                            entity.entity_type, entity.name
+                                        ));
                                     }
                                 }
                                 context_for_llm.push_str("\n---\n\n");
@@ -1487,21 +1575,37 @@ fn QueryTab(
                                 Ok(answer) => {
                                     result_text.push_str("\n💬 Synthesized Answer:\n");
                                     result_text.push_str(&format!("{}\n\n", answer));
-                                    web_sys::console::log_1(&format!("✅ LLM synthesis successful: {} chars", answer.len()).into());
-                                }
+                                    web_sys::console::log_1(
+                                        &format!(
+                                            "✅ LLM synthesis successful: {} chars",
+                                            answer.len()
+                                        )
+                                        .into(),
+                                    );
+                                },
                                 Err(e) => {
-                                    result_text.push_str(&format!("\n⚠️  LLM synthesis failed: {}\n", e));
-                                    result_text.push_str(&format!("Context prepared ({} chars)\n", context_for_llm.len()));
-                                    web_sys::console::error_1(&format!("LLM synthesis error: {}", e).into());
-                                }
+                                    result_text
+                                        .push_str(&format!("\n⚠️  LLM synthesis failed: {}\n", e));
+                                    result_text.push_str(&format!(
+                                        "Context prepared ({} chars)\n",
+                                        context_for_llm.len()
+                                    ));
+                                    web_sys::console::error_1(
+                                        &format!("LLM synthesis error: {}", e).into(),
+                                    );
+                                },
                             }
-                        }
+                        },
                         Err(e) => {
-                            result_text.push_str(&format!("\n⚠️  WebLLM initialization failed: {}\n", e));
+                            result_text
+                                .push_str(&format!("\n⚠️  WebLLM initialization failed: {}\n", e));
                             result_text.push_str("Make sure WebGPU is enabled in your browser.\n");
-                            result_text.push_str(&format!("Context prepared ({} chars)\n", context_for_llm.len()));
+                            result_text.push_str(&format!(
+                                "Context prepared ({} chars)\n",
+                                context_for_llm.len()
+                            ));
                             web_sys::console::error_1(&format!("WebLLM init error: {}", e).into());
-                        }
+                        },
                     }
                 }
 
@@ -1628,8 +1732,12 @@ fn HierarchyTab(
         spawn_local(async move {
             // TODO: Call Leiden algorithm on the graph
             // For now, create mock data to demonstrate the UI
-            web_sys::console::log_1(&"⚠️  Hierarchical community detection not yet implemented".into());
-            web_sys::console::log_1(&"   This feature requires the Leiden algorithm integration".into());
+            web_sys::console::log_1(
+                &"⚠️  Hierarchical community detection not yet implemented".into(),
+            );
+            web_sys::console::log_1(
+                &"   This feature requires the Leiden algorithm integration".into(),
+            );
 
             // Set mock max level
             set_max_level.set(3);

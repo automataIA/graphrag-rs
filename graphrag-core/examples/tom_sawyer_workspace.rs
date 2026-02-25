@@ -12,8 +12,8 @@
 //! Run with: cargo run --example tom_sawyer_workspace
 
 use graphrag_core::{
-    persistence::WorkspaceManager, ChunkId, Document, DocumentId, Entity, EntityId,
-    KnowledgeGraph, Relationship, TextChunk,
+    persistence::WorkspaceManager, ChunkId, Document, DocumentId, Entity, EntityId, KnowledgeGraph,
+    Relationship, TextChunk,
 };
 use indexmap::IndexMap;
 use std::fs;
@@ -140,10 +140,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let workspaces = workspace.list_workspaces()?;
     if let Some(ws_info) = workspaces.iter().find(|w| w.name == "tom_sawyer") {
-        println!("   ✅ Saved workspace: {} ({:.2} KB)",
-                 ws_info.name,
-                 ws_info.size_bytes as f64 / 1024.0);
-        println!("      Created: {}", ws_info.metadata.created_at.format("%Y-%m-%d %H:%M:%S"));
+        println!(
+            "   ✅ Saved workspace: {} ({:.2} KB)",
+            ws_info.name,
+            ws_info.size_bytes as f64 / 1024.0
+        );
+        println!(
+            "      Created: {}",
+            ws_info.metadata.created_at.format("%Y-%m-%d %H:%M:%S")
+        );
     }
 
     // === PHASE 7: Load from workspace ===
@@ -161,10 +166,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🔍 Phase 8: Verifying data integrity...");
 
     let checks = vec![
-        ("Documents", graph.document_count(), loaded_graph.document_count()),
-        ("Chunks", graph.chunks().count(), loaded_graph.chunks().count()),
-        ("Entities", graph.entity_count(), loaded_graph.entity_count()),
-        ("Relationships", graph.relationship_count(), loaded_graph.relationship_count()),
+        (
+            "Documents",
+            graph.document_count(),
+            loaded_graph.document_count(),
+        ),
+        (
+            "Chunks",
+            graph.chunks().count(),
+            loaded_graph.chunks().count(),
+        ),
+        (
+            "Entities",
+            graph.entity_count(),
+            loaded_graph.entity_count(),
+        ),
+        (
+            "Relationships",
+            graph.relationship_count(),
+            loaded_graph.relationship_count(),
+        ),
     ];
 
     let mut all_passed = true;
@@ -179,12 +200,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Verify document content
     if let Some(original_doc) = graph.get_document(&DocumentId::new("tom_sawyer".to_string())) {
-        if let Some(loaded_doc) = loaded_graph.get_document(&DocumentId::new("tom_sawyer".to_string())) {
+        if let Some(loaded_doc) =
+            loaded_graph.get_document(&DocumentId::new("tom_sawyer".to_string()))
+        {
             if original_doc.content.len() == loaded_doc.content.len() {
-                println!("   ✅ Document content size matches: {} bytes", original_doc.content.len());
+                println!(
+                    "   ✅ Document content size matches: {} bytes",
+                    original_doc.content.len()
+                );
             } else {
-                println!("   ❌ Document content size mismatch: {} != {}",
-                         original_doc.content.len(), loaded_doc.content.len());
+                println!(
+                    "   ❌ Document content size mismatch: {} != {}",
+                    original_doc.content.len(),
+                    loaded_doc.content.len()
+                );
                 all_passed = false;
             }
         }
@@ -195,14 +224,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\n   Entities (first 3):");
     for (i, entity) in loaded_graph.entities().take(3).enumerate() {
-        println!("      {}. {} ({}) [confidence: {:.2}]",
-                 i + 1, entity.name, entity.entity_type, entity.confidence);
+        println!(
+            "      {}. {} ({}) [confidence: {:.2}]",
+            i + 1,
+            entity.name,
+            entity.entity_type,
+            entity.confidence
+        );
     }
 
     println!("\n   Relationships (first 3):");
     for (i, rel) in loaded_graph.relationships().take(3).enumerate() {
-        println!("      {}. {} --[{}]--> {} [confidence: {:.2}]",
-                 i + 1, rel.source.0, rel.relation_type, rel.target.0, rel.confidence);
+        println!(
+            "      {}. {} --[{}]--> {} [confidence: {:.2}]",
+            i + 1,
+            rel.source.0,
+            rel.relation_type,
+            rel.target.0,
+            rel.confidence
+        );
     }
 
     // === FINAL RESULT ===
@@ -216,7 +256,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("\n📂 Workspace location: {}", workspace_dir);
-    println!("   To inspect: cat {}/tom_sawyer/metadata.toml", workspace_dir);
+    println!(
+        "   To inspect: cat {}/tom_sawyer/metadata.toml",
+        workspace_dir
+    );
     println!("   To list: ls -lh {}/", workspace_dir);
 
     Ok(())

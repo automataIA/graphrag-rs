@@ -27,11 +27,11 @@ fn test_easy_api_creation() {
         Ok(_) => {
             // Good, we can create it
             println!("SimpleGraphRAG created successfully");
-        }
+        },
         Err(e) => {
             // May fail due to LLM setup, but that's ok for this test
             println!("SimpleGraphRAG creation failed (expected): {e}");
-        }
+        },
     }
 }
 

@@ -170,7 +170,7 @@ impl ConcurrentProcessor {
                     Ok(Ok(processing_result)) => {
                         all_results.push(processing_result);
                         metrics.increment_document_processing_success();
-                    }
+                    },
                     Ok(Err(processing_error)) => {
                         total_errors += 1;
                         tracing::error!(
@@ -179,7 +179,7 @@ impl ConcurrentProcessor {
                             error = %processing_error,
                             "Processing error"
                         );
-                    }
+                    },
                     Err(join_error) => {
                         total_errors += 1;
                         tracing::error!(
@@ -188,7 +188,7 @@ impl ConcurrentProcessor {
                             error = %join_error,
                             "Task join error"
                         );
-                    }
+                    },
                 }
             }
 

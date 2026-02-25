@@ -3,9 +3,9 @@
 //! This module provides abstractions and implementations for storing
 //! knowledge graph data, vectors, and metadata.
 
-use crate::core::{Document, Entity, Result, TextChunk};
 #[cfg(feature = "async")]
 use crate::core::{traits::Storage, GraphRAGError};
+use crate::core::{Document, Entity, Result, TextChunk};
 use std::collections::HashMap;
 
 /// In-memory storage implementation for development and testing
