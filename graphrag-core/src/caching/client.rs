@@ -524,8 +524,16 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
         let utilization = client.cache_utilization();
-        assert!(utilization >= 0.0, "Utilization should be >= 0.0, got: {}", utilization);
-        assert!(utilization <= 1.0, "Utilization should be <= 1.0, got: {}", utilization);
+        assert!(
+            utilization >= 0.0,
+            "Utilization should be >= 0.0, got: {}",
+            utilization
+        );
+        assert!(
+            utilization <= 1.0,
+            "Utilization should be <= 1.0, got: {}",
+            utilization
+        );
     }
 
     #[tokio::test]
@@ -549,12 +557,16 @@ mod tests {
         let metrics = client.cache_statistics();
 
         // Should have good hit rate now (6 out of 9 requests = 66.7%)
-        assert!(metrics.hit_rate >= 0.5, "Hit rate should be >= 50%, got: {}", metrics.hit_rate);
+        assert!(
+            metrics.hit_rate >= 0.5,
+            "Hit rate should be >= 50%, got: {}",
+            metrics.hit_rate
+        );
         assert!(
             matches!(
                 health.status,
                 super::super::stats::HealthStatus::Healthy
-                | super::super::stats::HealthStatus::Warning
+                    | super::super::stats::HealthStatus::Warning
             ),
             "Expected Healthy/Warning but got: {:?}",
             health.status

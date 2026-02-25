@@ -167,10 +167,9 @@ impl QueryConceptMatcher {
             };
 
             // Combine match scores
-            let match_score =
-                (self.config.exact_match_weight * exact_score) +
-                (self.config.fuzzy_match_weight * fuzzy_score) +
-                (self.config.semantic_match_weight * semantic_score);
+            let match_score = (self.config.exact_match_weight * exact_score)
+                + (self.config.fuzzy_match_weight * fuzzy_score)
+                + (self.config.semantic_match_weight * semantic_score);
 
             // Boost with original ranking score
             let final_score = match_score + (self.config.ranking_boost * ranked_concept.score);
@@ -196,11 +195,16 @@ impl QueryConceptMatcher {
 
         // Sort by final match score descending
         matched_concepts.sort_by(|a, b| {
-            b.match_score.partial_cmp(&a.match_score).unwrap_or(std::cmp::Ordering::Equal)
+            b.match_score
+                .partial_cmp(&a.match_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         // Return top-K
-        matched_concepts.into_iter().take(self.config.max_results).collect()
+        matched_concepts
+            .into_iter()
+            .take(self.config.max_results)
+            .collect()
     }
 
     /// Tokenize text into normalized tokens
@@ -299,13 +303,20 @@ impl QueryConceptMatcher {
         // Fill matrix
         for i in 1..=len1 {
             for j in 1..=len2 {
-                let cost = if s1_chars[i - 1] == s2_chars[j - 1] { 0 } else { 1 };
+                let cost = if s1_chars[i - 1] == s2_chars[j - 1] {
+                    0
+                } else {
+                    1
+                };
 
                 matrix[i][j] = *[
-                    matrix[i - 1][j] + 1,      // deletion
-                    matrix[i][j - 1] + 1,      // insertion
+                    matrix[i - 1][j] + 1,        // deletion
+                    matrix[i][j - 1] + 1,        // insertion
                     matrix[i - 1][j - 1] + cost, // substitution
-                ].iter().min().unwrap();
+                ]
+                .iter()
+                .min()
+                .unwrap();
             }
         }
 
@@ -433,10 +444,19 @@ impl QueryConceptMatcher {
             };
         }
 
-        let exact_matches = matched_concepts.iter().filter(|mc| mc.exact_score > 0.0).count();
-        let fuzzy_matches = matched_concepts.iter().filter(|mc| mc.fuzzy_score > 0.0).count();
+        let exact_matches = matched_concepts
+            .iter()
+            .filter(|mc| mc.exact_score > 0.0)
+            .count();
+        let fuzzy_matches = matched_concepts
+            .iter()
+            .filter(|mc| mc.fuzzy_score > 0.0)
+            .count();
 
-        let avg_score = matched_concepts.iter().map(|mc| mc.match_score).sum::<f32>()
+        let avg_score = matched_concepts
+            .iter()
+            .map(|mc| mc.match_score)
+            .sum::<f32>()
             / matched_concepts.len() as f32;
 
         let top_score = matched_concepts
@@ -497,9 +517,7 @@ mod tests {
     fn test_fuzzy_matching() {
         let matcher = QueryConceptMatcher::new(QueryMatchConfig::default());
 
-        let concepts = vec![
-            create_test_concept("neural network", 0.8),
-        ];
+        let concepts = vec![create_test_concept("neural network", 0.8)];
 
         // Query has typo: "neurla" instead of "neural"
         let matched = matcher.match_query_to_concepts("neurla network training", &concepts);
@@ -529,10 +547,8 @@ mod tests {
             create_test_concept("deep learning", 0.7),
         ];
 
-        let matches = matcher.get_exact_phrase_matches(
-            "I want to learn about machine learning",
-            &concepts
-        );
+        let matches =
+            matcher.get_exact_phrase_matches("I want to learn about machine learning", &concepts);
 
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0], "machine learning");

@@ -47,21 +47,21 @@
 pub mod cache_config;
 pub mod cache_key;
 pub mod client;
+pub mod distributed;
 pub mod stats;
 pub mod warming;
-pub mod distributed;
 
 pub use cache_config::{CacheConfig, CacheConfigBuilder, EvictionPolicy};
 pub use cache_key::{CacheKey, CacheKeyGenerator};
 pub use client::CachedLLMClient;
-pub use stats::{CacheStatistics, CacheHealth, CacheMetrics};
-pub use warming::{CacheWarmer, WarmingStrategy, WarmingConfig};
-pub use distributed::{DistributedCache, L1Cache, DistributedCacheStats};
+pub use distributed::{DistributedCache, DistributedCacheStats, L1Cache};
+pub use stats::{CacheHealth, CacheMetrics, CacheStatistics};
+pub use warming::{CacheWarmer, WarmingConfig, WarmingStrategy};
 
 use crate::core::GraphRAGError;
 
 /// Re-export the LanguageModel trait for convenience
-pub use crate::core::traits::{LanguageModel, GenerationParams, ModelInfo};
+pub use crate::core::traits::{GenerationParams, LanguageModel, ModelInfo};
 
 /// Cache-specific error types
 #[derive(Debug, thiserror::Error)]

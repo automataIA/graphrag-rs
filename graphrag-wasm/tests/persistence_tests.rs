@@ -3,8 +3,8 @@
 //! Tests for save/load functionality using IndexedDB storage.
 //! Validates that graph state can be persisted and restored.
 
-use wasm_bindgen_test::*;
 use graphrag_wasm::GraphRAG;
+use wasm_bindgen_test::*;
 
 wasm_bindgen_test_configure!(run_in_browser);
 
@@ -40,17 +40,23 @@ async fn test_save_load_with_documents() {
     let doc1_embedding: Vec<f32> = (0..384).map(|i| (i as f32) / 384.0).collect();
     let doc2_embedding: Vec<f32> = (0..384).map(|i| ((i + 100) as f32) / 384.0).collect();
 
-    graph.add_document(
-        "doc1".to_string(),
-        "GraphRAG is a knowledge graph system".to_string(),
-        doc1_embedding.clone()
-    ).await.unwrap();
+    graph
+        .add_document(
+            "doc1".to_string(),
+            "GraphRAG is a knowledge graph system".to_string(),
+            doc1_embedding.clone(),
+        )
+        .await
+        .unwrap();
 
-    graph.add_document(
-        "doc2".to_string(),
-        "WASM enables browser-side ML".to_string(),
-        doc2_embedding.clone()
-    ).await.unwrap();
+    graph
+        .add_document(
+            "doc2".to_string(),
+            "WASM enables browser-side ML".to_string(),
+            doc2_embedding.clone(),
+        )
+        .await
+        .unwrap();
 
     // Build index
     graph.build_index().await.unwrap();
@@ -79,11 +85,10 @@ async fn test_save_clear_load() {
 
     // Add document
     let embedding: Vec<f32> = (0..384).map(|i| (i as f32) / 384.0).collect();
-    graph.add_document(
-        "doc1".to_string(),
-        "Test document".to_string(),
-        embedding
-    ).await.unwrap();
+    graph
+        .add_document("doc1".to_string(), "Test document".to_string(), embedding)
+        .await
+        .unwrap();
 
     assert_eq!(graph.document_count(), 1);
 
@@ -95,7 +100,10 @@ async fn test_save_clear_load() {
     assert_eq!(graph.document_count(), 0);
 
     // Load should restore
-    graph.load_from_storage("test-save-clear-load").await.unwrap();
+    graph
+        .load_from_storage("test-save-clear-load")
+        .await
+        .unwrap();
     assert_eq!(graph.document_count(), 1);
 }
 
@@ -110,25 +118,37 @@ async fn test_query_after_load() {
     let doc1_embedding: Vec<f32> = (0..384).map(|i| (i as f32) / 384.0).collect();
     let doc2_embedding: Vec<f32> = (0..384).map(|i| ((i + 100) as f32) / 384.0).collect();
 
-    graph.add_document(
-        "doc1".to_string(),
-        "Machine learning".to_string(),
-        doc1_embedding.clone()
-    ).await.unwrap();
+    graph
+        .add_document(
+            "doc1".to_string(),
+            "Machine learning".to_string(),
+            doc1_embedding.clone(),
+        )
+        .await
+        .unwrap();
 
-    graph.add_document(
-        "doc2".to_string(),
-        "Deep neural networks".to_string(),
-        doc2_embedding.clone()
-    ).await.unwrap();
+    graph
+        .add_document(
+            "doc2".to_string(),
+            "Deep neural networks".to_string(),
+            doc2_embedding.clone(),
+        )
+        .await
+        .unwrap();
 
     // Build index and save
     graph.build_index().await.unwrap();
-    graph.save_to_storage("test-query-after-load").await.unwrap();
+    graph
+        .save_to_storage("test-query-after-load")
+        .await
+        .unwrap();
 
     // Load into new instance
     let mut loaded_graph = GraphRAG::new(384).unwrap();
-    loaded_graph.load_from_storage("test-query-after-load").await.unwrap();
+    loaded_graph
+        .load_from_storage("test-query-after-load")
+        .await
+        .unwrap();
 
     // Query should work
     let query_embedding: Vec<f32> = (0..384).map(|i| ((i + 10) as f32) / 384.0).collect();
@@ -149,7 +169,10 @@ async fn test_multiple_save_load_cycles() {
     {
         let mut graph = GraphRAG::new(384).unwrap();
         let embedding: Vec<f32> = (0..384).map(|i| (i as f32) / 384.0).collect();
-        graph.add_document("doc1".to_string(), "First".to_string(), embedding).await.unwrap();
+        graph
+            .add_document("doc1".to_string(), "First".to_string(), embedding)
+            .await
+            .unwrap();
         graph.save_to_storage(db_name).await.unwrap();
     }
 
@@ -160,7 +183,10 @@ async fn test_multiple_save_load_cycles() {
         assert_eq!(graph.document_count(), 1);
 
         let embedding: Vec<f32> = (0..384).map(|i| ((i + 50) as f32) / 384.0).collect();
-        graph.add_document("doc2".to_string(), "Second".to_string(), embedding).await.unwrap();
+        graph
+            .add_document("doc2".to_string(), "Second".to_string(), embedding)
+            .await
+            .unwrap();
         graph.save_to_storage(db_name).await.unwrap();
     }
 
@@ -182,11 +208,10 @@ async fn test_large_graph_persistence() {
     // Add 100 documents
     for i in 0..100 {
         let embedding: Vec<f32> = (0..384).map(|j| ((j + i * 10) as f32) / 384.0).collect();
-        graph.add_document(
-            format!("doc{}", i),
-            format!("Document {}", i),
-            embedding
-        ).await.unwrap();
+        graph
+            .add_document(format!("doc{}", i), format!("Document {}", i), embedding)
+            .await
+            .unwrap();
     }
 
     assert_eq!(graph.document_count(), 100);
@@ -215,7 +240,9 @@ async fn test_large_graph_persistence() {
 async fn test_load_nonexistent_database() {
     let mut graph = GraphRAG::new(384).unwrap();
 
-    let result = graph.load_from_storage("this-database-does-not-exist-12345").await;
+    let result = graph
+        .load_from_storage("this-database-does-not-exist-12345")
+        .await;
 
     // Should fail gracefully
     // Note: Depending on implementation, this might succeed with empty data
@@ -224,11 +251,11 @@ async fn test_load_nonexistent_database() {
         Ok(_) => {
             // Loaded empty data
             assert_eq!(graph.document_count(), 0);
-        }
+        },
         Err(e) => {
             // Failed to load
             web_sys::console::log_1(&format!("Expected error: {:?}", e).into());
-        }
+        },
     }
 }
 
@@ -241,7 +268,10 @@ async fn test_dimension_persistence() {
     {
         let mut graph = GraphRAG::new(384).unwrap();
         let embedding: Vec<f32> = (0..384).map(|i| (i as f32) / 384.0).collect();
-        graph.add_document("doc1".to_string(), "Test".to_string(), embedding).await.unwrap();
+        graph
+            .add_document("doc1".to_string(), "Test".to_string(), embedding)
+            .await
+            .unwrap();
         graph.save_to_storage("test-dimension").await.unwrap();
     }
 
@@ -261,12 +291,14 @@ async fn test_dimension_persistence() {
 /// Validates that multiple save/load operations can happen concurrently.
 #[wasm_bindgen_test]
 async fn test_concurrent_save_load() {
-
     // Create and save graph 1
     {
         let mut graph1 = GraphRAG::new(384).unwrap();
         let embedding: Vec<f32> = (0..384).map(|i| (i as f32) / 384.0).collect();
-        graph1.add_document("doc1".to_string(), "Graph 1".to_string(), embedding).await.unwrap();
+        graph1
+            .add_document("doc1".to_string(), "Graph 1".to_string(), embedding)
+            .await
+            .unwrap();
         graph1.save_to_storage("concurrent-graph-1").await.unwrap();
     }
 
@@ -274,8 +306,14 @@ async fn test_concurrent_save_load() {
     {
         let mut graph2 = GraphRAG::new(384).unwrap();
         let embedding: Vec<f32> = (0..384).map(|i| ((i + 100) as f32) / 384.0).collect();
-        graph2.add_document("doc2".to_string(), "Graph 2".to_string(), embedding.clone()).await.unwrap();
-        graph2.add_document("doc3".to_string(), "Graph 2 second".to_string(), embedding).await.unwrap();
+        graph2
+            .add_document("doc2".to_string(), "Graph 2".to_string(), embedding.clone())
+            .await
+            .unwrap();
+        graph2
+            .add_document("doc3".to_string(), "Graph 2 second".to_string(), embedding)
+            .await
+            .unwrap();
         graph2.save_to_storage("concurrent-graph-2").await.unwrap();
     }
 

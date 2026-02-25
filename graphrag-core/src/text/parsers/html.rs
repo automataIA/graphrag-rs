@@ -28,7 +28,7 @@ impl HtmlLayoutParser {
                 '<' => inside_tag = true,
                 '>' => inside_tag = false,
                 _ if !inside_tag => text.push(ch),
-                _ => {}
+                _ => {},
             }
         }
 

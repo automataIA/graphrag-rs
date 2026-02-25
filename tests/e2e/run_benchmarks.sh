@@ -21,6 +21,15 @@ RESULTS_DIR="$SCRIPT_DIR/results"
 REPORTS_DIR="$SCRIPT_DIR/reports"
 BOOKS_DIR="$PROJECT_ROOT/docs-example"
 
+# Path to GLiNER-Relex ONNX model file.
+# Override with: GLINER_MODEL_PATH=/path/to/model.onnx ./run_benchmarks.sh --pipeline gliner_relex
+# To obtain the model:
+#   pip install huggingface_hub
+#   python -c "from huggingface_hub import snapshot_download; \
+#              snapshot_download('gliner-community/gliner-relex-large-v0.5', local_dir='/tmp/gliner-relex')"
+# Compile CLI with GLiNER support: cargo build --release --features gliner -p graphrag-cli
+GLINER_MODEL_PATH="${GLINER_MODEL_PATH:-/tmp/gliner-relex/model.onnx}"
+
 # Colors
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
@@ -56,6 +65,9 @@ QUESTIONS[tom_sawyer]="Who is Tom Sawyer and what are his main characteristics?|
 #   lightrag:      true | false
 #   leiden:        true | false
 #   cross_encoder: true | false
+#   keep_alive:    none | 5m | 30m | 1h  (Ollama KV cache — keeps model in VRAM between requests)
+#   num_ctx:       0 (use Ollama default) | integer (explicit context window, e.g. 32768)
+#   ollama_timeout: integer seconds (default 120; use 300+ for KV-cache pipelines)
 # =============================================================================
 
 # --- Algorithmic pipelines (no LLM needed, fast) ---
@@ -77,6 +89,9 @@ ollama_enabled=false
 lightrag=false
 leiden=false
 cross_encoder=false
+keep_alive=none
+num_ctx=0
+ollama_timeout=120
 PARAMS
 }
 
@@ -97,6 +112,9 @@ ollama_enabled=false
 lightrag=false
 leiden=false
 cross_encoder=false
+keep_alive=none
+num_ctx=0
+ollama_timeout=120
 PARAMS
 }
 
@@ -117,6 +135,9 @@ ollama_enabled=false
 lightrag=false
 leiden=true
 cross_encoder=false
+keep_alive=none
+num_ctx=0
+ollama_timeout=120
 PARAMS
 }
 
@@ -137,6 +158,9 @@ ollama_enabled=true
 lightrag=false
 leiden=false
 cross_encoder=false
+keep_alive=30m
+num_ctx=0
+ollama_timeout=120
 PARAMS
 }
 
@@ -159,6 +183,9 @@ ollama_enabled=true
 lightrag=true
 leiden=true
 cross_encoder=false
+keep_alive=30m
+num_ctx=0
+ollama_timeout=120
 PARAMS
 }
 
@@ -179,6 +206,9 @@ ollama_enabled=true
 lightrag=true
 leiden=true
 cross_encoder=false
+keep_alive=30m
+num_ctx=0
+ollama_timeout=120
 PARAMS
 }
 
@@ -199,6 +229,9 @@ ollama_enabled=true
 lightrag=true
 leiden=true
 cross_encoder=false
+keep_alive=30m
+num_ctx=0
+ollama_timeout=120
 PARAMS
 }
 
@@ -219,6 +252,9 @@ ollama_enabled=true
 lightrag=false
 leiden=false
 cross_encoder=false
+keep_alive=30m
+num_ctx=0
+ollama_timeout=120
 PARAMS
 }
 
@@ -241,6 +277,9 @@ ollama_enabled=true
 lightrag=true
 leiden=true
 cross_encoder=false
+keep_alive=30m
+num_ctx=0
+ollama_timeout=120
 PARAMS
 }
 
@@ -261,6 +300,9 @@ ollama_enabled=true
 lightrag=true
 leiden=true
 cross_encoder=false
+keep_alive=30m
+num_ctx=0
+ollama_timeout=120
 PARAMS
 }
 
@@ -282,6 +324,9 @@ ollama_enabled=true
 lightrag=true
 leiden=true
 cross_encoder=true
+keep_alive=30m
+num_ctx=0
+ollama_timeout=120
 PARAMS
 }
 
@@ -303,6 +348,9 @@ ollama_enabled=false
 lightrag=true
 leiden=true
 cross_encoder=false
+keep_alive=none
+num_ctx=0
+ollama_timeout=120
 PARAMS
 }
 
@@ -324,9 +372,122 @@ ollama_enabled=true
 lightrag=true
 leiden=true
 cross_encoder=true
+keep_alive=30m
+num_ctx=0
+ollama_timeout=120
 PARAMS
 }
 
+
+# --- KV Cache pipelines (keep_alive=1h, explicit num_ctx) ---
+# These pipelines keep the Ollama model in VRAM between all requests.
+# With KV Cache active, the model avoids re-evaluating shared token prefixes
+# across consecutive calls in the same document processing session.
+# Recommended for long documents (books, reports) on GPUs with ≥12GB VRAM.
+
+pipeline_kv_semantic_mistral() {
+    cat <<-PARAMS
+name=kv_semantic_mistral
+approach=semantic
+embedding=ollama
+embed_model=nomic-embed-text
+embed_dim=768
+chunk_size=512
+chunk_overlap=100
+use_gleaning=true
+gleaning_rounds=2
+llm_model=mistral-nemo:latest
+llm_temp=0.1
+ollama_enabled=true
+lightrag=true
+leiden=true
+cross_encoder=false
+keep_alive=1h
+num_ctx=32768
+ollama_timeout=300
+PARAMS
+}
+
+pipeline_kv_hybrid_mistral() {
+    cat <<-PARAMS
+name=kv_hybrid_mistral
+approach=hybrid
+embedding=ollama
+embed_model=nomic-embed-text
+embed_dim=768
+chunk_size=512
+chunk_overlap=100
+use_gleaning=true
+gleaning_rounds=2
+llm_model=mistral-nemo:latest
+llm_temp=0.1
+ollama_enabled=true
+lightrag=true
+leiden=true
+cross_encoder=false
+keep_alive=1h
+num_ctx=32768
+ollama_timeout=300
+PARAMS
+}
+
+pipeline_kv_semantic_qwen3() {
+    cat <<-PARAMS
+name=kv_semantic_qwen3
+approach=semantic
+embedding=ollama
+embed_model=nomic-embed-text
+embed_dim=768
+chunk_size=512
+chunk_overlap=100
+use_gleaning=true
+gleaning_rounds=2
+llm_model=qwen3:8b-q4_k_m
+llm_temp=0.1
+ollama_enabled=true
+lightrag=true
+leiden=true
+cross_encoder=false
+keep_alive=1h
+num_ctx=16384
+ollama_timeout=300
+PARAMS
+}
+
+# --- GLiNER-Relex pipeline (joint NER + RE, no LLM required, ~1.5 GB VRAM) ---
+# Requires: cargo build --release --features gliner -p graphrag-cli
+# Model path: set GLINER_MODEL_PATH env var before running.
+
+pipeline_gliner_relex() {
+    cat <<-PARAMS
+name=gliner_relex
+approach=algorithmic
+embedding=hash
+embed_model=none
+embed_dim=384
+chunk_size=800
+chunk_overlap=150
+use_gleaning=false
+gleaning_rounds=0
+llm_model=none
+llm_temp=0.0
+ollama_enabled=false
+lightrag=false
+leiden=true
+cross_encoder=false
+keep_alive=none
+num_ctx=0
+ollama_timeout=120
+gliner_enabled=true
+gliner_model_path=${GLINER_MODEL_PATH}
+gliner_mode=span
+gliner_entity_labels=["person","philosopher","concept","virtue","philosophical idea","deity","place"]
+gliner_relation_labels=["loves","defines","praises","argues against","part of","related to"]
+gliner_entity_threshold=0.40
+gliner_relation_threshold=0.50
+gliner_use_gpu=false
+PARAMS
+}
 
 # All pipeline function names
 ALL_PIPELINES=(
@@ -343,6 +504,10 @@ ALL_PIPELINES=(
     pipeline_future_rag_2026
     pipeline_mock_future_rag
     pipeline_fast_future_rag
+    pipeline_kv_semantic_mistral
+    pipeline_kv_hybrid_mistral
+    pipeline_kv_semantic_qwen3
+    pipeline_gliner_relex
 )
 
 # =============================================================================
@@ -370,6 +535,35 @@ extract_json() {
 generate_config() {
     local output_file="$1"
     local output_dir="$2"
+
+    # Build optional KV-cache fields — only included when explicitly set by the pipeline.
+    # keep_alive keeps the Ollama model in VRAM between requests (prevents KV cache eviction).
+    # num_ctx sets the context window; 0 means "use Ollama's default" (typically 2k-8k).
+    local ka="${P[keep_alive]:-none}"
+    local nc="${P[num_ctx]:-0}"
+    local ot="${P[ollama_timeout]:-120}"
+    local keep_alive_field=""
+    local num_ctx_field=""
+    if [[ "$ka" != "none" && -n "$ka" ]]; then
+        keep_alive_field="    \"keep_alive\": \"$ka\","
+    fi
+    if [[ "$nc" != "0" && -n "$nc" ]]; then
+        num_ctx_field="    \"num_ctx\": $nc,"
+    fi
+
+    # GLiNER-Relex fields (optional; only active when gliner_enabled=true)
+    local gliner_enabled="${P[gliner_enabled]:-false}"
+    local gliner_model_path="${P[gliner_model_path]:-}"
+    local gliner_mode="${P[gliner_mode]:-span}"
+    local gliner_entity_threshold="${P[gliner_entity_threshold]:-0.4}"
+    local gliner_relation_threshold="${P[gliner_relation_threshold]:-0.5}"
+    local gliner_use_gpu="${P[gliner_use_gpu]:-false}"
+    local gliner_entity_labels
+    local gliner_relation_labels
+    gliner_entity_labels="${P[gliner_entity_labels]}"
+    [[ -z "$gliner_entity_labels" ]] && gliner_entity_labels='["person","organization","location"]'
+    gliner_relation_labels="${P[gliner_relation_labels]}"
+    [[ -z "$gliner_relation_labels" ]] && gliner_relation_labels='["related to","part of"]'
 
     cat > "$output_file" <<EOF
 {
@@ -490,11 +684,13 @@ generate_config() {
     "port": 11434,
     "chat_model": "${P[llm_model]}",
     "embedding_model": "${P[embed_model]}",
-    "timeout_seconds": 120,
+    "timeout_seconds": $ot,
     "max_retries": 3,
     "fallback_to_hash": true,
     "max_tokens": 1200,
     "temperature": ${P[llm_temp]},
+$keep_alive_field
+$num_ctx_field
     "generation": {
       "temperature": ${P[llm_temp]},
       "top_p": 0.9,
@@ -580,6 +776,16 @@ generate_config() {
       "include_parallel": false,
       "enable_memory_profiling": false
     }
+  },
+  "gliner": {
+    "enabled": $gliner_enabled,
+    "model_path": "$gliner_model_path",
+    "mode": "$gliner_mode",
+    "entity_labels": $gliner_entity_labels,
+    "relation_labels": $gliner_relation_labels,
+    "entity_threshold": $gliner_entity_threshold,
+    "relation_threshold": $gliner_relation_threshold,
+    "use_gpu": $gliner_use_gpu
   }
 }
 EOF
@@ -607,6 +813,14 @@ run_pipeline_book() {
     echo -e "${BLUE}Chunks:${NC}   ${P[chunk_size]}/${P[chunk_overlap]} | Gleaning: ${P[use_gleaning]}×${P[gleaning_rounds]}"
     echo -e "${BLUE}LLM:${NC}     ${P[llm_model]} (T=${P[llm_temp]})"
     echo -e "${BLUE}Features:${NC} LightRAG=${P[lightrag]} Leiden=${P[leiden]} CrossEnc=${P[cross_encoder]}"
+    local ka_display="${P[keep_alive]:-none}"
+    local nc_display="${P[num_ctx]:-0}"
+    if [[ "$ka_display" != "none" || "$nc_display" != "0" ]]; then
+        echo -e "${BLUE}KV Cache:${NC} keep_alive=${ka_display} num_ctx=${nc_display} timeout=${P[ollama_timeout]:-120}s"
+    fi
+    if [[ "${P[gliner_enabled]:-false}" == "true" ]]; then
+        echo -e "${BLUE}GLiNER:${NC}   model=${P[gliner_model_path]:-N/A} mode=${P[gliner_mode]:-span} (entity_thr=${P[gliner_entity_threshold]:-0.4})"
+    fi
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
     # Generate config
@@ -637,7 +851,13 @@ run_pipeline_book() {
     "ollama_enabled": ${P[ollama_enabled]},
     "lightrag": ${P[lightrag]},
     "leiden": ${P[leiden]},
-    "cross_encoder": ${P[cross_encoder]}
+    "cross_encoder": ${P[cross_encoder]},
+    "keep_alive": "${P[keep_alive]:-none}",
+    "num_ctx": ${P[num_ctx]:-0},
+    "ollama_timeout": ${P[ollama_timeout]:-120},
+    "gliner_enabled": ${P[gliner_enabled]:-false},
+    "gliner_model_path": "${P[gliner_model_path]:-}",
+    "gliner_mode": "${P[gliner_mode]:-span}"
   }
 }
 EOF
@@ -683,6 +903,12 @@ EOF
             --argjson lightrag "${P[lightrag]}" \
             --argjson leiden "${P[leiden]}" \
             --argjson cross_encoder "${P[cross_encoder]}" \
+            --arg keep_alive "${P[keep_alive]:-none}" \
+            --argjson num_ctx "${P[num_ctx]:-0}" \
+            --argjson ollama_timeout "${P[ollama_timeout]:-120}" \
+            --argjson gliner_enabled "${P[gliner_enabled]:-false}" \
+            --arg gliner_model "${P[gliner_model_path]:-}" \
+            --arg gliner_mode "${P[gliner_mode]:-span}" \
             '{
               approach: $approach,
               embedding_backend: $embed_backend,
@@ -697,7 +923,13 @@ EOF
               ollama_enabled: $ollama_enabled,
               lightrag: $lightrag,
               leiden: $leiden,
-              cross_encoder: $cross_encoder
+              cross_encoder: $cross_encoder,
+              keep_alive: $keep_alive,
+              num_ctx: $num_ctx,
+              ollama_timeout: $ollama_timeout,
+              gliner_enabled: $gliner_enabled,
+              gliner_model: $gliner_model,
+              gliner_mode: $gliner_mode
             }')" \
         '{
           run_id: $run_id,

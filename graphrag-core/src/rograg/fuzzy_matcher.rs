@@ -30,7 +30,7 @@ pub enum FuzzyMatchError {
     #[error("No matching entities found for query: {query}")]
     NoMatches {
         /// The query text that produced no matches.
-        query: String
+        query: String,
     },
 
     /// The configured similarity threshold is too restrictive.
@@ -40,7 +40,7 @@ pub enum FuzzyMatchError {
     #[error("Similarity threshold too low: {threshold}")]
     ThresholdTooLow {
         /// The invalid threshold value that was configured.
-        threshold: f32
+        threshold: f32,
     },
 
     /// The knowledge graph is empty or contains no queryable content.
@@ -907,7 +907,9 @@ mod tests {
         let matcher = FuzzyMatcher::new();
         let graph = create_test_graph();
 
-        let result = matcher.match_query("character relationships", &graph).unwrap();
+        let result = matcher
+            .match_query("character relationships", &graph)
+            .unwrap();
 
         assert!(!result.matches.is_empty());
         assert!(result

@@ -1,5 +1,5 @@
 //! PageRank-based retrieval system for GraphRAG
-//! 
+//!
 //! This module is only available when the "pagerank" feature is enabled.
 #![cfg(feature = "pagerank")]
 
@@ -461,11 +461,7 @@ impl PageRankRetrievalSystem {
         let mut weighted_edges: HashMap<(EntityId, EntityId), f32> = HashMap::new();
 
         for rel in graph.get_all_relationships() {
-            let dynamic_weight = graph.dynamic_weight(
-                rel,
-                query_embedding,
-                &query_concepts,
-            );
+            let dynamic_weight = graph.dynamic_weight(rel, query_embedding, &query_concepts);
 
             weighted_edges.insert((rel.source.clone(), rel.target.clone()), dynamic_weight);
 
@@ -555,17 +551,19 @@ impl PageRankRetrievalSystem {
 ///
 /// Simple heuristic that extracts meaningful words (>3 chars, not stopwords)
 fn extract_query_concepts(query: &str) -> Vec<String> {
-    let stopwords = ["what", "when", "where", "who", "which", "how", "does", "the", "a", "an", "is", "are", "was", "were", "been", "be"];
+    let stopwords = [
+        "what", "when", "where", "who", "which", "how", "does", "the", "a", "an", "is", "are",
+        "was", "were", "been", "be",
+    ];
 
     query
         .to_lowercase()
         .split_whitespace()
-        .filter(|word| {
-            word.len() > 3 && !stopwords.contains(word)
-        })
+        .filter(|word| word.len() > 3 && !stopwords.contains(word))
         .map(|word| {
             // Remove punctuation
-            word.trim_matches(|c: char| !c.is_alphanumeric()).to_string()
+            word.trim_matches(|c: char| !c.is_alphanumeric())
+                .to_string()
         })
         .filter(|word| !word.is_empty())
         .collect()

@@ -81,17 +81,12 @@ impl TextAnalyzer {
         static ALPHA_REGEX: OnceLock<Regex> = OnceLock::new();
         static CHAPTER_REGEX: OnceLock<Regex> = OnceLock::new();
 
-        let decimal_re = DECIMAL_REGEX.get_or_init(|| {
-            Regex::new(r"^(\d+(?:\.\d+)*)\s*[.:]?\s").unwrap()
-        });
+        let decimal_re =
+            DECIMAL_REGEX.get_or_init(|| Regex::new(r"^(\d+(?:\.\d+)*)\s*[.:]?\s").unwrap());
 
-        let roman_re = ROMAN_REGEX.get_or_init(|| {
-            Regex::new(r"^([IVXLCDM]+)[.:]?\s").unwrap()
-        });
+        let roman_re = ROMAN_REGEX.get_or_init(|| Regex::new(r"^([IVXLCDM]+)[.:]?\s").unwrap());
 
-        let alpha_re = ALPHA_REGEX.get_or_init(|| {
-            Regex::new(r"^([A-Z])[.:]?\s").unwrap()
-        });
+        let alpha_re = ALPHA_REGEX.get_or_init(|| Regex::new(r"^([A-Z])[.:]?\s").unwrap());
 
         let chapter_re = CHAPTER_REGEX.get_or_init(|| {
             Regex::new(r"(?i)^(chapter|section|part|appendix)\s+(\d+|[IVXLCDM]+|[A-Z])\b").unwrap()
@@ -359,7 +354,10 @@ mod tests {
     #[test]
     fn test_markdown_heading_detection() {
         assert_eq!(TextAnalyzer::detect_heading_level("# Chapter 1"), Some(1));
-        assert_eq!(TextAnalyzer::detect_heading_level("## Section 1.1"), Some(2));
+        assert_eq!(
+            TextAnalyzer::detect_heading_level("## Section 1.1"),
+            Some(2)
+        );
         assert_eq!(
             TextAnalyzer::detect_heading_level("### Subsection 1.1.1"),
             Some(3)
@@ -375,7 +373,10 @@ mod tests {
             TextAnalyzer::detect_heading_level("INTRODUCTION TO MACHINE LEARNING"),
             Some(2)
         );
-        assert_eq!(TextAnalyzer::detect_heading_level("This is not ALL CAPS"), None);
+        assert_eq!(
+            TextAnalyzer::detect_heading_level("This is not ALL CAPS"),
+            None
+        );
     }
 
     #[test]

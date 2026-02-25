@@ -1,8 +1,8 @@
 use crate::{
+    core::traits::{GenerationParams, LanguageModel, ModelInfo},
     retrieval::{ResultType, SearchResult},
     summarization::QueryResult,
     text::TextProcessor,
-    core::traits::{LanguageModel, GenerationParams, ModelInfo},
     GraphRAGError, Result,
 };
 use std::collections::{HashMap, HashSet};
@@ -232,7 +232,16 @@ impl MockLLM {
     /// Extract character names from text
     fn extract_character_names(&self, text: &str) -> Vec<String> {
         let common_names = [
-            "entity", "second", "third", "fourth", "fifth", "sixth", "guardian", "companion", "friend", "character",
+            "entity",
+            "second",
+            "third",
+            "fourth",
+            "fifth",
+            "sixth",
+            "guardian",
+            "companion",
+            "friend",
+            "character",
         ];
         let mut found_names = Vec::new();
 

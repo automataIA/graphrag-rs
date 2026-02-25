@@ -37,7 +37,10 @@ pub fn validate_query(query: &str) -> Result<(), ValidationError> {
 
     if query.len() > MAX_QUERY_LENGTH {
         return Err(ValidationError {
-            error: format!("Query exceeds maximum length of {} characters", MAX_QUERY_LENGTH),
+            error: format!(
+                "Query exceeds maximum length of {} characters",
+                MAX_QUERY_LENGTH
+            ),
             field: Some("query".to_string()),
             max_length: Some(MAX_QUERY_LENGTH),
         });
@@ -67,7 +70,10 @@ pub fn validate_title(title: &str) -> Result<(), ValidationError> {
 
     if title.len() > MAX_TITLE_LENGTH {
         return Err(ValidationError {
-            error: format!("Title exceeds maximum length of {} characters", MAX_TITLE_LENGTH),
+            error: format!(
+                "Title exceeds maximum length of {} characters",
+                MAX_TITLE_LENGTH
+            ),
             field: Some("title".to_string()),
             max_length: Some(MAX_TITLE_LENGTH),
         });
@@ -88,7 +94,10 @@ pub fn validate_content(content: &str) -> Result<(), ValidationError> {
 
     if content.len() > MAX_CONTENT_LENGTH {
         return Err(ValidationError {
-            error: format!("Content exceeds maximum length of {} characters", MAX_CONTENT_LENGTH),
+            error: format!(
+                "Content exceeds maximum length of {} characters",
+                MAX_CONTENT_LENGTH
+            ),
             field: Some("content".to_string()),
             max_length: Some(MAX_CONTENT_LENGTH),
         });
@@ -143,7 +152,9 @@ fn contains_sql_injection_patterns(input: &str) -> bool {
         "execute(",
     ];
 
-    dangerous_patterns.iter().any(|pattern| lower.contains(pattern))
+    dangerous_patterns
+        .iter()
+        .any(|pattern| lower.contains(pattern))
 }
 
 // Note: Request body size limits are now configured in main.rs using
@@ -198,8 +209,14 @@ mod tests {
     fn test_sql_injection_detection() {
         assert!(contains_sql_injection_patterns("'; DROP TABLE users; --"));
         assert!(contains_sql_injection_patterns("' OR '1'='1"));
-        assert!(contains_sql_injection_patterns("UNION SELECT * FROM passwords"));
-        assert!(!contains_sql_injection_patterns("What is the drop in temperature?"));
-        assert!(!contains_sql_injection_patterns("Normal query about tables"));
+        assert!(contains_sql_injection_patterns(
+            "UNION SELECT * FROM passwords"
+        ));
+        assert!(!contains_sql_injection_patterns(
+            "What is the drop in temperature?"
+        ));
+        assert!(!contains_sql_injection_patterns(
+            "Normal query about tables"
+        ));
     }
 }

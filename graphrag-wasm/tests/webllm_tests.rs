@@ -3,8 +3,8 @@
 //! Tests for WebLLM bindings, model initialization, chat completions, and streaming.
 //! These tests require WebLLM to be available in the browser environment.
 
+use graphrag_wasm::webllm::{get_recommended_models, is_webllm_available, ChatMessage, WebLLM};
 use wasm_bindgen_test::*;
-use graphrag_wasm::webllm::{WebLLM, ChatMessage, is_webllm_available, get_recommended_models};
 
 wasm_bindgen_test_configure!(run_in_browser);
 
@@ -69,10 +69,10 @@ async fn test_webllm_initialization() {
             web_sys::console::log_1(&"✅ WebLLM initialized successfully".into());
             // Model is ready to use
             drop(llm);
-        }
+        },
         Err(e) => {
             web_sys::console::error_1(&format!("❌ WebLLM initialization failed: {}", e).into());
-        }
+        },
     }
 }
 
@@ -85,8 +85,8 @@ async fn test_webllm_progress_tracking() {
         return;
     }
 
-    use std::rc::Rc;
     use std::cell::RefCell;
+    use std::rc::Rc;
 
     let progress_calls = Rc::new(RefCell::new(0));
     let progress_calls_clone = progress_calls.clone();
@@ -95,13 +95,12 @@ async fn test_webllm_progress_tracking() {
         "Llama-3.2-1B-Instruct-q4f16_1-MLC",
         move |progress, text| {
             *progress_calls_clone.borrow_mut() += 1;
-            web_sys::console::log_1(&format!(
-                "Progress: {:.1}% - {}",
-                progress * 100.0,
-                text
-            ).into());
+            web_sys::console::log_1(
+                &format!("Progress: {:.1}% - {}", progress * 100.0, text).into(),
+            );
         },
-    ).await;
+    )
+    .await;
 
     if let Ok(llm) = result {
         // Should have received multiple progress callbacks
@@ -130,10 +129,10 @@ async fn test_simple_chat() {
         Ok(response) => {
             web_sys::console::log_1(&format!("Response: {}", response).into());
             assert!(!response.is_empty());
-        }
+        },
         Err(e) => {
             web_sys::console::error_1(&format!("Chat failed: {}", e).into());
-        }
+        },
     }
 }
 
@@ -183,35 +182,35 @@ async fn test_streaming_chat() {
         Err(_) => return,
     };
 
-    let messages = vec![
-        ChatMessage::user("Count from 1 to 5."),
-    ];
+    let messages = vec![ChatMessage::user("Count from 1 to 5.")];
 
-    use std::rc::Rc;
     use std::cell::RefCell;
+    use std::rc::Rc;
 
     let chunks = Rc::new(RefCell::new(Vec::new()));
     let chunks_clone = chunks.clone();
 
-    let full_response = llm.chat_stream(
-        messages,
-        move |chunk| {
-            web_sys::console::log_1(&format!("Chunk: {}", chunk).into());
-            chunks_clone.borrow_mut().push(chunk);
-        },
-        Some(0.8),
-        Some(50),
-    ).await;
+    let full_response = llm
+        .chat_stream(
+            messages,
+            move |chunk| {
+                web_sys::console::log_1(&format!("Chunk: {}", chunk).into());
+                chunks_clone.borrow_mut().push(chunk);
+            },
+            Some(0.8),
+            Some(50),
+        )
+        .await;
 
     match full_response {
         Ok(response) => {
             assert!(!response.is_empty());
             assert!(!chunks.borrow().is_empty());
             web_sys::console::log_1(&format!("Full response: {}", response).into());
-        }
+        },
         Err(e) => {
             web_sys::console::error_1(&format!("Streaming failed: {}", e).into());
-        }
+        },
     }
 }
 
@@ -229,9 +228,7 @@ async fn test_temperature_control() {
         Err(_) => return,
     };
 
-    let messages = vec![
-        ChatMessage::user("Write a creative sentence."),
-    ];
+    let messages = vec![ChatMessage::user("Write a creative sentence.")];
 
     // Low temperature (more deterministic)
     let response_low = llm.chat(messages.clone(), Some(0.1), Some(50)).await;
@@ -260,9 +257,7 @@ async fn test_max_tokens_limit() {
         Err(_) => return,
     };
 
-    let messages = vec![
-        ChatMessage::user("Tell me a long story."),
-    ];
+    let messages = vec![ChatMessage::user("Tell me a long story.")];
 
     // Very short response (10 tokens)
     let response_short = llm.chat(messages.clone(), Some(0.7), Some(10)).await;

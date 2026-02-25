@@ -18,6 +18,8 @@ mod ollama_tests {
             max_tokens: Some(100),
             temperature: Some(0.7),
             enable_caching: true,
+            keep_alive: None,
+            num_ctx: None,
         };
 
         assert!(config.enable_caching);
@@ -33,13 +35,18 @@ mod ollama_tests {
             top_k: Some(50),
             stop: Some(vec!["END".to_string(), "STOP".to_string()]),
             repeat_penalty: Some(1.2),
+            num_ctx: None,
+            keep_alive: None,
         };
 
         assert_eq!(params.num_predict, Some(500));
         assert_eq!(params.temperature, Some(0.8));
         assert_eq!(params.top_p, Some(0.95));
         assert_eq!(params.top_k, Some(50));
-        assert_eq!(params.stop, Some(vec!["END".to_string(), "STOP".to_string()]));
+        assert_eq!(
+            params.stop,
+            Some(vec!["END".to_string(), "STOP".to_string()])
+        );
         assert_eq!(params.repeat_penalty, Some(1.2));
     }
 

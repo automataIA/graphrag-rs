@@ -34,7 +34,7 @@ pub enum ProcessingError {
     #[error("Query processing timeout after {duration:?}")]
     Timeout {
         /// Duration elapsed before timeout.
-        duration: Duration
+        duration: Duration,
     },
 
     /// All retrieval strategies failed to produce results.
@@ -43,7 +43,7 @@ pub enum ProcessingError {
     #[error("All retrieval strategies failed: {reason}")]
     AllStrategiesFailed {
         /// Reason why strategies failed.
-        reason: String
+        reason: String,
     },
 
     /// Query is malformed, empty, or otherwise invalid.
@@ -52,7 +52,7 @@ pub enum ProcessingError {
     #[error("Invalid query: {reason}")]
     InvalidQuery {
         /// Description of what makes the query invalid.
-        reason: String
+        reason: String,
     },
 
     /// ROGRAG configuration is invalid or incomplete.
@@ -61,7 +61,7 @@ pub enum ProcessingError {
     #[error("Configuration error: {reason}")]
     ConfigurationError {
         /// Description of the configuration issue.
-        reason: String
+        reason: String,
     },
 
     /// Component initialization failed during processor setup.
@@ -72,7 +72,7 @@ pub enum ProcessingError {
         /// Name of the component that failed.
         component: String,
         /// Reason for initialization failure.
-        reason: String
+        reason: String,
     },
 }
 
@@ -106,7 +106,8 @@ pub struct RogragProcessorBuilder {
 #[cfg(feature = "rograg")]
 #[derive(Debug)]
 struct ProcessingContext {
-    #[allow(dead_code)] query: String,
+    #[allow(dead_code)]
+    query: String,
     start_time: Instant,
     decomposition_time: Option<Duration>,
     retrieval_time: Option<Duration>,
@@ -423,7 +424,7 @@ impl RogragProcessor {
 
                 // Fallback to single query
                 Ok(DecompositionResult::single_query(query.to_string()))
-            }
+            },
             Err(error) => Err(error),
         }
     }
@@ -456,7 +457,7 @@ impl RogragProcessor {
                         content: "Unable to process this part of the query".to_string(),
                         sources: vec![],
                     });
-                }
+                },
                 Err(error) => return Err(error),
             }
         }
@@ -485,12 +486,12 @@ impl RogragProcessor {
                     subquery.to_string(),
                     logic_result,
                 ));
-            }
+            },
             Err(error) if self.config.enable_fallbacks => {
                 context.add_error(format!(
                     "Logic form retrieval failed for '{subquery}': {error}"
                 ));
-            }
+            },
             Err(error) => return Err(error),
         }
 
@@ -925,8 +926,7 @@ pub enum SubqueryResultType {
 ///
 /// Detailed timing breakdown and metrics for performance analysis.
 #[cfg(feature = "rograg")]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ProcessingStats {
     /// Total processing time in milliseconds.
     pub total_time_ms: u64,
@@ -1005,7 +1005,9 @@ mod tests {
         let processor = RogragProcessor::new().unwrap();
         let graph = create_test_graph();
 
-        let result = processor.process_query("What is Entity Name?", &graph).await;
+        let result = processor
+            .process_query("What is Entity Name?", &graph)
+            .await;
         assert!(result.is_ok());
 
         let response = result.unwrap();

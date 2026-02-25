@@ -4,7 +4,9 @@
 //! with the core GraphRAG traits (AsyncEmbedder, AsyncLanguageModel).
 
 use crate::core::error::{GraphRAGError, Result};
-use crate::core::traits::{AsyncEmbedder, AsyncLanguageModel, GenerationParams, ModelInfo, ModelUsageStats};
+use crate::core::traits::{
+    AsyncEmbedder, AsyncLanguageModel, GenerationParams, ModelInfo, ModelUsageStats,
+};
 use crate::embeddings::ollama::OllamaEmbeddings;
 use crate::ollama::{OllamaClient, OllamaConfig, OllamaGenerationParams};
 use async_trait::async_trait;
@@ -85,10 +87,7 @@ impl OllamaLanguageModelAdapter {
 
     /// Create with custom client
     pub fn from_client(client: OllamaClient, model_name: String) -> Self {
-        Self {
-            client,
-            model_name,
-        }
+        Self { client, model_name }
     }
 }
 
@@ -109,9 +108,14 @@ impl AsyncLanguageModel for OllamaLanguageModelAdapter {
             top_k: None, // Not in core GenerationParams
             stop: params.stop_sequences,
             repeat_penalty: None, // Not in core GenerationParams
+            num_ctx: None,
+            keep_alive: None,
+            context: None,
         };
 
-        self.client.generate_with_params(prompt, ollama_params).await
+        self.client
+            .generate_with_params(prompt, ollama_params)
+            .await
     }
 
     async fn is_available(&self) -> bool {
@@ -125,7 +129,7 @@ impl AsyncLanguageModel for OllamaLanguageModelAdapter {
             name: self.model_name.clone(),
             version: None, // Ollama doesn't expose version via current wrapper
             max_context_length: Some(4096), // Common default for llama models
-            supports_streaming: true,       // Streaming now supported!
+            supports_streaming: true, // Streaming now supported!
         }
     }
 
@@ -138,7 +142,11 @@ impl AsyncLanguageModel for OllamaLanguageModelAdapter {
             total_requests: total,
             total_tokens_processed: stats.get_total_tokens(),
             average_response_time_ms: 0.0, // Not tracked yet (would need request timing)
-            error_rate: if total > 0 { failed as f64 / total as f64 } else { 0.0 },
+            error_rate: if total > 0 {
+                failed as f64 / total as f64
+            } else {
+                0.0
+            },
         })
     }
 }

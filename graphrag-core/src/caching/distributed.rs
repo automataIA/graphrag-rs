@@ -5,10 +5,10 @@
 //! - L2: Redis cache (distributed)
 //! - L3: Persistent storage (fallback)
 
+use parking_lot::RwLock;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::collections::HashMap;
-use parking_lot::RwLock;
 
 #[cfg(feature = "redis_storage")]
 use redis::{Commands, Connection};
@@ -192,9 +192,10 @@ impl L2Cache {
                     message: format!("Redis SETEX failed: {}", e),
                 })?;
         } else {
-            conn.set::<_, _, ()>(&prefixed, value).map_err(|e| GraphRAGError::Storage {
-                message: format!("Redis SET failed: {}", e),
-            })?;
+            conn.set::<_, _, ()>(&prefixed, value)
+                .map_err(|e| GraphRAGError::Storage {
+                    message: format!("Redis SET failed: {}", e),
+                })?;
         }
 
         Ok(())
@@ -205,9 +206,10 @@ impl L2Cache {
         let mut conn = self.get_connection()?;
         let prefixed = self.prefixed_key(key);
 
-        conn.del::<_, ()>(&prefixed).map_err(|e| GraphRAGError::Storage {
-            message: format!("Redis DEL failed: {}", e),
-        })?;
+        conn.del::<_, ()>(&prefixed)
+            .map_err(|e| GraphRAGError::Storage {
+                message: format!("Redis DEL failed: {}", e),
+            })?;
 
         Ok(())
     }
@@ -224,9 +226,10 @@ impl L2Cache {
 
         // Delete all keys
         if !keys.is_empty() {
-            conn.del::<_, ()>(&keys).map_err(|e| GraphRAGError::Storage {
-                message: format!("Redis DEL failed: {}", e),
-            })?;
+            conn.del::<_, ()>(&keys)
+                .map_err(|e| GraphRAGError::Storage {
+                    message: format!("Redis DEL failed: {}", e),
+                })?;
         }
 
         Ok(())
@@ -234,9 +237,11 @@ impl L2Cache {
 
     /// Get a connection to the Redis server
     fn get_connection(&self) -> Result<Connection> {
-        self.client.get_connection().map_err(|e| GraphRAGError::Storage {
-            message: format!("Failed to get Redis connection: {}", e),
-        })
+        self.client
+            .get_connection()
+            .map_err(|e| GraphRAGError::Storage {
+                message: format!("Failed to get Redis connection: {}", e),
+            })
     }
 }
 

@@ -164,9 +164,9 @@ impl BoundaryDetector {
 
         // Common abbreviations that shouldn't end sentences
         let abbreviations: HashSet<&str> = [
-            "Dr.", "Mr.", "Mrs.", "Ms.", "Prof.", "Sr.", "Jr.",
-            "etc.", "e.g.", "i.e.", "vs.", "cf.",
-            "Jan.", "Feb.", "Mar.", "Apr.", "Jun.", "Jul.", "Aug.", "Sep.", "Oct.", "Nov.", "Dec.",
+            "Dr.", "Mr.", "Mrs.", "Ms.", "Prof.", "Sr.", "Jr.", "etc.", "e.g.", "i.e.", "vs.",
+            "cf.", "Jan.", "Feb.", "Mar.", "Apr.", "Jun.", "Jul.", "Aug.", "Sep.", "Oct.", "Nov.",
+            "Dec.",
         ]
         .iter()
         .copied()
@@ -178,9 +178,9 @@ impl BoundaryDetector {
 
             // Check if this is a false positive (abbreviation)
             let before_text = &text[..position];
-            let is_abbreviation = abbreviations.iter().any(|abbr| {
-                before_text.ends_with(&abbr[..abbr.len() - 1])
-            });
+            let is_abbreviation = abbreviations
+                .iter()
+                .any(|abbr| before_text.ends_with(&abbr[..abbr.len() - 1]));
 
             if !is_abbreviation {
                 // Check minimum sentence length
@@ -260,7 +260,9 @@ impl BoundaryDetector {
 
             // Plaintext heading detection (ALL CAPS, or starts with heading marker)
             if line_trimmed.len() > 3
-                && line_trimmed.chars().all(|c| c.is_uppercase() || c.is_whitespace() || c.is_numeric())
+                && line_trimmed
+                    .chars()
+                    .all(|c| c.is_uppercase() || c.is_whitespace() || c.is_numeric())
                 && line_trimmed.chars().any(|c| c.is_alphabetic())
             {
                 boundaries.push(Boundary {
@@ -464,7 +466,9 @@ mod tests {
         let boundaries = detector.detect_heading_boundaries(text);
 
         assert!(boundaries.len() >= 3);
-        assert!(boundaries.iter().all(|b| b.boundary_type == BoundaryType::Heading));
+        assert!(boundaries
+            .iter()
+            .all(|b| b.boundary_type == BoundaryType::Heading));
     }
 
     #[test]

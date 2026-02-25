@@ -134,7 +134,11 @@ impl AsyncLanguageModel for MockLanguageModel {
         }
     }
 
-    async fn complete_with_params(&self, prompt: &str, _params: GenerationParams) -> Result<String> {
+    async fn complete_with_params(
+        &self,
+        prompt: &str,
+        _params: GenerationParams,
+    ) -> Result<String> {
         self.complete(prompt).await
     }
 
@@ -200,7 +204,12 @@ impl MockVectorStore {
 impl AsyncVectorStore for MockVectorStore {
     type Error = GraphRAGError;
 
-    async fn add_vector(&mut self, id: String, vector: Vec<f32>, _metadata: VectorMetadata) -> Result<()> {
+    async fn add_vector(
+        &mut self,
+        id: String,
+        vector: Vec<f32>,
+        _metadata: VectorMetadata,
+    ) -> Result<()> {
         if vector.len() != self.dimension {
             return Err(GraphRAGError::Embedding {
                 message: format!(
@@ -336,8 +345,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_embedder() {
-        let embedder = MockEmbedder::new(128)
-            .with_embedding("test", vec![0.5; 128]);
+        let embedder = MockEmbedder::new(128).with_embedding("test", vec![0.5; 128]);
 
         let result = embedder.embed("test").await.unwrap();
         assert_eq!(result.len(), 128);
@@ -375,8 +383,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_retriever() {
-        let retriever = MockRetriever::new()
-            .with_results(vec!["result1".to_string(), "result2".to_string(), "result3".to_string()]);
+        let retriever = MockRetriever::new().with_results(vec![
+            "result1".to_string(),
+            "result2".to_string(),
+            "result3".to_string(),
+        ]);
 
         let results = retriever.search("query".to_string(), 2).await.unwrap();
         assert_eq!(results.len(), 2);

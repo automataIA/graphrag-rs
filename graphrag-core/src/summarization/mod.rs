@@ -1,10 +1,10 @@
+#[cfg(feature = "parallel-processing")]
+use crate::parallel::ParallelProcessor;
 use crate::{
-    core::{ChunkId, DocumentId, TextChunk, GraphRAGError},
+    core::{ChunkId, DocumentId, GraphRAGError, TextChunk},
     text::TextProcessor,
     Result,
 };
-#[cfg(feature = "parallel-processing")]
-use crate::parallel::ParallelProcessor;
 use indexmap::IndexMap;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -13,13 +13,26 @@ use std::sync::Arc;
 #[async_trait::async_trait]
 pub trait LLMClient: Send + Sync {
     /// Generate a summary for the given text
-    async fn generate_summary(&self, text: &str, prompt: &str, max_tokens: usize, temperature: f32) -> Result<String>;
+    async fn generate_summary(
+        &self,
+        text: &str,
+        prompt: &str,
+        max_tokens: usize,
+        temperature: f32,
+    ) -> Result<String>;
 
     /// Generate summary in batch for multiple texts
-    async fn generate_summary_batch(&self, texts: &[(&str, &str)], max_tokens: usize, temperature: f32) -> Result<Vec<String>> {
+    async fn generate_summary_batch(
+        &self,
+        texts: &[(&str, &str)],
+        max_tokens: usize,
+        temperature: f32,
+    ) -> Result<Vec<String>> {
         let mut results = Vec::new();
         for (text, prompt) in texts {
-            let summary = self.generate_summary(text, prompt, max_tokens, temperature).await?;
+            let summary = self
+                .generate_summary(text, prompt, max_tokens, temperature)
+                .await?;
             results.push(summary);
         }
         Ok(results)
@@ -308,16 +321,19 @@ impl DocumentTree {
                     let node_id = NodeId::new(format!("leaf_{}", chunk.id));
 
                     // Create a temporary text processor for each thread to avoid borrowing issues
-                    let temp_processor = crate::text::TextProcessor::new(1000, 100)
-                        .map_err(|e| crate::GraphRAGError::Config {
-                            message: format!("Failed to create text processor: {e}"),
+                    let temp_processor =
+                        crate::text::TextProcessor::new(1000, 100).map_err(|e| {
+                            crate::GraphRAGError::Config {
+                                message: format!("Failed to create text processor: {e}"),
+                            }
                         })?;
 
                     // Extract keywords for the chunk
                     let keywords = temp_processor.extract_keywords(&chunk.content, 5);
 
                     // Generate summary using simplified approach suitable for parallel execution
-                    let summary = self.generate_parallel_summary(&chunk.content, &temp_processor)?;
+                    let summary =
+                        self.generate_parallel_summary(&chunk.content, &temp_processor)?;
 
                     let node = TreeNode {
                         id: node_id.clone(),
@@ -352,12 +368,12 @@ impl DocumentTree {
                     self.levels.insert(0, leaf_node_ids.clone());
 
                     Ok(leaf_node_ids)
-                }
+                },
                 Err(e) => {
                     eprintln!("Error in parallel node creation: {e}");
                     // Fall back to sequential processing
                     self.create_leaf_nodes_sequential(chunks)
-                }
+                },
             }
         }
 
@@ -408,7 +424,9 @@ impl DocumentTree {
         level: usize,
         context: &str,
     ) -> Result<String> {
-        let llm_client = self.llm_client.as_ref()
+        let llm_client = self
+            .llm_client
+            .as_ref()
             .ok_or_else(|| GraphRAGError::Config {
                 message: "LLM client not configured for summarization".to_string(),
             })?;
@@ -420,12 +438,16 @@ impl DocumentTree {
         let prompt = self.create_summary_prompt(text, level, context, &level_config)?;
 
         // Generate summary
-        let summary = llm_client.generate_summary(
-            text,
-            &prompt,
-            level_config.max_length,
-            level_config.temperature.unwrap_or(self.config.llm_config.temperature),
-        ).await?;
+        let summary = llm_client
+            .generate_summary(
+                text,
+                &prompt,
+                level_config.max_length,
+                level_config
+                    .temperature
+                    .unwrap_or(self.config.llm_config.temperature),
+            )
+            .await?;
 
         // Ensure summary is within length limits
         self.truncate_summary(&summary, level_config.max_length)
@@ -436,7 +458,9 @@ impl DocumentTree {
         &self,
         texts: &[(&str, usize, &str)], // (text, level, context)
     ) -> Result<Vec<String>> {
-        let llm_client = self.llm_client.as_ref()
+        let llm_client = self
+            .llm_client
+            .as_ref()
             .ok_or_else(|| GraphRAGError::Config {
                 message: "LLM client not configured for summarization".to_string(),
             })?;
@@ -455,11 +479,17 @@ impl DocumentTree {
         let text_refs: Vec<&str> = texts.iter().map(|(t, _, _)| *t).collect();
         let prompt_refs: Vec<&str> = prompts.iter().map(|p| p.as_str()).collect();
 
-        let summaries = llm_client.generate_summary_batch(
-            &text_refs.iter().zip(prompt_refs.iter()).map(|(&t, &p)| (t, p)).collect::<Vec<_>>(),
-            self.config.llm_config.max_tokens,
-            self.config.llm_config.temperature,
-        ).await?;
+        let summaries = llm_client
+            .generate_summary_batch(
+                &text_refs
+                    .iter()
+                    .zip(prompt_refs.iter())
+                    .map(|(&t, &p)| (t, p))
+                    .collect::<Vec<_>>(),
+                self.config.llm_config.max_tokens,
+                self.config.llm_config.temperature,
+            )
+            .await?;
 
         // Truncate summaries according to level configs
         let mut results = Vec::new();
@@ -532,7 +562,9 @@ impl DocumentTree {
 
     /// Get configuration for a specific level
     fn get_level_config(&self, level: usize) -> LevelConfig {
-        self.config.llm_config.level_configs
+        self.config
+            .llm_config
+            .level_configs
             .get(&level)
             .cloned()
             .unwrap_or({
@@ -644,7 +676,9 @@ impl DocumentTree {
         let mut current_level = 0;
 
         while current_level_nodes.len() > 1 {
-            let next_level_nodes = self.merge_level(&current_level_nodes, current_level + 1).await?;
+            let next_level_nodes = self
+                .merge_level(&current_level_nodes, current_level + 1)
+                .await?;
 
             current_level_nodes = next_level_nodes;
             current_level += 1;
@@ -657,12 +691,18 @@ impl DocumentTree {
     }
 
     /// Merge nodes at a level to create the next level up
-    async fn merge_level(&mut self, level_nodes: &[NodeId], new_level: usize) -> Result<Vec<NodeId>> {
+    async fn merge_level(
+        &mut self,
+        level_nodes: &[NodeId],
+        new_level: usize,
+    ) -> Result<Vec<NodeId>> {
         let mut new_level_nodes = Vec::new();
         // Group nodes by merge_size
         for (node_counter, chunk) in level_nodes.chunks(self.config.merge_size).enumerate() {
             let merged_node_id = NodeId::new(format!("level_{new_level}_{node_counter}"));
-            let merged_node = self.merge_nodes(chunk, merged_node_id.clone(), new_level).await?;
+            let merged_node = self
+                .merge_nodes(chunk, merged_node_id.clone(), new_level)
+                .await?;
 
             // Update parent references for children
             for child_id in chunk {
@@ -724,15 +764,22 @@ impl DocumentTree {
                 );
 
                 // Try LLM-based summarization, fall back to extractive if it fails
-                match self.generate_llm_summary(&combined_content, level, &context).await {
+                match self
+                    .generate_llm_summary(&combined_content, level, &context)
+                    .await
+                {
                     Ok(llm_summary) => {
-                        println!("✅ Generated LLM-based summary for level {} ({} chars)", level, llm_summary.len());
+                        println!(
+                            "✅ Generated LLM-based summary for level {} ({} chars)",
+                            level,
+                            llm_summary.len()
+                        );
                         llm_summary
-                    }
+                    },
                     Err(e) => {
                         eprintln!("⚠️ LLM summarization failed for level {}: {}, falling back to extractive", level, e);
                         self.generate_extractive_summary(&combined_content)?
-                    }
+                    },
                 }
             } else {
                 self.generate_extractive_summary(&combined_content)?

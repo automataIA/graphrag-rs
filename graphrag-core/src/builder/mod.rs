@@ -803,7 +803,7 @@ mod tests {
         // Can configure LLM before output directory
         let builder = TypedBuilder::new()
             .with_ollama()  // LLM first
-            .with_output_dir("./test");  // Output second
+            .with_output_dir("./test"); // Output second
 
         assert!(builder.config().ollama.enabled);
         assert_eq!(builder.config().output_dir, "./test");

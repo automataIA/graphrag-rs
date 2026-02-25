@@ -290,11 +290,11 @@ impl QueryAnalyzer {
                         current_entity.clear();
                     }
                     in_quotes = !in_quotes;
-                }
+                },
                 _ if in_quotes => {
                     current_entity.push(ch);
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
 

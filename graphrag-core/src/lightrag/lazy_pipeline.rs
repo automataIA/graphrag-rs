@@ -44,7 +44,7 @@ use crate::lightrag::concept_graph::{
     ConceptExtractor, ConceptExtractorConfig, ConceptGraph, ConceptGraphBuilder,
 };
 use crate::lightrag::iterative_deepening::{IterativeDeepeningSearch, SearchConfig, SearchResults};
-use crate::lightrag::query_refinement::{QueryRefiner, QueryRefinementConfig};
+use crate::lightrag::query_refinement::{QueryRefinementConfig, QueryRefiner};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -163,7 +163,8 @@ impl LazyGraphRAGPipeline {
             // Add all concept-chunk mappings to the index
             if let Some(ref graph) = self.concept_graph {
                 for (concept_text, concept) in &graph.concepts {
-                    let entity_id = crate::core::EntityId::new(self.normalize_concept(concept_text));
+                    let entity_id =
+                        crate::core::EntityId::new(self.normalize_concept(concept_text));
 
                     for chunk_id in &concept.chunk_ids {
                         index.add_mapping(&entity_id, chunk_id);
@@ -184,7 +185,7 @@ impl LazyGraphRAGPipeline {
             None => {
                 // Return empty results if graph not built
                 return SearchResults::new(query.to_string());
-            }
+            },
         };
 
         let index = match &self.bidirectional_index {
@@ -192,7 +193,7 @@ impl LazyGraphRAGPipeline {
             None => {
                 // Return empty results if index not built
                 return SearchResults::new(query.to_string());
-            }
+            },
         };
 
         self.search_engine.search(query, graph, index)
@@ -224,7 +225,10 @@ impl LazyGraphRAGPipeline {
             relation_count: g.relation_count(),
         });
 
-        let index_stats = self.bidirectional_index.as_ref().map(|i| i.get_statistics());
+        let index_stats = self
+            .bidirectional_index
+            .as_ref()
+            .map(|i| i.get_statistics());
 
         PipelineStatistics {
             document_count: self.document_count,

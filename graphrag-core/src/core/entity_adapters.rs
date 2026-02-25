@@ -13,7 +13,7 @@ use crate::core::Entity;
 use async_trait::async_trait;
 
 #[cfg(feature = "lightrag")]
-use crate::lightrag::graph_indexer::{GraphIndexer, ExtractedEntity};
+use crate::lightrag::graph_indexer::{ExtractedEntity, GraphIndexer};
 
 /// Adapter for GraphIndexer to implement AsyncEntityExtractor trait
 #[cfg(feature = "lightrag")]
@@ -108,11 +108,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_graph_indexer_adapter() {
-        let adapter = GraphIndexerAdapter::new(
-            vec!["person".to_string(), "organization".to_string()],
-            3,
-        )
-        .unwrap();
+        let adapter =
+            GraphIndexerAdapter::new(vec!["person".to_string(), "organization".to_string()], 3)
+                .unwrap();
 
         let text = "John Smith works at Microsoft Corporation.";
         let entities = adapter.extract(text).await.unwrap();
@@ -125,12 +123,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_confidence_threshold_filtering() {
-        let adapter = GraphIndexerAdapter::new(
-            vec!["person".to_string()],
-            3,
-        )
-        .unwrap()
-        .with_confidence_threshold(0.6);
+        let adapter = GraphIndexerAdapter::new(vec!["person".to_string()], 3)
+            .unwrap()
+            .with_confidence_threshold(0.6);
 
         let text = "John Smith works at Microsoft.";
         let entities = adapter.extract(text).await.unwrap();
@@ -143,16 +138,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_batch_extraction() {
-        let adapter = GraphIndexerAdapter::new(
-            vec!["person".to_string(), "location".to_string()],
-            3,
-        )
-        .unwrap();
+        let adapter =
+            GraphIndexerAdapter::new(vec!["person".to_string(), "location".to_string()], 3)
+                .unwrap();
 
-        let texts = vec![
-            "Alice lives in Paris.",
-            "Bob works in London.",
-        ];
+        let texts = vec!["Alice lives in Paris.", "Bob works in London."];
 
         let results = adapter.extract_batch(&texts).await.unwrap();
         assert_eq!(results.len(), 2);

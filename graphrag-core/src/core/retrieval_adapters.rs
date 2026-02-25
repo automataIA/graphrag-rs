@@ -123,7 +123,11 @@ impl AsyncRetriever for RetrievalSystemAdapter {
         self.search(query, k).await
     }
 
-    async fn search_batch(&self, queries: Vec<Self::Query>, k: usize) -> Result<Vec<Vec<Self::Result>>> {
+    async fn search_batch(
+        &self,
+        queries: Vec<Self::Query>,
+        k: usize,
+    ) -> Result<Vec<Vec<Self::Result>>> {
         let mut results = Vec::with_capacity(queries.len());
         for query in queries {
             results.push(self.search(query, k).await?);

@@ -13,8 +13,8 @@
 use std::collections::HashMap;
 
 use crate::core::{EntityId, GraphRAGError, Result};
+use crate::graph::pagerank::{PageRankConfig, PersonalizedPageRank};
 use crate::retrieval::SearchResult;
-use crate::graph::pagerank::{PersonalizedPageRank, PageRankConfig};
 
 /// Configuration for HippoRAG PPR retrieval
 #[derive(Debug, Clone)]
@@ -49,11 +49,11 @@ pub struct HippoRAGConfig {
 impl Default for HippoRAGConfig {
     fn default() -> Self {
         Self {
-            damping_factor: 0.5,  // HippoRAG uses 0.5 instead of typical 0.85
+            damping_factor: 0.5, // HippoRAG uses 0.5 instead of typical 0.85
             max_iterations: 100,
             tolerance: 1e-6,
             top_k_facts: 100,
-            passage_node_weight: 0.05,  // Passages get 5% weight vs entities
+            passage_node_weight: 0.05, // Passages get 5% weight vs entities
             top_k_results: 10,
             min_entity_frequency: 1,
             normalize_scores: true,
@@ -244,7 +244,9 @@ impl HippoRAGRetriever {
         &self,
         reset_probabilities: &HashMap<EntityId, f64>,
     ) -> Result<HashMap<EntityId, f64>> {
-        let pagerank = self.pagerank.as_ref()
+        let pagerank = self
+            .pagerank
+            .as_ref()
             .ok_or_else(|| GraphRAGError::Config {
                 message: "PageRank not initialized".to_string(),
             })?;
@@ -266,7 +268,7 @@ impl HippoRAGRetriever {
                 if original_scores.contains_key(entity_id) {
                     Some(SearchResult {
                         id: entity_id.to_string(),
-                        content: String::new(),  // Will be filled by caller
+                        content: String::new(), // Will be filled by caller
                         score: ppr_score as f32,
                         result_type: crate::retrieval::ResultType::Chunk,
                         entities: Vec::new(),
@@ -280,7 +282,9 @@ impl HippoRAGRetriever {
 
         // Sort by PPR score (descending)
         results.sort_by(|a, b| {
-            b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal)
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         // Truncate to top-k
@@ -349,23 +353,37 @@ mod tests {
         ];
 
         let mut entity_to_passages = HashMap::new();
-        entity_to_passages.insert(EntityId::new("Alice".to_string()), vec![EntityId::new("doc1".to_string())]);
-        entity_to_passages.insert(EntityId::new("Company".to_string()), vec![EntityId::new("doc1".to_string()), EntityId::new("doc2".to_string())]);
+        entity_to_passages.insert(
+            EntityId::new("Alice".to_string()),
+            vec![EntityId::new("doc1".to_string())],
+        );
+        entity_to_passages.insert(
+            EntityId::new("Company".to_string()),
+            vec![
+                EntityId::new("doc1".to_string()),
+                EntityId::new("doc2".to_string()),
+            ],
+        );
 
-        let weights = retriever.calculate_entity_weights(&facts, &entity_to_passages).unwrap();
+        let weights = retriever
+            .calculate_entity_weights(&facts, &entity_to_passages)
+            .unwrap();
 
         // Alice should have higher weight (appears in fewer passages)
         let alice_weight = weights.get(&EntityId::new("Alice".to_string())).unwrap();
         let company_weight = weights.get(&EntityId::new("Company".to_string())).unwrap();
 
-        assert!(alice_weight > company_weight, "Alice should have higher weight due to lower frequency");
+        assert!(
+            alice_weight > company_weight,
+            "Alice should have higher weight due to lower frequency"
+        );
     }
 
     #[tokio::test]
     async fn test_passage_weight_calculation() {
         let config = HippoRAGConfig {
             passage_node_weight: 0.05,
-            normalize_scores: false,  // Disable normalization for this test
+            normalize_scores: false, // Disable normalization for this test
             ..Default::default()
         };
         let retriever = HippoRAGRetriever::new(config);
@@ -374,15 +392,23 @@ mod tests {
         passage_scores.insert(EntityId::new("doc1".to_string()), 0.9);
         passage_scores.insert(EntityId::new("doc2".to_string()), 0.5);
 
-        let weights = retriever.calculate_passage_weights(&passage_scores).unwrap();
+        let weights = retriever
+            .calculate_passage_weights(&passage_scores)
+            .unwrap();
 
         // Passage weights should be scaled by passage_node_weight
         let doc1_weight = weights.get(&EntityId::new("doc1".to_string())).unwrap();
-        assert!((*doc1_weight - 0.9 * 0.05).abs() < 0.001, "Passage weight should be scaled");
+        assert!(
+            (*doc1_weight - 0.9 * 0.05).abs() < 0.001,
+            "Passage weight should be scaled"
+        );
 
         // doc1 should have higher weight than doc2
         let doc2_weight = weights.get(&EntityId::new("doc2".to_string())).unwrap();
-        assert!(doc1_weight > doc2_weight, "Higher score should have higher weight");
+        assert!(
+            doc1_weight > doc2_weight,
+            "Higher score should have higher weight"
+        );
     }
 
     #[test]
@@ -395,13 +421,18 @@ mod tests {
 
         let mut passage_weights = HashMap::new();
         passage_weights.insert(EntityId::new("doc1".to_string()), 0.04);
-        passage_weights.insert(EntityId::new("entity1".to_string()), 0.01);  // Overlap
+        passage_weights.insert(EntityId::new("entity1".to_string()), 0.01); // Overlap
 
-        let combined = retriever.combine_weights(entity_weights, passage_weights).unwrap();
+        let combined = retriever
+            .combine_weights(entity_weights, passage_weights)
+            .unwrap();
 
         // entity1 should have combined weight
         let entity1_combined = combined.get(&EntityId::new("entity1".to_string())).unwrap();
-        assert!(*entity1_combined > 0.0, "Entity should have combined weight");
+        assert!(
+            *entity1_combined > 0.0,
+            "Entity should have combined weight"
+        );
 
         // All weights should sum to 1.0 (normalized)
         let total: f64 = combined.values().sum();

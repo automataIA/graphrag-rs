@@ -8,33 +8,33 @@
 //! - **Lazy Propagation**: Defers relationship updates until necessary, reducing operations by 80-90%
 //! - **Delta Computation**: Calculates minimal diffs between graph snapshots with bloom filters
 
-pub mod lazy_propagation;
-pub mod delta_computation;
 pub mod async_batch;
+pub mod delta_computation;
+pub mod lazy_propagation;
 
 pub use lazy_propagation::{
-    LazyPropagationEngine, LazyPropagationConfig, PendingUpdate,
-    PropagationResult, PropagationStats, UpdateStatus,
+    LazyPropagationConfig, LazyPropagationEngine, PendingUpdate, PropagationResult,
+    PropagationStats, UpdateStatus,
 };
 
 pub use delta_computation::{
-    DeltaComputer, DeltaComputationConfig, GraphSnapshot, GraphDelta,
-    DeltaStatistics, NodeSnapshot, EdgeSnapshot, NodeModification,
-    EdgeModification, PropertyChange, ChangeType, HashAlgorithm,
+    ChangeType, DeltaComputationConfig, DeltaComputer, DeltaStatistics, EdgeModification,
+    EdgeSnapshot, GraphDelta, GraphSnapshot, HashAlgorithm, NodeModification, NodeSnapshot,
+    PropertyChange,
 };
 
 pub use async_batch::{
-    AsyncBatchUpdater, AsyncBatchConfig, UpdateOperation, UpdateBatch,
-    BatchResult, BatchStatistics, OperationType, UpdateData, BatchStatus,
+    AsyncBatchConfig, AsyncBatchUpdater, BatchResult, BatchStatistics, BatchStatus, OperationType,
+    UpdateBatch, UpdateData, UpdateOperation,
 };
 
-use crate::{Result, GraphRAGError};
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
+use crate::{GraphRAGError, Result};
 use parking_lot::RwLock;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Incremental graph update manager with advanced features
 ///
@@ -555,11 +555,11 @@ impl IncrementalGraphManager {
                         if let Some(emb) = updates.embeddings {
                             node.embeddings = Some(emb);
                         }
-                    }
+                    },
                     ConflictResolution::HighestConfidence => {
                         // Compare confidence scores before updating
                         // Implementation depends on confidence tracking
-                    }
+                    },
                     ConflictResolution::Merge => {
                         // Merge attributes intelligently
                         if let Some(attrs) = updates.attributes {
@@ -567,13 +567,13 @@ impl IncrementalGraphManager {
                                 node.attributes.entry(key).or_insert(value);
                             }
                         }
-                    }
+                    },
                     ConflictResolution::Manual => {
                         // Queue for manual resolution
                         return Err(GraphRAGError::IncrementalUpdate {
                             message: "Manual conflict resolution required".to_string(),
                         });
-                    }
+                    },
                 }
 
                 node.updated_at = chrono::Utc::now();
@@ -671,7 +671,11 @@ impl IncrementalGraphManager {
     ///
     /// The update will be deferred until threshold is reached or force propagate is called.
     #[allow(dead_code)]
-    fn queue_lazy_update(&self, node_id: String, affected_relationships: Vec<String>) -> Result<String> {
+    fn queue_lazy_update(
+        &self,
+        node_id: String,
+        affected_relationships: Vec<String>,
+    ) -> Result<String> {
         if !self.config.enable_lazy_propagation {
             return Ok(String::new()); // Skip if disabled
         }
@@ -696,10 +700,9 @@ impl IncrementalGraphManager {
         // Collect all nodes
         for (node_id, &node_idx) in node_index.iter() {
             if let Some(node) = graph.node_weight(node_idx) {
-                let content_hash = self.delta_computer.hash_node_content(
-                    node_id,
-                    &node.attributes,
-                );
+                let content_hash = self
+                    .delta_computer
+                    .hash_node_content(node_id, &node.attributes);
 
                 nodes.insert(
                     node_id.clone(),
@@ -720,10 +723,7 @@ impl IncrementalGraphManager {
 
             if let (Some(source), Some(target)) = (source_id, target_id) {
                 let edge_data = edge_ref.weight();
-                let content_hash = format!(
-                    "{}-{}-{:?}",
-                    source, target, edge_data.edge_type
-                );
+                let content_hash = format!("{}-{}-{:?}", source, target, edge_data.edge_type);
 
                 edges.insert(
                     (source.clone(), target.clone()),
@@ -739,11 +739,8 @@ impl IncrementalGraphManager {
             }
         }
 
-        self.delta_computer.create_snapshot(
-            uuid::Uuid::new_v4().to_string(),
-            nodes,
-            edges,
-        )
+        self.delta_computer
+            .create_snapshot(uuid::Uuid::new_v4().to_string(), nodes, edges)
     }
 
     /// Compute delta between last snapshot and current state
@@ -800,7 +797,8 @@ impl IncrementalGraphManager {
         let history = self.update_history.read();
 
         // Find the version to rollback to
-        let rollback_point = history.iter()
+        let rollback_point = history
+            .iter()
             .position(|r| r.id == version_id)
             .ok_or_else(|| GraphRAGError::NotFound {
                 resource: "Version".to_string(),
@@ -846,13 +844,16 @@ impl IncrementalGraphManager {
         }
 
         let content_hash = self.hash_content(content);
-        self.change_detector.read().document_hashes.get(&content.id)
+        self.change_detector
+            .read()
+            .document_hashes
+            .get(&content.id)
             .map(|existing_hash| existing_hash != &content_hash)
             .unwrap_or(true)
     }
 
     fn hash_content(&self, content: &DocumentContent) -> String {
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(content.text.as_bytes());
         format!("{:x}", hasher.finalize())
@@ -874,12 +875,15 @@ impl IncrementalGraphManager {
         for entity in extraction.entities {
             if let Some(existing_id) = self.find_similar_entity(&entity) {
                 // Update existing entity
-                self.update_node(&existing_id, NodeUpdate {
-                    label: Some(entity.name),
-                    attributes: Some(entity.attributes),
-                    embeddings: None,
-                    node_type: None,
-                })?;
+                self.update_node(
+                    &existing_id,
+                    NodeUpdate {
+                        label: Some(entity.name),
+                        attributes: Some(entity.attributes),
+                        embeddings: None,
+                        node_type: None,
+                    },
+                )?;
                 summary.nodes_updated += 1;
             } else {
                 // Add new entity
@@ -907,7 +911,7 @@ impl IncrementalGraphManager {
                     weight: relationship.confidence,
                     attributes: HashMap::new(),
                     created_at: chrono::Utc::now(),
-                }
+                },
             )?;
             summary.edges_added += 1;
         }
@@ -945,7 +949,10 @@ impl IncrementalGraphManager {
 
     fn update_change_detector(&mut self, content: &DocumentContent) -> Result<()> {
         let hash = self.hash_content(content);
-        self.change_detector.write().document_hashes.insert(content.id.clone(), hash);
+        self.change_detector
+            .write()
+            .document_hashes
+            .insert(content.id.clone(), hash);
         Ok(())
     }
 
@@ -956,11 +963,11 @@ impl IncrementalGraphManager {
                 for node_id in &record.affected_nodes {
                     self.remove_node(node_id)?;
                 }
-            }
+            },
             UpdateType::RemoveNode => {
                 // Would need to store removed nodes to restore them
-            }
-            _ => {}
+            },
+            _ => {},
         }
 
         Ok(())
@@ -1187,16 +1194,18 @@ mod tests {
         let mut manager = IncrementalGraphManager::new(IncrementalConfig::default());
 
         // Add node
-        manager.add_node(GraphNode {
-            id: "node1".to_string(),
-            label: "Test Node".to_string(),
-            node_type: NodeType::Entity,
-            attributes: HashMap::new(),
-            embeddings: None,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-            version: 1,
-        }).unwrap();
+        manager
+            .add_node(GraphNode {
+                id: "node1".to_string(),
+                label: "Test Node".to_string(),
+                node_type: NodeType::Entity,
+                attributes: HashMap::new(),
+                embeddings: None,
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+                version: 1,
+            })
+            .unwrap();
 
         let stats = manager.stats();
         assert_eq!(stats.node_count, 1);

@@ -21,9 +21,9 @@
 //! # Serve www/ directory
 //! ```
 
-use wasm_bindgen::prelude::*;
-use graphrag_wasm::onnx_embedder::{WasmOnnxEmbedder, check_onnx_runtime};
 use gloo_net::http::Request;
+use graphrag_wasm::onnx_embedder::{check_onnx_runtime, WasmOnnxEmbedder};
+use wasm_bindgen::prelude::*;
 
 /// Helper: Fetch tokenizer JSON from server
 async fn fetch_tokenizer_json() -> Result<String, JsValue> {
@@ -32,7 +32,9 @@ async fn fetch_tokenizer_json() -> Result<String, JsValue> {
         .await
         .map_err(|e| JsValue::from_str(&format!("Failed to fetch tokenizer.json: {:?}", e)))?;
 
-    response.text().await
+    response
+        .text()
+        .await
         .map_err(|e| JsValue::from_str(&format!("Failed to read tokenizer.json: {:?}", e)))
 }
 
@@ -44,7 +46,9 @@ pub fn check_onnx_available() -> bool {
     if available {
         web_sys::console::log_1(&"✅ ONNX Runtime Web is available".into());
     } else {
-        web_sys::console::warn_1(&"⚠️ ONNX Runtime Web not found - add <script> tag to HTML".into());
+        web_sys::console::warn_1(
+            &"⚠️ ONNX Runtime Web not found - add <script> tag to HTML".into(),
+        );
     }
 
     available
@@ -63,12 +67,16 @@ pub async fn example_onnx_basic() -> Result<js_sys::Float32Array, JsValue> {
     web_sys::console::log_1(&"✅ ONNX embedder created".into());
 
     // Load model (use your model URL)
-    embedder.load_model("./models/all-MiniLM-L6-v2.onnx", Some(true)).await?;
+    embedder
+        .load_model("./models/all-MiniLM-L6-v2.onnx", Some(true))
+        .await?;
     web_sys::console::log_1(&"✅ Model loaded with WebGPU".into());
 
     // Generate embedding
     let embedding = embedder.embed("Hello, ONNX Runtime!").await?;
-    web_sys::console::log_1(&format!("✅ Generated embedding: {} dimensions", embedding.length()).into());
+    web_sys::console::log_1(
+        &format!("✅ Generated embedding: {} dimensions", embedding.length()).into(),
+    );
 
     Ok(embedding)
 }
@@ -80,7 +88,9 @@ pub async fn example_onnx_batch() -> Result<js_sys::Array, JsValue> {
 
     let tokenizer_json = fetch_tokenizer_json().await?;
     let mut embedder = WasmOnnxEmbedder::new(384, &tokenizer_json)?;
-    embedder.load_model("./models/all-MiniLM-L6-v2.onnx", Some(true)).await?;
+    embedder
+        .load_model("./models/all-MiniLM-L6-v2.onnx", Some(true))
+        .await?;
 
     // Batch of texts
     let texts = vec![
@@ -109,7 +119,9 @@ pub async fn example_onnx_performance() -> Result<JsValue, JsValue> {
 
     let tokenizer_json = fetch_tokenizer_json().await?;
     let mut embedder = WasmOnnxEmbedder::new(384, &tokenizer_json)?;
-    embedder.load_model("./models/all-MiniLM-L6-v2.onnx", Some(true)).await?;
+    embedder
+        .load_model("./models/all-MiniLM-L6-v2.onnx", Some(true))
+        .await?;
 
     let text = "Performance testing with ONNX Runtime Web and WebGPU acceleration";
 
@@ -132,14 +144,28 @@ pub async fn example_onnx_performance() -> Result<JsValue, JsValue> {
     let time_ms = end - start;
 
     web_sys::console::log_1(&format!("⚡ ONNX + WebGPU: {:.2}ms", time_ms).into());
-    web_sys::console::log_1(&format!("📊 Expected CPU time: ~{:.0}ms (25x slower)", time_ms * 25.0).into());
+    web_sys::console::log_1(
+        &format!(
+            "📊 Expected CPU time: ~{:.0}ms (25x slower)",
+            time_ms * 25.0
+        )
+        .into(),
+    );
 
     // Return results
     let result = js_sys::Object::new();
     js_sys::Reflect::set(&result, &"time_ms".into(), &JsValue::from_f64(time_ms))?;
-    js_sys::Reflect::set(&result, &"estimated_cpu_time_ms".into(), &JsValue::from_f64(time_ms * 25.0))?;
+    js_sys::Reflect::set(
+        &result,
+        &"estimated_cpu_time_ms".into(),
+        &JsValue::from_f64(time_ms * 25.0),
+    )?;
     js_sys::Reflect::set(&result, &"speedup".into(), &JsValue::from_f64(25.0))?;
-    js_sys::Reflect::set(&result, &"backend".into(), &"ONNX Runtime Web + WebGPU".into())?;
+    js_sys::Reflect::set(
+        &result,
+        &"backend".into(),
+        &"ONNX Runtime Web + WebGPU".into(),
+    )?;
 
     Ok(result.into())
 }
@@ -151,7 +177,9 @@ pub async fn example_semantic_similarity() -> Result<f64, JsValue> {
 
     let tokenizer_json = fetch_tokenizer_json().await?;
     let mut embedder = WasmOnnxEmbedder::new(384, &tokenizer_json)?;
-    embedder.load_model("./models/all-MiniLM-L6-v2.onnx", Some(true)).await?;
+    embedder
+        .load_model("./models/all-MiniLM-L6-v2.onnx", Some(true))
+        .await?;
 
     // Two similar sentences
     let text1 = "The cat sits on the mat";
@@ -181,7 +209,9 @@ pub async fn example_onnx_graphrag() -> Result<String, JsValue> {
     // Create ONNX embedder
     let tokenizer_json = fetch_tokenizer_json().await?;
     let mut embedder = WasmOnnxEmbedder::new(384, &tokenizer_json)?;
-    embedder.load_model("./models/all-MiniLM-L6-v2.onnx", Some(true)).await?;
+    embedder
+        .load_model("./models/all-MiniLM-L6-v2.onnx", Some(true))
+        .await?;
 
     // Create GraphRAG
     let mut graph = GraphRAG::new(384)?;
@@ -207,11 +237,9 @@ pub async fn example_onnx_graphrag() -> Result<String, JsValue> {
 
     // Add to GraphRAG
     for (i, (doc, embedding)) in documents.iter().zip(embeddings.iter()).enumerate() {
-        graph.add_document(
-            format!("doc{}", i),
-            doc.to_string(),
-            embedding.clone()
-        ).await?;
+        graph
+            .add_document(format!("doc{}", i), doc.to_string(), embedding.clone())
+            .await?;
     }
 
     // Build index
@@ -247,11 +275,19 @@ pub async fn example_backend_comparison() -> Result<JsValue, JsValue> {
     // Test with WebGPU
     web_sys::console::log_1(&"\n1️⃣ Testing WebGPU backend...".into());
     let mut embedder_gpu = WasmOnnxEmbedder::new(384, &tokenizer_json)?;
-    embedder_gpu.load_model("./models/all-MiniLM-L6-v2.onnx", Some(true)).await?;
+    embedder_gpu
+        .load_model("./models/all-MiniLM-L6-v2.onnx", Some(true))
+        .await?;
 
-    let start_gpu = window().and_then(|w| w.performance()).map(|p| p.now()).unwrap_or(0.0);
+    let start_gpu = window()
+        .and_then(|w| w.performance())
+        .map(|p| p.now())
+        .unwrap_or(0.0);
     let _emb_gpu = embedder_gpu.embed(text).await?;
-    let end_gpu = window().and_then(|w| w.performance()).map(|p| p.now()).unwrap_or(0.0);
+    let end_gpu = window()
+        .and_then(|w| w.performance())
+        .map(|p| p.now())
+        .unwrap_or(0.0);
     let time_gpu = end_gpu - start_gpu;
 
     web_sys::console::log_1(&format!("   WebGPU: {:.2}ms", time_gpu).into());
@@ -259,11 +295,19 @@ pub async fn example_backend_comparison() -> Result<JsValue, JsValue> {
     // Test with CPU (WASM backend)
     web_sys::console::log_1(&"\n2️⃣ Testing WASM backend...".into());
     let mut embedder_cpu = WasmOnnxEmbedder::new(384, &tokenizer_json)?;
-    embedder_cpu.load_model("./models/all-MiniLM-L6-v2.onnx", Some(false)).await?;
+    embedder_cpu
+        .load_model("./models/all-MiniLM-L6-v2.onnx", Some(false))
+        .await?;
 
-    let start_cpu = window().and_then(|w| w.performance()).map(|p| p.now()).unwrap_or(0.0);
+    let start_cpu = window()
+        .and_then(|w| w.performance())
+        .map(|p| p.now())
+        .unwrap_or(0.0);
     let _emb_cpu = embedder_cpu.embed(text).await?;
-    let end_cpu = window().and_then(|w| w.performance()).map(|p| p.now()).unwrap_or(0.0);
+    let end_cpu = window()
+        .and_then(|w| w.performance())
+        .map(|p| p.now())
+        .unwrap_or(0.0);
     let time_cpu = end_cpu - start_cpu;
 
     web_sys::console::log_1(&format!("   WASM: {:.2}ms", time_cpu).into());
@@ -273,8 +317,16 @@ pub async fn example_backend_comparison() -> Result<JsValue, JsValue> {
 
     // Return comparison
     let result = js_sys::Object::new();
-    js_sys::Reflect::set(&result, &"webgpu_time_ms".into(), &JsValue::from_f64(time_gpu))?;
-    js_sys::Reflect::set(&result, &"wasm_time_ms".into(), &JsValue::from_f64(time_cpu))?;
+    js_sys::Reflect::set(
+        &result,
+        &"webgpu_time_ms".into(),
+        &JsValue::from_f64(time_gpu),
+    )?;
+    js_sys::Reflect::set(
+        &result,
+        &"wasm_time_ms".into(),
+        &JsValue::from_f64(time_cpu),
+    )?;
     js_sys::Reflect::set(&result, &"speedup".into(), &JsValue::from_f64(speedup))?;
 
     Ok(result.into())

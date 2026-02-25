@@ -5,9 +5,7 @@
 
 use crate::{
     core::{ChunkMetadata, Document, TextChunk},
-    text::{
-        DocumentStructure, ExtractiveSummarizer, LayoutParser, TfIdfKeywordExtractor,
-    },
+    text::{DocumentStructure, ExtractiveSummarizer, LayoutParser, TfIdfKeywordExtractor},
     Result,
 };
 
@@ -45,11 +43,7 @@ impl ChunkEnricher {
     }
 
     /// Enrich multiple chunks with metadata
-    pub fn enrich_chunks(
-        &mut self,
-        chunks: &mut [TextChunk],
-        document: &Document,
-    ) -> Result<()> {
+    pub fn enrich_chunks(&mut self, chunks: &mut [TextChunk], document: &Document) -> Result<()> {
         tracing::debug!(
             "Enriching {} chunks for document: {}",
             chunks.len(),
@@ -222,10 +216,7 @@ impl EnrichmentStatistics {
             self.chunks_with_summary as f32 / self.total_chunks as f32 * 100.0
         );
         tracing::info!("  Total keywords: {}", self.total_keywords);
-        tracing::info!(
-            "  Average completeness: {:.2}",
-            self.avg_completeness
-        );
+        tracing::info!("  Average completeness: {:.2}", self.avg_completeness);
     }
 }
 

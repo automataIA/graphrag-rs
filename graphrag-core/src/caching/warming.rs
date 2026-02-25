@@ -224,7 +224,7 @@ impl CacheWarmer {
                             "Warmed query"
                         );
                     }
-                }
+                },
                 Err(e) => {
                     results.failed_queries += 1;
                     error_count += 1;
@@ -240,7 +240,7 @@ impl CacheWarmer {
                             "Too many errors during warming: {error_count}"
                         )));
                     }
-                }
+                },
             }
 
             // Add delay between requests
@@ -425,12 +425,12 @@ impl CacheWarmer {
                     client.complete_with_params(query, p.clone()).map_err(|e| {
                         CacheError::WarmingFailed(format!("Query execution failed: {e}"))
                     })?;
-                }
+                },
                 None => {
                     client.complete(query).map_err(|e| {
                         CacheError::WarmingFailed(format!("Query execution failed: {e}"))
                     })?;
-                }
+                },
             }
         }
 
@@ -540,7 +540,10 @@ mod tests {
 
     #[test]
     fn test_warming_config_validation() {
-        let config = WarmingConfig { max_queries: 0, ..Default::default() };
+        let config = WarmingConfig {
+            max_queries: 0,
+            ..Default::default()
+        };
         assert!(config.validate().is_err());
 
         let config = WarmingConfig {

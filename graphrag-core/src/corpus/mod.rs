@@ -4,15 +4,15 @@
 //! for GraphRAG-RS, implementing the Multi-Document Processing capabilities outlined
 //! in Phase 3 of the implementation plan.
 
+pub mod collection_processor;
 pub mod document_manager;
 pub mod entity_linker;
 pub mod knowledge_graph;
-pub mod collection_processor;
 
-pub use document_manager::{DocumentManager, DocumentMetadata, DocumentCollection};
+pub use collection_processor::{CollectionProcessor, CorpusStats, ProcessingPipeline};
+pub use document_manager::{DocumentCollection, DocumentManager, DocumentMetadata};
 pub use entity_linker::{CrossDocumentEntityLinker, EntityCluster, LinkingStrategy};
 pub use knowledge_graph::{CorpusKnowledgeGraph, GlobalEntity, GlobalRelation};
-pub use collection_processor::{CollectionProcessor, ProcessingPipeline, CorpusStats};
 
 use crate::core::Result;
 use std::path::Path;
@@ -38,18 +38,30 @@ impl CorpusProcessor {
     }
 
     /// Process a complete document collection
-    pub async fn process_collection(&mut self, collection_path: &Path) -> Result<CorpusProcessingResult> {
+    pub async fn process_collection(
+        &mut self,
+        collection_path: &Path,
+    ) -> Result<CorpusProcessingResult> {
         // Load and index documents
-        let collection = self.document_manager.load_collection(collection_path).await?;
+        let collection = self
+            .document_manager
+            .load_collection(collection_path)
+            .await?;
 
         // Extract entities from all documents
-        let document_entities = self.collection_processor.extract_all_entities(collection).await?;
+        let document_entities = self
+            .collection_processor
+            .extract_all_entities(collection)
+            .await?;
 
         // Perform cross-document entity linking
         let entity_clusters = self.entity_linker.link_entities(document_entities).await?;
 
         // Build corpus-level knowledge graph
-        let global_graph = self.knowledge_graph.build_from_clusters(entity_clusters, collection).await?;
+        let global_graph = self
+            .knowledge_graph
+            .build_from_clusters(entity_clusters, collection)
+            .await?;
 
         // Update statistics
         self.stats.update_from_processing(collection, &global_graph);
@@ -67,13 +79,20 @@ impl CorpusProcessor {
         let metadata = self.document_manager.add_document(document_path).await?;
 
         // Extract entities from new document
-        let entities = self.collection_processor.extract_document_entities(&metadata).await?;
+        let entities = self
+            .collection_processor
+            .extract_document_entities(&metadata)
+            .await?;
 
         // Link with existing entities
-        self.entity_linker.link_new_document_entities(entities).await?;
+        self.entity_linker
+            .link_new_document_entities(entities)
+            .await?;
 
         // Update knowledge graph incrementally
-        self.knowledge_graph.integrate_new_document(&metadata).await?;
+        self.knowledge_graph
+            .integrate_new_document(&metadata)
+            .await?;
 
         Ok(())
     }

@@ -16,9 +16,9 @@
 //! - Similarity search in graph space
 //! - Transfer learning across graphs
 
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use rand::Rng;
 
 /// Graph embedding configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -172,12 +172,7 @@ impl Node2Vec {
     }
 
     /// Perform single biased random walk from starting node
-    fn random_walk<R: Rng>(
-        &self,
-        graph: &EmbeddingGraph,
-        start: &str,
-        rng: &mut R,
-    ) -> Vec<String> {
+    fn random_walk<R: Rng>(&self, graph: &EmbeddingGraph, start: &str, rng: &mut R) -> Vec<String> {
         let mut walk = vec![start.to_string()];
 
         for _ in 1..self.config.walk_length {
@@ -386,7 +381,12 @@ impl GraphSAGE {
 
         // Iteratively aggregate neighborhood information
         for layer in 0..self.config.num_layers {
-            let samples = self.config.samples_per_layer.get(layer).copied().unwrap_or(10);
+            let samples = self
+                .config
+                .samples_per_layer
+                .get(layer)
+                .copied()
+                .unwrap_or(10);
             node_features = self.aggregate_layer(graph, &node_features, samples);
         }
 
@@ -460,7 +460,7 @@ impl GraphSAGE {
                 }
 
                 sum
-            }
+            },
             Aggregator::MaxPool => {
                 // Element-wise maximum across all neighbor features
                 let mut max_feat = vec![f32::NEG_INFINITY; self.config.dimension];
@@ -479,15 +479,15 @@ impl GraphSAGE {
                 } else {
                     max_feat
                 }
-            }
+            },
             Aggregator::Attention => {
                 // Attention-weighted aggregation
                 self.aggregate_attention(features, neighbors)
-            }
+            },
             Aggregator::Lstm => {
                 // LSTM-based aggregation (order-dependent)
                 self.aggregate_lstm(features, neighbors)
-            }
+            },
         }
     }
 
@@ -502,10 +502,8 @@ impl GraphSAGE {
         }
 
         // Collect neighbor features
-        let neighbor_feats: Vec<&Vec<f32>> = neighbors
-            .iter()
-            .filter_map(|n| features.get(*n))
-            .collect();
+        let neighbor_feats: Vec<&Vec<f32>> =
+            neighbors.iter().filter_map(|n| features.get(*n)).collect();
 
         if neighbor_feats.is_empty() {
             return vec![0.0; self.config.dimension];

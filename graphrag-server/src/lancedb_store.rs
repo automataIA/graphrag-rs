@@ -30,9 +30,11 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 #[cfg(feature = "lancedb")]
-use arrow_array::{RecordBatch, RecordBatchIterator, Float32Array, StringArray, Int32Array, types::Float32Type};
+use arrow_array::{
+    types::Float32Type, Float32Array, Int32Array, RecordBatch, RecordBatchIterator, StringArray,
+};
 #[cfg(feature = "lancedb")]
-use arrow_schema::{Schema, Field, DataType, SchemaRef};
+use arrow_schema::{DataType, Field, Schema, SchemaRef};
 
 /// Document metadata stored in LanceDB
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -130,7 +132,8 @@ impl LanceDBStore {
             1. Connect to LanceDB: lancedb::connect(db_path)
             2. Define schema with vector field
             3. Create table with schema
-            4. Set up vector index for fast search".to_string()
+            4. Set up vector index for fast search"
+                .to_string(),
         ))
     }
 
@@ -156,10 +159,14 @@ impl LanceDBStore {
         }
 
         // TODO: Implement actual document insertion
-        tracing::debug!("LanceDB: Would insert document '{}' with {} dims", id, embedding.len());
+        tracing::debug!(
+            "LanceDB: Would insert document '{}' with {} dims",
+            id,
+            embedding.len()
+        );
 
         Err(LanceDBError::NotImplemented(
-            "Document insertion not implemented. See lancedb::Table::add() docs".to_string()
+            "Document insertion not implemented. See lancedb::Table::add() docs".to_string(),
         ))
     }
 
@@ -180,7 +187,7 @@ impl LanceDBStore {
         tracing::debug!("LanceDB: Would search for {} similar vectors", limit);
 
         Err(LanceDBError::NotImplemented(
-            "Vector search not implemented. See lancedb::Query::nearest_to() docs".to_string()
+            "Vector search not implemented. See lancedb::Query::nearest_to() docs".to_string(),
         ))
     }
 
@@ -189,7 +196,7 @@ impl LanceDBStore {
         tracing::debug!("LanceDB: Would delete document '{}'", id);
 
         Err(LanceDBError::NotImplemented(
-            "Document deletion not implemented".to_string()
+            "Document deletion not implemented".to_string(),
         ))
     }
 

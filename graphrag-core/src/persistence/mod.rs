@@ -57,13 +57,13 @@ pub mod parquet;
 pub mod lance;
 
 // Re-exports (workspace always available)
-pub use workspace::{WorkspaceManager, WorkspaceMetadata, WorkspaceInfo};
+pub use workspace::{WorkspaceInfo, WorkspaceManager, WorkspaceMetadata};
 
 #[cfg(feature = "persistent-storage")]
-pub use parquet::{ParquetPersistence, ParquetConfig};
+pub use parquet::{ParquetConfig, ParquetPersistence};
 
 #[cfg(feature = "lancedb")]
-pub use lance::{LanceVectorStore, LanceConfig, IndexType, DistanceMetric, SearchResult};
+pub use lance::{DistanceMetric, IndexType, LanceConfig, LanceVectorStore, SearchResult};
 
 /// Persistence trait for knowledge graphs
 pub trait Persistence {

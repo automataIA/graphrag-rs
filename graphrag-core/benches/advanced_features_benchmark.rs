@@ -1,11 +1,10 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
-use graphrag_core::core::{EntityId, KnowledgeGraph, Entity, Relationship};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use graphrag_core::core::{Entity, EntityId, KnowledgeGraph, Relationship};
 
 #[cfg(feature = "async")]
 use graphrag_core::{
+    graph::hierarchical_relationships::HierarchyBuilder, optimization::OptimizerConfig,
     retrieval::causal_analysis::CausalAnalyzer,
-    graph::hierarchical_relationships::HierarchyBuilder,
-    optimization::OptimizerConfig,
 };
 
 use std::sync::Arc;
@@ -142,7 +141,8 @@ fn bench_dynamic_weighting(c: &mut Criterion) {
                 let temporal_boost = 0.10;
                 let concept_boost = 0.05;
 
-                let dynamic_weight = base_weight * (1.0 + semantic_boost + temporal_boost + concept_boost);
+                let dynamic_weight =
+                    base_weight * (1.0 + semantic_boost + temporal_boost + concept_boost);
                 black_box(dynamic_weight);
             }
         });
@@ -173,7 +173,8 @@ fn bench_causal_analysis(c: &mut Criterion) {
 #[cfg(feature = "async")]
 fn bench_hierarchical_clustering(c: &mut Criterion) {
     let graph = create_test_graph();
-    let relationships: Vec<Relationship> = graph.get_all_relationships().into_iter().cloned().collect();
+    let relationships: Vec<Relationship> =
+        graph.get_all_relationships().into_iter().cloned().collect();
 
     c.bench_function("hierarchical_clustering_build", |b| {
         b.iter(|| {
@@ -226,38 +227,44 @@ fn bench_feature_comparison(c: &mut Criterion) {
     });
 
     // With dynamic weighting
-    group.bench_function(BenchmarkId::new("dynamic_weighting", "weighted_lookup"), |b| {
-        b.iter(|| {
-            let id = EntityId("socrates".to_string());
-            let entity = graph.get_entity(&id);
-            if let Some(e) = entity {
-                // Simulate dynamic weighting overhead
-                for rel in graph.get_all_relationships() {
-                    if rel.source == e.id {
-                        let weight = rel.confidence * 1.15;
-                        black_box(weight);
+    group.bench_function(
+        BenchmarkId::new("dynamic_weighting", "weighted_lookup"),
+        |b| {
+            b.iter(|| {
+                let id = EntityId("socrates".to_string());
+                let entity = graph.get_entity(&id);
+                if let Some(e) = entity {
+                    // Simulate dynamic weighting overhead
+                    for rel in graph.get_all_relationships() {
+                        if rel.source == e.id {
+                            let weight = rel.confidence * 1.15;
+                            black_box(weight);
+                        }
                     }
                 }
-            }
-        });
-    });
+            });
+        },
+    );
 
     // With triple reflection (simulated)
-    group.bench_function(BenchmarkId::new("triple_reflection", "validated_lookup"), |b| {
-        b.iter(|| {
-            let id = EntityId("socrates".to_string());
-            let entity = graph.get_entity(&id);
-            if let Some(e) = entity {
-                // Simulate validation overhead
-                for rel in graph.get_all_relationships() {
-                    if rel.source == e.id {
-                        let is_valid = rel.confidence > 0.7;
-                        black_box(is_valid);
+    group.bench_function(
+        BenchmarkId::new("triple_reflection", "validated_lookup"),
+        |b| {
+            b.iter(|| {
+                let id = EntityId("socrates".to_string());
+                let entity = graph.get_entity(&id);
+                if let Some(e) = entity {
+                    // Simulate validation overhead
+                    for rel in graph.get_all_relationships() {
+                        if rel.source == e.id {
+                            let is_valid = rel.confidence > 0.7;
+                            black_box(is_valid);
+                        }
                     }
                 }
-            }
-        });
-    });
+            });
+        },
+    );
 
     group.finish();
 }

@@ -39,7 +39,7 @@
 use crate::core::ChunkId;
 use crate::entity::BidirectionalIndex;
 use crate::lightrag::concept_graph::ConceptGraph;
-use crate::lightrag::query_refinement::{QueryRefiner, QueryRefinementConfig, RefinedQuery};
+use crate::lightrag::query_refinement::{QueryRefinementConfig, QueryRefiner, RefinedQuery};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -120,11 +120,9 @@ impl IterativeDeepeningSearch {
         let mut visited_chunks: HashSet<ChunkId> = HashSet::new();
 
         // Perform query refinement to get initial concepts
-        let refined_query = self.query_refiner.refine_query(
-            query,
-            concept_graph,
-            bidirectional_index,
-        );
+        let refined_query =
+            self.query_refiner
+                .refine_query(query, concept_graph, bidirectional_index);
 
         if refined_query.initial_concepts.is_empty() {
             return results;
@@ -238,7 +236,8 @@ impl IterativeDeepeningSearch {
             for related_concept in related {
                 if !current_concepts.contains(&related_concept) {
                     // Score based on connectivity
-                    let score = self.score_concept(&related_concept, current_concepts, concept_graph);
+                    let score =
+                        self.score_concept(&related_concept, current_concepts, concept_graph);
                     *related_concepts.entry(related_concept).or_insert(0.0) += score;
                 }
             }
@@ -405,7 +404,7 @@ pub enum StopReason {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lightrag::concept_graph::{ConceptGraphBuilder, ConceptExtractor};
+    use crate::lightrag::concept_graph::{ConceptExtractor, ConceptGraphBuilder};
 
     #[test]
     fn test_iterative_deepening_basic() {
@@ -422,10 +421,7 @@ mod tests {
 
         // Create test data
         let mut builder = ConceptGraphBuilder::new();
-        builder.add_document_concepts("doc1", vec![
-            "machine".to_string(),
-            "learning".to_string(),
-        ]);
+        builder.add_document_concepts("doc1", vec!["machine".to_string(), "learning".to_string()]);
         builder.add_chunk_concepts("chunk1", vec!["machine".to_string()]);
 
         let concept_graph = builder.build();

@@ -4,7 +4,7 @@
 
 #[cfg(feature = "web-api")]
 pub mod server {
-    use crate::{GraphRAG, Result, GraphRAGError};
+    use crate::{GraphRAG, GraphRAGError, Result};
     use axum::{
         extract::{Path, Query, State},
         http::StatusCode,
@@ -37,10 +37,7 @@ pub mod server {
     }
 
     /// Start the REST API server
-    pub async fn start_server(
-        graphrag: GraphRAG,
-        config: ApiConfig,
-    ) -> Result<()> {
+    pub async fn start_server(graphrag: GraphRAG, config: ApiConfig) -> Result<()> {
         let state = ApiState {
             graphrag: Arc::new(RwLock::new(graphrag)),
         };
@@ -50,12 +47,15 @@ pub mod server {
         let addr = format!("{}:{}", config.host, config.port);
         tracing::info!(addr = %addr, "GraphRAG API listening");
 
-        let listener = tokio::net::TcpListener::bind(&addr).await
-            .map_err(|e| GraphRAGError::Network {
-                message: format!("Failed to bind to {}: {}", addr, e),
-            })?;
+        let listener =
+            tokio::net::TcpListener::bind(&addr)
+                .await
+                .map_err(|e| GraphRAGError::Network {
+                    message: format!("Failed to bind to {}: {}", addr, e),
+                })?;
 
-        axum::serve(listener, app).await
+        axum::serve(listener, app)
+            .await
             .map_err(|e| GraphRAGError::Network {
                 message: format!("Server error: {}", e),
             })?;
@@ -113,7 +113,8 @@ pub mod server {
         let start = std::time::Instant::now();
 
         let graphrag = state.graphrag.read().await;
-        let results = graphrag.query(&req.query)
+        let results = graphrag
+            .query(&req.query)
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
         Ok(Json(QueryResponse {
@@ -122,9 +123,7 @@ pub mod server {
         }))
     }
 
-    async fn stats(
-        State(_state): State<ApiState>,
-    ) -> Json<serde_json::Value> {
+    async fn stats(State(_state): State<ApiState>) -> Json<serde_json::Value> {
         Json(serde_json::json!({
             "nodes": 0,
             "edges": 0,
@@ -136,7 +135,7 @@ pub mod server {
 /// Client for interacting with GraphRAG REST API
 #[cfg(feature = "web-api")]
 pub mod client {
-    use crate::{Result, GraphRAGError};
+    use crate::{GraphRAGError, Result};
     use serde::{Deserialize, Serialize};
 
     pub struct ApiClient {
@@ -163,7 +162,8 @@ pub mod client {
                 results: Vec<String>,
             }
 
-            let response: Response = self.client
+            let response: Response = self
+                .client
                 .post(&format!("{}/query", self.base_url))
                 .send_json(Request {
                     query: query.to_string(),
@@ -178,7 +178,8 @@ pub mod client {
         }
 
         pub fn health_check(&self) -> Result<bool> {
-            let response = self.client
+            let response = self
+                .client
                 .get(&format!("{}/health", self.base_url))
                 .call()
                 .map_err(|e| GraphRAGError::Network {

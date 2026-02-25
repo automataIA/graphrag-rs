@@ -68,7 +68,7 @@ impl SlashCommand {
                 // Debug log to see what's being parsed
                 tracing::debug!("Parsing config command - path_str: {:?}", path_str);
                 Ok(SlashCommand::Config(PathBuf::from(path_str)))
-            }
+            },
             "load" => {
                 // Get everything after "load" command
                 let rest = trimmed[1..].trim_start_matches("load").trim();
@@ -91,27 +91,31 @@ impl SlashCommand {
                     return Err(eyre!("Missing file path argument"));
                 }
 
-                tracing::debug!("Parsing load command - path_str: {:?}, rebuild: {}", path_str, rebuild);
+                tracing::debug!(
+                    "Parsing load command - path_str: {:?}, rebuild: {}",
+                    path_str,
+                    rebuild
+                );
                 Ok(SlashCommand::Load(PathBuf::from(path_str), rebuild))
-            }
+            },
             "clear" => {
                 if !args.is_empty() {
                     return Err(eyre!("/clear takes no arguments"));
                 }
                 Ok(SlashCommand::Clear)
-            }
+            },
             "rebuild" => {
                 if !args.is_empty() {
                     return Err(eyre!("/rebuild takes no arguments"));
                 }
                 Ok(SlashCommand::Rebuild)
-            }
+            },
             "stats" => {
                 if !args.is_empty() {
                     return Err(eyre!("/stats takes no arguments"));
                 }
                 Ok(SlashCommand::Stats)
-            }
+            },
             "entities" => {
                 let filter = if args.is_empty() {
                     None
@@ -119,7 +123,7 @@ impl SlashCommand {
                     Some(args.join(" "))
                 };
                 Ok(SlashCommand::Entities(filter))
-            }
+            },
             "workspace" | "ws" => {
                 // /workspace <name> - load workspace
                 // /workspace list - list workspaces
@@ -127,7 +131,9 @@ impl SlashCommand {
                 // /workspace delete <name> - delete workspace
 
                 if args.is_empty() {
-                    return Err(eyre!("Missing argument. Usage: /workspace <name|list|save|delete>"));
+                    return Err(eyre!(
+                        "Missing argument. Usage: /workspace <name|list|save|delete>"
+                    ));
                 }
 
                 match args[0].to_lowercase().as_str() {
@@ -136,31 +142,31 @@ impl SlashCommand {
                             return Err(eyre!("/workspace list takes no additional arguments"));
                         }
                         Ok(SlashCommand::WorkspaceList)
-                    }
+                    },
                     "save" => {
                         if args.len() < 2 {
                             return Err(eyre!("Missing workspace name: /workspace save <name>"));
                         }
                         Ok(SlashCommand::WorkspaceSave(args[1].to_string()))
-                    }
+                    },
                     "delete" | "del" | "rm" => {
                         if args.len() < 2 {
                             return Err(eyre!("Missing workspace name: /workspace delete <name>"));
                         }
                         Ok(SlashCommand::WorkspaceDelete(args[1].to_string()))
-                    }
+                    },
                     name => {
                         // Default: load workspace
                         Ok(SlashCommand::Workspace(name.to_string()))
-                    }
+                    },
                 }
-            }
+            },
             "help" => {
                 if !args.is_empty() {
                     return Err(eyre!("/help takes no arguments"));
                 }
                 Ok(SlashCommand::Help)
-            }
+            },
             _ => Err(eyre!(
                 "Unknown command: /{}. Type /help for available commands.",
                 command
@@ -255,13 +261,19 @@ mod tests {
     #[test]
     fn test_parse_config_with_path() {
         let cmd = SlashCommand::parse("/config docs-example/sym.json5").unwrap();
-        assert_eq!(cmd, SlashCommand::Config(PathBuf::from("docs-example/sym.json5")));
+        assert_eq!(
+            cmd,
+            SlashCommand::Config(PathBuf::from("docs-example/sym.json5"))
+        );
     }
 
     #[test]
     fn test_parse_config_with_spaces_in_dirname() {
         let cmd = SlashCommand::parse("/config my docs/config.toml").unwrap();
-        assert_eq!(cmd, SlashCommand::Config(PathBuf::from("my docs/config.toml")));
+        assert_eq!(
+            cmd,
+            SlashCommand::Config(PathBuf::from("my docs/config.toml"))
+        );
     }
 
     #[test]

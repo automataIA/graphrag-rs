@@ -174,6 +174,7 @@ pub struct EntityData {
     #[serde(rename = "type")]
     pub entity_type: String,
     /// Description of the entity's role or significance in the context
+    #[serde(default)]
     pub description: String,
 }
 
@@ -237,7 +238,12 @@ impl PromptBuilder {
         // Format previous relationships for display
         let relationships_summary = previous_relationships
             .iter()
-            .map(|r| format!("- {} -> {}: {} (strength: {:.2})", r.source, r.target, r.description, r.strength))
+            .map(|r| {
+                format!(
+                    "- {} -> {}: {} (strength: {:.2})",
+                    r.source, r.target, r.description, r.strength
+                )
+            })
             .collect::<Vec<_>>()
             .join("\n");
 
@@ -264,7 +270,11 @@ impl PromptBuilder {
             .join("\n");
 
         let entities_summary = if entities.len() > 20 {
-            format!("{}...\n(showing 20 of {} entities)", entities_summary, entities.len())
+            format!(
+                "{}...\n(showing 20 of {} entities)",
+                entities_summary,
+                entities.len()
+            )
         } else {
             entities_summary
         };
@@ -278,7 +288,11 @@ impl PromptBuilder {
             .join("\n");
 
         let relationships_summary = if relationships.len() > 20 {
-            format!("{}...\n(showing 20 of {} relationships)", relationships_summary, relationships.len())
+            format!(
+                "{}...\n(showing 20 of {} relationships)",
+                relationships_summary,
+                relationships.len()
+            )
         } else {
             relationships_summary
         };
@@ -316,22 +330,18 @@ mod tests {
     fn test_build_continuation_prompt() {
         let builder = PromptBuilder::new(vec!["PERSON".to_string()]);
 
-        let previous_entities = vec![
-            EntityData {
-                name: "Tom".to_string(),
-                entity_type: "PERSON".to_string(),
-                description: "A young boy".to_string(),
-            },
-        ];
+        let previous_entities = vec![EntityData {
+            name: "Tom".to_string(),
+            entity_type: "PERSON".to_string(),
+            description: "A young boy".to_string(),
+        }];
 
-        let previous_relationships = vec![
-            RelationshipData {
-                source: "Tom".to_string(),
-                target: "Huck".to_string(),
-                description: "friends".to_string(),
-                strength: 0.9,
-            },
-        ];
+        let previous_relationships = vec![RelationshipData {
+            source: "Tom".to_string(),
+            target: "Huck".to_string(),
+            description: "friends".to_string(),
+            strength: 0.9,
+        }];
 
         let prompt = builder.build_continuation_prompt(
             "Tom and Huck are best friends.",
@@ -348,22 +358,18 @@ mod tests {
     fn test_build_completion_prompt() {
         let builder = PromptBuilder::new(vec!["PERSON".to_string()]);
 
-        let entities = vec![
-            EntityData {
-                name: "Tom".to_string(),
-                entity_type: "PERSON".to_string(),
-                description: "A young boy".to_string(),
-            },
-        ];
+        let entities = vec![EntityData {
+            name: "Tom".to_string(),
+            entity_type: "PERSON".to_string(),
+            description: "A young boy".to_string(),
+        }];
 
-        let relationships = vec![
-            RelationshipData {
-                source: "Tom".to_string(),
-                target: "Huck".to_string(),
-                description: "friends".to_string(),
-                strength: 0.9,
-            },
-        ];
+        let relationships = vec![RelationshipData {
+            source: "Tom".to_string(),
+            target: "Huck".to_string(),
+            description: "friends".to_string(),
+            strength: 0.9,
+        }];
 
         let prompt = builder.build_completion_prompt("Test text", &entities, &relationships);
 
@@ -374,21 +380,17 @@ mod tests {
     #[test]
     fn test_extraction_output_serialization() {
         let output = ExtractionOutput {
-            entities: vec![
-                EntityData {
-                    name: "Tom Sawyer".to_string(),
-                    entity_type: "PERSON".to_string(),
-                    description: "The protagonist".to_string(),
-                },
-            ],
-            relationships: vec![
-                RelationshipData {
-                    source: "Tom Sawyer".to_string(),
-                    target: "Huck Finn".to_string(),
-                    description: "best friends".to_string(),
-                    strength: 0.95,
-                },
-            ],
+            entities: vec![EntityData {
+                name: "Tom Sawyer".to_string(),
+                entity_type: "PERSON".to_string(),
+                description: "The protagonist".to_string(),
+            }],
+            relationships: vec![RelationshipData {
+                source: "Tom Sawyer".to_string(),
+                target: "Huck Finn".to_string(),
+                description: "best friends".to_string(),
+                strength: 0.95,
+            }],
         };
 
         let json = serde_json::to_string(&output).unwrap();

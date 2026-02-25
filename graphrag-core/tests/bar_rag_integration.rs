@@ -9,14 +9,14 @@
 //! - +40% semantic coherence
 //! - -60% entity fragmentation
 
+use async_trait::async_trait;
+use graphrag_core::core::{ChunkingStrategy, DocumentId};
 use graphrag_core::embeddings::EmbeddingProvider;
 use graphrag_core::text::{
     BoundaryAwareChunkingStrategy, BoundaryDetectionConfig, BoundaryDetector, BoundaryType,
     CoherenceConfig, SemanticCoherenceScorer,
 };
-use graphrag_core::core::{ChunkingStrategy, DocumentId};
 use std::sync::Arc;
-use async_trait::async_trait;
 
 /// Mock embedding provider for testing
 struct MockEmbeddingProvider {
@@ -116,14 +116,16 @@ Third paragraph.";
         .collect();
 
     // Check total boundaries first
-    assert!(!boundaries.is_empty(),
-        "No boundaries detected at all");
+    assert!(!boundaries.is_empty(), "No boundaries detected at all");
 
     // Paragraph boundaries or other semantic boundaries should be found
     // BAR-RAG may find sentence or other boundaries even if paragraph detection varies
-    assert!(paragraph_boundaries.len() >= 1 || boundaries.len() >= 2,
+    assert!(
+        paragraph_boundaries.len() >= 1 || boundaries.len() >= 2,
         "Expected paragraph boundaries or other semantic boundaries, found {} paragraph, {} total",
-        paragraph_boundaries.len(), boundaries.len());
+        paragraph_boundaries.len(),
+        boundaries.len()
+    );
 }
 
 #[test]
@@ -242,7 +244,8 @@ async fn test_coherence_scorer_optimal_split() {
     let provider = Arc::new(MockEmbeddingProvider::new(384));
     let scorer = SemanticCoherenceScorer::new(config, provider);
 
-    let text = "First topic here. More about first topic. Second topic begins. More about second topic.";
+    let text =
+        "First topic here. More about first topic. Second topic begins. More about second topic.";
     let boundaries = vec![42, 62]; // Positions after "topic." and "begins."
 
     let result = scorer.find_optimal_split(text, &boundaries).await.unwrap();
@@ -313,8 +316,8 @@ fn test_boundary_aware_size_constraints() {
         BoundaryDetectionConfig::default(),
         CoherenceConfig::default(),
         provider,
-        500,  // max chars (small for testing)
-        100,  // min chars
+        500, // max chars (small for testing)
+        100, // min chars
         document_id,
     );
 
@@ -490,9 +493,11 @@ This approach significantly improves retrieval quality and answer accuracy.
 
     // Should produce at least one chunk
     // Note: Coherence-based optimization may keep related content together
-    assert!(chunks.len() >= 1,
+    assert!(
+        chunks.len() >= 1,
         "Expected at least 1 chunk, got {}",
-        chunks.len());
+        chunks.len()
+    );
 }
 
 #[test]
@@ -509,8 +514,7 @@ fn test_real_world_document_plato_symposium() {
         return;
     }
 
-    let text = fs::read_to_string(symposium_path)
-        .expect("Failed to read Symposium.txt");
+    let text = fs::read_to_string(symposium_path).expect("Failed to read Symposium.txt");
 
     // Use first 5000 characters for testing (Introduction section)
     let text_sample = if text.len() > 5000 {
@@ -562,8 +566,12 @@ fn test_real_world_document_plato_symposium() {
         // Check coherence score in metadata if available
         if let Some(score) = chunk.metadata.custom.get("coherence_score") {
             has_coherence_metadata = true;
-            println!("Chunk {}: {} chars, coherence: {}",
-                i, chunk.content.len(), score);
+            println!(
+                "Chunk {}: {} chars, coherence: {}",
+                i,
+                chunk.content.len(),
+                score
+            );
         } else {
             println!("Chunk {}: {} chars", i, chunk.content.len());
         }
@@ -588,7 +596,10 @@ fn test_real_world_document_plato_symposium() {
     }
 
     println!("Total characters processed: {}", total_chars);
-    println!("Coverage: {:.1}%", (total_chars as f64 / text_sample.len() as f64) * 100.0);
+    println!(
+        "Coverage: {:.1}%",
+        (total_chars as f64 / text_sample.len() as f64) * 100.0
+    );
 
     // Verify good coverage (should process most of the text)
     let coverage = (total_chars as f64 / text_sample.len() as f64) * 100.0;

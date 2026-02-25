@@ -13,7 +13,7 @@
 //! - Natural fit for knowledge graphs
 
 use crate::{
-    core::{Entity, EntityId, Relationship, Result, TextChunk, GraphRAGError},
+    core::{Entity, EntityId, GraphRAGError, Relationship, Result, TextChunk},
     ollama::OllamaClient,
 };
 use serde::{Deserialize, Serialize};
@@ -56,9 +56,7 @@ impl AtomicFact {
         // Check for BC/BCE dates
         if marker.contains("BC") || marker.contains("BCE") {
             // Extract the number before BC/BCE
-            let num_str: String = marker.chars()
-                .filter(|c| c.is_ascii_digit())
-                .collect();
+            let num_str: String = marker.chars().filter(|c| c.is_ascii_digit()).collect();
 
             if let Ok(year) = num_str.parse::<i64>() {
                 // Negative for BC years
@@ -68,9 +66,7 @@ impl AtomicFact {
         }
 
         // Check for AD dates (positive years)
-        let num_str: String = marker.chars()
-            .filter(|c| c.is_ascii_digit())
-            .collect();
+        let num_str: String = marker.chars().filter(|c| c.is_ascii_digit()).collect();
 
         if let Ok(year) = num_str.parse::<i64>() {
             if year > 1000 && year < 3000 {
@@ -185,7 +181,9 @@ JSON:"#,
                                 subject: f.subject,
                                 predicate: f.predicate,
                                 object: f.object,
-                                temporal_marker: f.temporal_marker.filter(|s| !s.is_empty() && s != "null"),
+                                temporal_marker: f
+                                    .temporal_marker
+                                    .filter(|s| !s.is_empty() && s != "null"),
                                 confidence: f.confidence.clamp(0.0, 1.0),
                             })
                             .collect();
@@ -198,7 +196,7 @@ JSON:"#,
                         );
 
                         Ok(facts)
-                    }
+                    },
                     Err(e) => {
                         #[cfg(feature = "tracing")]
                         tracing::warn!(
@@ -210,9 +208,9 @@ JSON:"#,
 
                         // Return empty vector on parse failure
                         Ok(Vec::new())
-                    }
+                    },
                 }
-            }
+            },
             Err(e) => {
                 #[cfg(feature = "tracing")]
                 tracing::error!(
@@ -224,7 +222,7 @@ JSON:"#,
                 Err(GraphRAGError::EntityExtraction {
                     message: format!("Atomic fact extraction failed: {}", e),
                 })
-            }
+            },
         }
     }
 
@@ -296,24 +294,22 @@ JSON:"#,
 
             // Add temporal information if available
             if let Some(timestamp) = fact.extract_timestamp() {
-                relationship.temporal_range = Some(
-                    crate::graph::temporal::TemporalRange::new(timestamp, timestamp)
-                );
+                relationship.temporal_range = Some(crate::graph::temporal::TemporalRange::new(
+                    timestamp, timestamp,
+                ));
 
                 // Infer temporal relationship type based on predicate
                 if fact.predicate.to_lowercase().contains("caused")
                     || fact.predicate.to_lowercase().contains("led to")
                 {
-                    relationship.temporal_type = Some(
-                        crate::graph::temporal::TemporalRelationType::Caused
-                    );
+                    relationship.temporal_type =
+                        Some(crate::graph::temporal::TemporalRelationType::Caused);
                     relationship.causal_strength = Some(fact.confidence);
                 } else if fact.predicate.to_lowercase().contains("enabled")
                     || fact.predicate.to_lowercase().contains("allowed")
                 {
-                    relationship.temporal_type = Some(
-                        crate::graph::temporal::TemporalRelationType::Enabled
-                    );
+                    relationship.temporal_type =
+                        Some(crate::graph::temporal::TemporalRelationType::Enabled);
                     relationship.causal_strength = Some(fact.confidence * 0.6);
                 }
             }
@@ -417,21 +413,12 @@ mod tests {
 
     #[test]
     fn test_infer_entity_type() {
-        assert_eq!(
-            AtomicFactExtractor::infer_entity_type("Socrates"),
-            "PERSON"
-        );
+        assert_eq!(AtomicFactExtractor::infer_entity_type("Socrates"), "PERSON");
         assert_eq!(
             AtomicFactExtractor::infer_entity_type("Athens"),
             "PERSON" // Would be LOCATION if we had more sophisticated logic
         );
-        assert_eq!(
-            AtomicFactExtractor::infer_entity_type("love"),
-            "CONCEPT"
-        );
-        assert_eq!(
-            AtomicFactExtractor::infer_entity_type("1876"),
-            "DATE"
-        );
+        assert_eq!(AtomicFactExtractor::infer_entity_type("love"), "CONCEPT");
+        assert_eq!(AtomicFactExtractor::infer_entity_type("1876"), "DATE");
     }
 }

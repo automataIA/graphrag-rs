@@ -18,15 +18,14 @@
 //! - Model weights and configuration
 //! - Progressive loading support
 
+use serde::{Deserialize, Serialize};
+use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    IdbDatabase, IdbOpenDbRequest, IdbRequest,
-    IdbTransactionMode, Cache, Request, Response,
+    Cache, IdbDatabase, IdbOpenDbRequest, IdbRequest, IdbTransactionMode, Request, Response,
 };
-use serde::{Deserialize, Serialize};
-use std::rc::Rc;
 
 /// Helper function to convert IdbRequest to Promise
 fn idb_request_to_promise(request: &IdbRequest) -> js_sys::Promise {
@@ -39,7 +38,9 @@ fn idb_request_to_promise(request: &IdbRequest) -> js_sys::Promise {
         });
         let onerror = Closure::once(move |event: web_sys::Event| {
             let error_msg = format!("IdbRequest error: {:?}", event);
-            reject.call1(&JsValue::NULL, &JsValue::from_str(&error_msg)).unwrap();
+            reject
+                .call1(&JsValue::NULL, &JsValue::from_str(&error_msg))
+                .unwrap();
         });
 
         request.set_onsuccess(Some(onsuccess.as_ref().unchecked_ref()));
@@ -79,7 +80,9 @@ impl std::fmt::Display for StorageError {
 impl From<JsValue> for StorageError {
     fn from(value: JsValue) -> Self {
         StorageError::DatabaseError(
-            value.as_string().unwrap_or_else(|| "Unknown error".to_string())
+            value
+                .as_string()
+                .unwrap_or_else(|| "Unknown error".to_string()),
         )
     }
 }
@@ -128,9 +131,9 @@ impl IndexedDBStore {
             .map_err(|_| StorageError::UnsupportedBrowser("IndexedDB not available".to_string()))?
             .ok_or_else(|| StorageError::UnsupportedBrowser("IndexedDB is None".to_string()))?;
 
-        let open_request = idb_factory
-            .open_with_u32(name, version)
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to open database: {:?}", e)))?;
+        let open_request = idb_factory.open_with_u32(name, version).map_err(|e| {
+            StorageError::DatabaseError(format!("Failed to open database: {:?}", e))
+        })?;
 
         // Set up onupgradeneeded callback
         let onupgradeneeded = Closure::once(move |event: web_sys::IdbVersionChangeEvent| {
@@ -141,16 +144,24 @@ impl IndexedDBStore {
             // Create object stores (will only create if they don't exist)
             // onupgradeneeded is only called when version changes, so we can safely try to create
             let _ = db.create_object_store("entities").map_err(|e| {
-                web_sys::console::warn_1(&format!("entities store may already exist: {:?}", e).into());
+                web_sys::console::warn_1(
+                    &format!("entities store may already exist: {:?}", e).into(),
+                );
             });
             let _ = db.create_object_store("relationships").map_err(|e| {
-                web_sys::console::warn_1(&format!("relationships store may already exist: {:?}", e).into());
+                web_sys::console::warn_1(
+                    &format!("relationships store may already exist: {:?}", e).into(),
+                );
             });
             let _ = db.create_object_store("documents").map_err(|e| {
-                web_sys::console::warn_1(&format!("documents store may already exist: {:?}", e).into());
+                web_sys::console::warn_1(
+                    &format!("documents store may already exist: {:?}", e).into(),
+                );
             });
             let _ = db.create_object_store("metadata").map_err(|e| {
-                web_sys::console::warn_1(&format!("metadata store may already exist: {:?}", e).into());
+                web_sys::console::warn_1(
+                    &format!("metadata store may already exist: {:?}", e).into(),
+                );
             });
         });
         open_request.set_onupgradeneeded(Some(onupgradeneeded.as_ref().unchecked_ref()));
@@ -159,8 +170,9 @@ impl IndexedDBStore {
         // Wait for database to open
         let promise = idb_request_to_promise(&open_request);
         let db_value = JsFuture::from(promise).await?;
-        let db = db_value.dyn_into::<IdbDatabase>()
-            .map_err(|_| StorageError::DatabaseError("Failed to cast to IdbDatabase".to_string()))?;
+        let db = db_value.dyn_into::<IdbDatabase>().map_err(|_| {
+            StorageError::DatabaseError("Failed to cast to IdbDatabase".to_string())
+        })?;
 
         Ok(Self {
             db,
@@ -181,13 +193,16 @@ impl IndexedDBStore {
         key: &str,
         value: &T,
     ) -> Result<(), StorageError> {
-        let transaction = self.db
+        let transaction = self
+            .db
             .transaction_with_str_and_mode(store_name, IdbTransactionMode::Readwrite)
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to create transaction: {:?}", e)))?;
+            .map_err(|e| {
+                StorageError::DatabaseError(format!("Failed to create transaction: {:?}", e))
+            })?;
 
-        let store = transaction
-            .object_store(store_name)
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to get object store: {:?}", e)))?;
+        let store = transaction.object_store(store_name).map_err(|e| {
+            StorageError::DatabaseError(format!("Failed to get object store: {:?}", e))
+        })?;
 
         let js_value = serde_wasm_bindgen::to_value(value)
             .map_err(|e| StorageError::SerializationError(e.to_string()))?;
@@ -215,13 +230,13 @@ impl IndexedDBStore {
         store_name: &str,
         key: &str,
     ) -> Result<T, StorageError> {
-        let transaction = self.db
-            .transaction_with_str(store_name)
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to create transaction: {:?}", e)))?;
+        let transaction = self.db.transaction_with_str(store_name).map_err(|e| {
+            StorageError::DatabaseError(format!("Failed to create transaction: {:?}", e))
+        })?;
 
-        let store = transaction
-            .object_store(store_name)
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to get object store: {:?}", e)))?;
+        let store = transaction.object_store(store_name).map_err(|e| {
+            StorageError::DatabaseError(format!("Failed to get object store: {:?}", e))
+        })?;
 
         let request = store
             .get(&JsValue::from_str(key))
@@ -255,13 +270,13 @@ impl IndexedDBStore {
         store_name: &str,
         batch_size: Option<u32>,
     ) -> Result<Vec<T>, StorageError> {
-        let transaction = self.db
-            .transaction_with_str(store_name)
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to create transaction: {:?}", e)))?;
+        let transaction = self.db.transaction_with_str(store_name).map_err(|e| {
+            StorageError::DatabaseError(format!("Failed to create transaction: {:?}", e))
+        })?;
 
-        let store = transaction
-            .object_store(store_name)
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to get object store: {:?}", e)))?;
+        let store = transaction.object_store(store_name).map_err(|e| {
+            StorageError::DatabaseError(format!("Failed to get object store: {:?}", e))
+        })?;
 
         // Use getAll() - note: batch_size parameter is ignored as web_sys IdbObjectStore
         // doesn't support limiting results directly
@@ -302,17 +317,14 @@ impl IndexedDBStore {
     /// # Returns
     /// Vector of all keys in the store
     #[allow(dead_code)]
-    pub async fn get_all_keys(
-        &self,
-        store_name: &str,
-    ) -> Result<Vec<String>, StorageError> {
-        let transaction = self.db
-            .transaction_with_str(store_name)
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to create transaction: {:?}", e)))?;
+    pub async fn get_all_keys(&self, store_name: &str) -> Result<Vec<String>, StorageError> {
+        let transaction = self.db.transaction_with_str(store_name).map_err(|e| {
+            StorageError::DatabaseError(format!("Failed to create transaction: {:?}", e))
+        })?;
 
-        let store = transaction
-            .object_store(store_name)
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to get object store: {:?}", e)))?;
+        let store = transaction.object_store(store_name).map_err(|e| {
+            StorageError::DatabaseError(format!("Failed to get object store: {:?}", e))
+        })?;
 
         let request = store
             .get_all_keys()
@@ -340,13 +352,16 @@ impl IndexedDBStore {
     /// Delete a value from an object store
     #[allow(dead_code)]
     pub async fn delete(&self, store_name: &str, key: &str) -> Result<(), StorageError> {
-        let transaction = self.db
+        let transaction = self
+            .db
             .transaction_with_str_and_mode(store_name, IdbTransactionMode::Readwrite)
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to create transaction: {:?}", e)))?;
+            .map_err(|e| {
+                StorageError::DatabaseError(format!("Failed to create transaction: {:?}", e))
+            })?;
 
-        let store = transaction
-            .object_store(store_name)
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to get object store: {:?}", e)))?;
+        let store = transaction.object_store(store_name).map_err(|e| {
+            StorageError::DatabaseError(format!("Failed to get object store: {:?}", e))
+        })?;
 
         let request = store
             .delete(&JsValue::from_str(key))
@@ -361,13 +376,16 @@ impl IndexedDBStore {
     /// Clear all values from an object store
     #[allow(dead_code)]
     pub async fn clear(&self, store_name: &str) -> Result<(), StorageError> {
-        let transaction = self.db
+        let transaction = self
+            .db
             .transaction_with_str_and_mode(store_name, IdbTransactionMode::Readwrite)
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to create transaction: {:?}", e)))?;
+            .map_err(|e| {
+                StorageError::DatabaseError(format!("Failed to create transaction: {:?}", e))
+            })?;
 
-        let store = transaction
-            .object_store(store_name)
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to get object store: {:?}", e)))?;
+        let store = transaction.object_store(store_name).map_err(|e| {
+            StorageError::DatabaseError(format!("Failed to get object store: {:?}", e))
+        })?;
 
         let request = store
             .clear()
@@ -428,7 +446,8 @@ impl CacheStore {
             .map_err(|_| StorageError::UnsupportedBrowser("Cache API not available".to_string()))?;
 
         let cache_promise = cache_storage.open(name);
-        let cache_value = JsFuture::from(cache_promise).await
+        let cache_value = JsFuture::from(cache_promise)
+            .await
             .map_err(|e| StorageError::DatabaseError(format!("Failed to open cache: {:?}", e)))?;
         let cache = cache_value
             .dyn_into::<Cache>()
@@ -448,17 +467,20 @@ impl CacheStore {
     #[allow(dead_code)]
     pub async fn put(&self, key: &str, bytes: &[u8]) -> Result<(), StorageError> {
         let url = format!("https://graphrag.local/{}", key);
-        let request = Request::new_with_str(&url)
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to create request: {:?}", e)))?;
+        let request = Request::new_with_str(&url).map_err(|e| {
+            StorageError::DatabaseError(format!("Failed to create request: {:?}", e))
+        })?;
 
         // Create response with bytes
         let array = js_sys::Uint8Array::from(bytes);
-        let response = Response::new_with_opt_buffer_source(Some(array.as_ref()))
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to create response: {:?}", e)))?;
+        let response = Response::new_with_opt_buffer_source(Some(array.as_ref())).map_err(|e| {
+            StorageError::DatabaseError(format!("Failed to create response: {:?}", e))
+        })?;
 
         // Store in cache - put_with_request returns Promise directly
         let put_promise = self.cache.put_with_request(&request, &response);
-        JsFuture::from(put_promise).await
+        JsFuture::from(put_promise)
+            .await
             .map_err(|e| StorageError::DatabaseError(format!("Failed to put in cache: {:?}", e)))?;
 
         Ok(())
@@ -475,7 +497,8 @@ impl CacheStore {
     pub async fn get(&self, key: &str) -> Result<Vec<u8>, StorageError> {
         let url = format!("https://graphrag.local/{}", key);
         let match_promise = self.cache.match_with_str(&url);
-        let match_value = JsFuture::from(match_promise).await
+        let match_value = JsFuture::from(match_promise)
+            .await
             .map_err(|e| StorageError::DatabaseError(format!("Failed to match cache: {:?}", e)))?;
 
         if match_value.is_undefined() {
@@ -486,13 +509,17 @@ impl CacheStore {
             .dyn_into::<Response>()
             .map_err(|_| StorageError::DatabaseError("Failed to cast to Response".to_string()))?;
 
-        let array_buffer_promise = response.array_buffer()
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to get array buffer promise: {:?}", e)))?;
-        let array_buffer_value = JsFuture::from(array_buffer_promise).await
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to get array buffer: {:?}", e)))?;
+        let array_buffer_promise = response.array_buffer().map_err(|e| {
+            StorageError::DatabaseError(format!("Failed to get array buffer promise: {:?}", e))
+        })?;
+        let array_buffer_value = JsFuture::from(array_buffer_promise).await.map_err(|e| {
+            StorageError::DatabaseError(format!("Failed to get array buffer: {:?}", e))
+        })?;
         let array_buffer = array_buffer_value
             .dyn_into::<js_sys::ArrayBuffer>()
-            .map_err(|_| StorageError::DatabaseError("Failed to cast to ArrayBuffer".to_string()))?;
+            .map_err(|_| {
+                StorageError::DatabaseError("Failed to cast to ArrayBuffer".to_string())
+            })?;
 
         let uint8_array = js_sys::Uint8Array::new(&array_buffer);
         let mut buffer = vec![0_u8; uint8_array.length() as usize];
@@ -506,8 +533,9 @@ impl CacheStore {
     pub async fn delete(&self, key: &str) -> Result<bool, StorageError> {
         let url = format!("https://graphrag.local/{}", key);
         let delete_promise = self.cache.delete_with_str(&url);
-        let result = JsFuture::from(delete_promise).await
-            .map_err(|e| StorageError::DatabaseError(format!("Failed to delete from cache: {:?}", e)))?;
+        let result = JsFuture::from(delete_promise).await.map_err(|e| {
+            StorageError::DatabaseError(format!("Failed to delete from cache: {:?}", e))
+        })?;
         Ok(result.as_bool().unwrap_or(false))
     }
 
@@ -516,7 +544,8 @@ impl CacheStore {
     pub async fn has(&self, key: &str) -> Result<bool, StorageError> {
         let url = format!("https://graphrag.local/{}", key);
         let match_promise = self.cache.match_with_str(&url);
-        let match_value = JsFuture::from(match_promise).await
+        let match_value = JsFuture::from(match_promise)
+            .await
             .map_err(|e| StorageError::DatabaseError(format!("Failed to match cache: {:?}", e)))?;
         Ok(!match_value.is_undefined())
     }
@@ -541,7 +570,9 @@ pub async fn estimate_storage() -> Result<(u64, u64, f64), StorageError> {
         .map_err(|_| StorageError::UnsupportedBrowser("Storage API not available".to_string()))?;
 
     if storage.is_undefined() {
-        return Err(StorageError::UnsupportedBrowser("Storage API not supported".to_string()));
+        return Err(StorageError::UnsupportedBrowser(
+            "Storage API not supported".to_string(),
+        ));
     }
 
     let estimate_fn = js_sys::Reflect::get(&storage, &JsValue::from_str("estimate"))

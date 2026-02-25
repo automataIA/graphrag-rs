@@ -15,9 +15,9 @@ use graphrag_core::{
 
 #[cfg(feature = "async")]
 use graphrag_core::{
-    retrieval::causal_analysis::CausalAnalyzer,
     graph::hierarchical_relationships::HierarchyBuilder,
-    optimization::{GraphWeightOptimizer, OptimizerConfig, ObjectiveWeights, TestQuery},
+    optimization::{GraphWeightOptimizer, ObjectiveWeights, OptimizerConfig, TestQuery},
+    retrieval::causal_analysis::CausalAnalyzer,
 };
 
 use std::sync::Arc;
@@ -236,7 +236,10 @@ async fn test_temporal_consistency_validation() {
 
             // Verify time span is reasonable (negative means later event has earlier timestamp)
             if let Some(span) = chain.time_span {
-                assert!(span >= 0, "Time span should be positive (cause before effect)");
+                assert!(
+                    span >= 0,
+                    "Time span should be positive (cause before effect)"
+                );
                 println!("  Time span: {} seconds", span);
             }
         } else {
@@ -250,11 +253,8 @@ async fn test_temporal_consistency_validation() {
 async fn test_hierarchical_clustering_build() {
     // Test Phase 3.1: Hierarchical Relationship Clustering
     let graph = create_philosophy_graph();
-    let relationships: Vec<Relationship> = graph
-        .get_all_relationships()
-        .into_iter()
-        .cloned()
-        .collect();
+    let relationships: Vec<Relationship> =
+        graph.get_all_relationships().into_iter().cloned().collect();
 
     // Build hierarchy with 2 levels
     let builder = HierarchyBuilder::new(relationships)
@@ -328,8 +328,18 @@ fn test_advanced_features_config_defaults() {
     assert!(config.advanced_features.symbolic_anchoring.max_anchors > 0);
 
     // Dynamic Weighting
-    assert!(config.advanced_features.dynamic_weighting.enable_semantic_boost);
-    assert!(config.advanced_features.dynamic_weighting.enable_temporal_boost);
+    assert!(
+        config
+            .advanced_features
+            .dynamic_weighting
+            .enable_semantic_boost
+    );
+    assert!(
+        config
+            .advanced_features
+            .dynamic_weighting
+            .enable_temporal_boost
+    );
 
     // Causal Analysis
     assert!(config.advanced_features.causal_analysis.min_confidence >= 0.0);
@@ -341,7 +351,11 @@ fn test_advanced_features_config_defaults() {
     assert!(config.advanced_features.hierarchical_clustering.num_levels >= 2);
     assert!(config.advanced_features.hierarchical_clustering.num_levels <= 5);
     assert_eq!(
-        config.advanced_features.hierarchical_clustering.resolutions.len(),
+        config
+            .advanced_features
+            .hierarchical_clustering
+            .resolutions
+            .len(),
         config.advanced_features.hierarchical_clustering.num_levels
     );
 
@@ -361,7 +375,10 @@ fn test_config_serialization() {
     let serialized = toml::to_string(&config).expect("Should serialize to TOML");
     assert!(serialized.contains("[advanced_features"));
 
-    println!("Config serialized successfully ({} bytes)", serialized.len());
+    println!(
+        "Config serialized successfully ({} bytes)",
+        serialized.len()
+    );
 }
 
 #[test]
@@ -410,7 +427,9 @@ fn test_entity_temporal_fields() {
 #[tokio::test]
 async fn test_rograg_causal_analyzer_integration() {
     // Test Phase 2.3 enhancement: RoGRAG with CausalAnalyzer integration
-    use graphrag_core::rograg::{LogicFormQuery, LogicFormExecutor, Predicate, Argument, ArgumentType, LogicQueryType};
+    use graphrag_core::rograg::{
+        Argument, ArgumentType, LogicFormExecutor, LogicFormQuery, LogicQueryType, Predicate,
+    };
 
     let graph = create_philosophy_graph();
 
@@ -446,16 +465,24 @@ async fn test_rograg_causal_analyzer_integration() {
     assert!(!bindings.is_empty(), "Should find causal bindings");
 
     // Check that results include temporal consistency information
-    let has_temporal_info = bindings.iter().any(|b| {
-        b.value.contains("temporally consistent")
-            || b.value.contains("Causal chain")
-    });
+    let has_temporal_info = bindings
+        .iter()
+        .any(|b| b.value.contains("temporally consistent") || b.value.contains("Causal chain"));
 
-    assert!(has_temporal_info, "Should include temporal consistency information");
+    assert!(
+        has_temporal_info,
+        "Should include temporal consistency information"
+    );
 
-    println!("RoGRAG CausalAnalyzer integration test: {} bindings found", bindings.len());
+    println!(
+        "RoGRAG CausalAnalyzer integration test: {} bindings found",
+        bindings.len()
+    );
     for binding in &bindings {
-        println!("  - {} (confidence: {:.2})", binding.value, binding.confidence);
+        println!(
+            "  - {} (confidence: {:.2})",
+            binding.value, binding.confidence
+        );
     }
 }
 
@@ -486,8 +513,10 @@ async fn test_end_to_end_advanced_pipeline() {
         assert!(boosted_weight >= base_weight);
     }
 
-    println!("Step 2: Applied dynamic weighting to {} relationships",
-             graph_arc.get_all_relationships().len());
+    println!(
+        "Step 2: Applied dynamic weighting to {} relationships",
+        graph_arc.get_all_relationships().len()
+    );
 
     // 3. Hierarchical Clustering (builder setup)
     let rels: Vec<Relationship> = graph_arc

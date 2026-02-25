@@ -328,7 +328,7 @@ impl SyntaxAnalyzer {
                     return lower[..lower.len() - 1].to_string();
                 }
                 lower
-            }
+            },
             POSTag::VerbPast | POSTag::Verb3rdSing => {
                 // Remove -ed, -s
                 if lower.ends_with("ed") {
@@ -338,14 +338,14 @@ impl SyntaxAnalyzer {
                     return lower[..lower.len() - 1].to_string();
                 }
                 lower
-            }
+            },
             POSTag::VerbGerund => {
                 // Remove -ing
                 if lower.ends_with("ing") {
                     return lower[..lower.len() - 3].to_string();
                 }
                 lower
-            }
+            },
             _ => lower,
         }
     }
@@ -398,8 +398,9 @@ impl SyntaxAnalyzer {
             match tokens[i].pos {
                 POSTag::Adjective => {
                     // Find next noun
-                    if let Some(noun_idx) =
-                        tokens[i + 1..].iter().position(|t| matches!(t.pos, POSTag::Noun | POSTag::ProperNoun))
+                    if let Some(noun_idx) = tokens[i + 1..]
+                        .iter()
+                        .position(|t| matches!(t.pos, POSTag::Noun | POSTag::ProperNoun))
                     {
                         dependencies.push(Dependency {
                             head: i + 1 + noun_idx,
@@ -407,7 +408,7 @@ impl SyntaxAnalyzer {
                             relation: DependencyRelation::Modifier,
                         });
                     }
-                }
+                },
                 POSTag::Adverb => {
                     // Modify nearest verb
                     let verb_idx = tokens.iter().position(|t| {
@@ -420,11 +421,12 @@ impl SyntaxAnalyzer {
                             relation: DependencyRelation::Modifier,
                         });
                     }
-                }
+                },
                 POSTag::Determiner => {
                     // Determine next noun
-                    if let Some(noun_idx) =
-                        tokens[i + 1..].iter().position(|t| matches!(t.pos, POSTag::Noun | POSTag::ProperNoun))
+                    if let Some(noun_idx) = tokens[i + 1..]
+                        .iter()
+                        .position(|t| matches!(t.pos, POSTag::Noun | POSTag::ProperNoun))
                     {
                         dependencies.push(Dependency {
                             head: i + 1 + noun_idx,
@@ -432,8 +434,8 @@ impl SyntaxAnalyzer {
                             relation: DependencyRelation::Determiner,
                         });
                     }
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
 
@@ -451,12 +453,15 @@ impl SyntaxAnalyzer {
                 POSTag::Determiner | POSTag::Adjective => {
                     // Start or continue noun phrase
                     current_phrase.push(token.clone());
-                }
-                POSTag::Noun | POSTag::ProperNoun | POSTag::NounPlural | POSTag::ProperNounPlural => {
+                },
+                POSTag::Noun
+                | POSTag::ProperNoun
+                | POSTag::NounPlural
+                | POSTag::ProperNounPlural => {
                     // Add noun to phrase
                     head_idx = current_phrase.len();
                     current_phrase.push(token.clone());
-                }
+                },
                 _ => {
                     // End of noun phrase
                     if !current_phrase.is_empty() {
@@ -475,7 +480,7 @@ impl SyntaxAnalyzer {
                         current_phrase.clear();
                         head_idx = 0;
                     }
-                }
+                },
             }
         }
 
@@ -510,72 +515,140 @@ impl SyntaxAnalyzer {
     // Dictionary builders
     fn build_noun_dict() -> HashMap<String, POSTag> {
         let nouns = vec![
-            "time", "person", "year", "way", "day", "thing", "man", "world", "life",
-            "hand", "part", "child", "eye", "woman", "place", "work", "week", "case",
-            "point", "government", "company", "number", "group", "problem", "fact",
+            "time",
+            "person",
+            "year",
+            "way",
+            "day",
+            "thing",
+            "man",
+            "world",
+            "life",
+            "hand",
+            "part",
+            "child",
+            "eye",
+            "woman",
+            "place",
+            "work",
+            "week",
+            "case",
+            "point",
+            "government",
+            "company",
+            "number",
+            "group",
+            "problem",
+            "fact",
         ];
-        nouns.into_iter().map(|s| (s.to_string(), POSTag::Noun)).collect()
+        nouns
+            .into_iter()
+            .map(|s| (s.to_string(), POSTag::Noun))
+            .collect()
     }
 
     fn build_verb_dict() -> HashMap<String, POSTag> {
         let verbs = vec![
-            "be", "have", "do", "say", "get", "make", "go", "know", "take", "see",
-            "come", "think", "look", "want", "give", "use", "find", "tell", "ask",
-            "work", "seem", "feel", "try", "leave", "call",
+            "be", "have", "do", "say", "get", "make", "go", "know", "take", "see", "come", "think",
+            "look", "want", "give", "use", "find", "tell", "ask", "work", "seem", "feel", "try",
+            "leave", "call",
         ];
-        verbs.into_iter().map(|s| (s.to_string(), POSTag::Verb)).collect()
+        verbs
+            .into_iter()
+            .map(|s| (s.to_string(), POSTag::Verb))
+            .collect()
     }
 
     fn build_adjective_dict() -> HashMap<String, POSTag> {
         let adjectives = vec![
-            "good", "new", "first", "last", "long", "great", "little", "own", "other",
-            "old", "right", "big", "high", "different", "small", "large", "next",
-            "early", "young", "important", "few", "public", "bad", "same", "able",
+            "good",
+            "new",
+            "first",
+            "last",
+            "long",
+            "great",
+            "little",
+            "own",
+            "other",
+            "old",
+            "right",
+            "big",
+            "high",
+            "different",
+            "small",
+            "large",
+            "next",
+            "early",
+            "young",
+            "important",
+            "few",
+            "public",
+            "bad",
+            "same",
+            "able",
         ];
-        adjectives.into_iter().map(|s| (s.to_string(), POSTag::Adjective)).collect()
+        adjectives
+            .into_iter()
+            .map(|s| (s.to_string(), POSTag::Adjective))
+            .collect()
     }
 
     fn build_adverb_dict() -> HashMap<String, POSTag> {
         let adverbs = vec![
-            "not", "so", "out", "up", "now", "only", "just", "more", "also", "very",
-            "well", "back", "there", "even", "still", "too", "here", "then", "always",
-            "never", "often", "quite", "really", "almost", "again",
+            "not", "so", "out", "up", "now", "only", "just", "more", "also", "very", "well",
+            "back", "there", "even", "still", "too", "here", "then", "always", "never", "often",
+            "quite", "really", "almost", "again",
         ];
-        adverbs.into_iter().map(|s| (s.to_string(), POSTag::Adverb)).collect()
+        adverbs
+            .into_iter()
+            .map(|s| (s.to_string(), POSTag::Adverb))
+            .collect()
     }
 
     fn build_preposition_dict() -> HashMap<String, POSTag> {
         let prepositions = vec![
-            "of", "in", "to", "for", "with", "on", "at", "from", "by", "about",
-            "into", "through", "during", "before", "after", "above", "below", "between",
-            "under", "since", "without", "within", "along", "among", "across",
+            "of", "in", "to", "for", "with", "on", "at", "from", "by", "about", "into", "through",
+            "during", "before", "after", "above", "below", "between", "under", "since", "without",
+            "within", "along", "among", "across",
         ];
-        prepositions.into_iter().map(|s| (s.to_string(), POSTag::Preposition)).collect()
+        prepositions
+            .into_iter()
+            .map(|s| (s.to_string(), POSTag::Preposition))
+            .collect()
     }
 
     fn build_determiner_dict() -> HashMap<String, POSTag> {
         let determiners = vec![
-            "the", "a", "an", "this", "that", "these", "those", "my", "your",
-            "his", "her", "its", "our", "their", "all", "both", "each", "every",
-            "some", "any", "no", "another", "such", "what", "which",
+            "the", "a", "an", "this", "that", "these", "those", "my", "your", "his", "her", "its",
+            "our", "their", "all", "both", "each", "every", "some", "any", "no", "another", "such",
+            "what", "which",
         ];
-        determiners.into_iter().map(|s| (s.to_string(), POSTag::Determiner)).collect()
+        determiners
+            .into_iter()
+            .map(|s| (s.to_string(), POSTag::Determiner))
+            .collect()
     }
 
     fn build_pronoun_dict() -> HashMap<String, POSTag> {
         let pronouns = vec![
-            "i", "you", "he", "she", "it", "we", "they", "me", "him", "her",
-            "us", "them", "who", "whom", "what", "which", "this", "that",
+            "i", "you", "he", "she", "it", "we", "they", "me", "him", "her", "us", "them", "who",
+            "whom", "what", "which", "this", "that",
         ];
-        pronouns.into_iter().map(|s| (s.to_string(), POSTag::Pronoun)).collect()
+        pronouns
+            .into_iter()
+            .map(|s| (s.to_string(), POSTag::Pronoun))
+            .collect()
     }
 
     fn build_conjunction_dict() -> HashMap<String, POSTag> {
         let conjunctions = vec![
-            "and", "or", "but", "nor", "yet", "so", "for", "because", "although",
-            "though", "while", "if", "unless", "until", "when", "where",
+            "and", "or", "but", "nor", "yet", "so", "for", "because", "although", "though",
+            "while", "if", "unless", "until", "when", "where",
         ];
-        conjunctions.into_iter().map(|s| (s.to_string(), POSTag::Conjunction)).collect()
+        conjunctions
+            .into_iter()
+            .map(|s| (s.to_string(), POSTag::Conjunction))
+            .collect()
     }
 }
 
@@ -596,7 +669,7 @@ mod tests {
         assert_eq!(tokens[0].pos, POSTag::Determiner); // "The"
         assert_eq!(tokens[1].pos, POSTag::Adjective); // "good" (in dictionary)
         assert!(matches!(tokens[3].pos, POSTag::Noun | POSTag::ProperNoun)); // "fox"
-        // "jumps" ends with 's' but may be tagged as plural noun, so we check it's present
+                                                                             // "jumps" ends with 's' but may be tagged as plural noun, so we check it's present
         assert!(tokens.iter().any(|t| t.text == "jumps"));
     }
 
@@ -633,7 +706,9 @@ mod tests {
         assert!(!deps.is_empty());
 
         // Find subject dependency
-        let has_subject = deps.iter().any(|d| matches!(d.relation, DependencyRelation::Subject));
+        let has_subject = deps
+            .iter()
+            .any(|d| matches!(d.relation, DependencyRelation::Subject));
         assert!(has_subject, "Should have subject dependency");
     }
 
@@ -670,7 +745,8 @@ mod tests {
         let tokens = analyzer.pos_tag(text).unwrap();
 
         // Should detect proper nouns
-        let proper_nouns: Vec<_> = tokens.iter()
+        let proper_nouns: Vec<_> = tokens
+            .iter()
             .filter(|t| matches!(t.pos, POSTag::ProperNoun))
             .collect();
 

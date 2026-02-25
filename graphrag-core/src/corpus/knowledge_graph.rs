@@ -1,14 +1,14 @@
 //! Corpus-level knowledge graph construction and management
 
 use crate::core::Result;
-use crate::corpus::entity_linker::EntityCluster;
 use crate::corpus::document_manager::DocumentCollection;
-use std::collections::{HashMap, HashSet};
-use std::path::Path;
-use serde::{Deserialize, Serialize};
-use petgraph::{Graph, Directed};
+use crate::corpus::entity_linker::EntityCluster;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
+use petgraph::{Directed, Graph};
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GlobalEntity {
@@ -116,8 +116,10 @@ impl CorpusKnowledgeGraph {
             let global_entity = self.create_global_entity(cluster)?;
             let node_index = self.graph.add_node(global_entity.id.clone());
 
-            self.entity_node_map.insert(global_entity.id.clone(), node_index);
-            self.global_entities.insert(global_entity.id.clone(), global_entity);
+            self.entity_node_map
+                .insert(global_entity.id.clone(), node_index);
+            self.global_entities
+                .insert(global_entity.id.clone(), global_entity);
 
             // Map documents to entities
             for member in &cluster.member_entities {
@@ -129,7 +131,8 @@ impl CorpusKnowledgeGraph {
         }
 
         // Step 2: Identify cross-document relations
-        self.identify_cross_document_relations(&clusters, collection).await?;
+        self.identify_cross_document_relations(&clusters, collection)
+            .await?;
 
         // Step 3: Calculate entity importance scores
         self.calculate_importance_scores();
@@ -149,7 +152,8 @@ impl CorpusKnowledgeGraph {
     /// Create a global entity from an entity cluster
     fn create_global_entity(&self, cluster: &EntityCluster) -> Result<GlobalEntity> {
         let total_mentions = cluster.member_entities.len();
-        let source_documents: Vec<String> = cluster.member_entities
+        let source_documents: Vec<String> = cluster
+            .member_entities
             .iter()
             .map(|e| e.document_id.clone())
             .collect::<HashSet<_>>()
@@ -233,24 +237,34 @@ impl CorpusKnowledgeGraph {
                             self.entity_node_map.get(source_id),
                             self.entity_node_map.get(target_id),
                         ) {
-                            self.graph.add_edge(source_node, target_node, relation.relation_type.clone());
+                            self.graph.add_edge(
+                                source_node,
+                                target_node,
+                                relation.relation_type.clone(),
+                            );
                         }
 
                         self.global_relations.insert(relation_key, relation);
                         relation_counter += 1;
                     } else {
                         // Increment frequency for existing relation
-                        if let Some(existing_relation) = self.global_relations.get_mut(&relation_key) {
+                        if let Some(existing_relation) =
+                            self.global_relations.get_mut(&relation_key)
+                        {
                             existing_relation.document_frequency += 1;
                             existing_relation.source_documents.push(doc_id.clone());
-                            existing_relation.confidence = (existing_relation.confidence + 0.1).min(1.0);
+                            existing_relation.confidence =
+                                (existing_relation.confidence + 0.1).min(1.0);
                         }
                     }
                 }
             }
         }
 
-        tracing::debug!(relation_count = self.global_relations.len(), "Cross-document relations identified");
+        tracing::debug!(
+            relation_count = self.global_relations.len(),
+            "Cross-document relations identified"
+        );
         Ok(())
     }
 
@@ -305,14 +319,17 @@ impl CorpusKnowledgeGraph {
 
         // Calculate average connections
         if self.stats.total_entities > 0 {
-            self.stats.avg_entity_connections = (self.stats.total_relations * 2) as f32 / self.stats.total_entities as f32;
+            self.stats.avg_entity_connections =
+                (self.stats.total_relations * 2) as f32 / self.stats.total_entities as f32;
         }
 
         // Calculate graph density
         if self.stats.total_entities > 1 {
-            let max_possible_edges = self.stats.total_entities * (self.stats.total_entities - 1) / 2;
+            let max_possible_edges =
+                self.stats.total_entities * (self.stats.total_entities - 1) / 2;
             if max_possible_edges > 0 {
-                self.stats.graph_density = self.stats.total_relations as f32 / max_possible_edges as f32;
+                self.stats.graph_density =
+                    self.stats.total_relations as f32 / max_possible_edges as f32;
             }
         }
 
@@ -332,7 +349,10 @@ impl CorpusKnowledgeGraph {
     }
 
     /// Integrate a new document into the existing knowledge graph
-    pub async fn integrate_new_document(&mut self, _document_metadata: &crate::corpus::document_manager::DocumentMetadata) -> Result<()> {
+    pub async fn integrate_new_document(
+        &mut self,
+        _document_metadata: &crate::corpus::document_manager::DocumentMetadata,
+    ) -> Result<()> {
         // Placeholder implementation
         // In practice, this would:
         // 1. Extract entities from the new document
@@ -352,7 +372,9 @@ impl CorpusKnowledgeGraph {
         // Simple text matching against entity names and aliases
         for entity in self.global_entities.values() {
             let name_match = entity.canonical_name.to_lowercase().contains(&query_lower);
-            let alias_match = entity.aliases.iter()
+            let alias_match = entity
+                .aliases
+                .iter()
                 .any(|alias| alias.to_lowercase().contains(&query_lower));
 
             if name_match || alias_match {
@@ -361,7 +383,11 @@ impl CorpusKnowledgeGraph {
         }
 
         // Sort by importance score
-        results.sort_by(|a, b| b.importance_score.partial_cmp(&a.importance_score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.importance_score
+                .partial_cmp(&a.importance_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         tracing::debug!(match_count = results.len(), "Found matching entities");
         Ok(results)
@@ -393,7 +419,8 @@ impl CorpusKnowledgeGraph {
 
     /// Get entities by type
     pub fn get_entities_by_type(&self, entity_type: &str) -> Vec<&GlobalEntity> {
-        self.global_entities.values()
+        self.global_entities
+            .values()
             .filter(|entity| entity.entity_type == entity_type)
             .collect()
     }
@@ -401,13 +428,18 @@ impl CorpusKnowledgeGraph {
     /// Get most important entities
     pub fn get_top_entities(&self, limit: usize) -> Vec<&GlobalEntity> {
         let mut entities: Vec<&GlobalEntity> = self.global_entities.values().collect();
-        entities.sort_by(|a, b| b.importance_score.partial_cmp(&a.importance_score).unwrap_or(std::cmp::Ordering::Equal));
+        entities.sort_by(|a, b| {
+            b.importance_score
+                .partial_cmp(&a.importance_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         entities.into_iter().take(limit).collect()
     }
 
     /// Get entities that appear in multiple documents
     pub fn get_cross_document_entities(&self) -> Vec<&GlobalEntity> {
-        self.global_entities.values()
+        self.global_entities
+            .values()
             .filter(|entity| entity.document_frequency > 1)
             .collect()
     }

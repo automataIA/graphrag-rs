@@ -4,9 +4,9 @@
 //! GraphRAG user interfaces in the browser.
 
 pub mod force_layout;
-pub mod ui_components;
-pub mod settings;
 pub mod hierarchy;
+pub mod settings;
+pub mod ui_components;
 
 // Re-export settings components
 pub use settings::SettingsPanel;
@@ -14,13 +14,13 @@ pub use settings::SettingsPanel;
 // Re-export UI components
 #[allow(unused_imports)]
 pub use ui_components::{
-    ChatWindow, QueryInterface, GraphStats, DocumentManager, GraphVisualization,
-    ChatMessage, MessageRole, GraphNode, GraphEdge,
+    ChatMessage, ChatWindow, DocumentManager, GraphEdge, GraphNode, GraphStats, GraphVisualization,
+    MessageRole, QueryInterface,
 };
 
 // Re-export hierarchy components
 #[allow(unused_imports)]
 pub use hierarchy::{
-    HierarchyExplorer, CommunityCard, LevelSelector, AdaptiveQueryPanel,
-    CommunityData, QueryAnalysisResult, QueryResult,
+    AdaptiveQueryPanel, CommunityCard, CommunityData, HierarchyExplorer, LevelSelector,
+    QueryAnalysisResult, QueryResult,
 };

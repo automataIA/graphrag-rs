@@ -3,9 +3,9 @@
 //! Comprehensive tests for IndexedDB and Cache API storage implementations.
 //! Validates all CRUD operations, error handling, and edge cases.
 
+use graphrag_wasm::storage::{estimate_storage, CacheStore, IndexedDBStore};
+use serde::{Deserialize, Serialize};
 use wasm_bindgen_test::*;
-use graphrag_wasm::storage::{IndexedDBStore, CacheStore, estimate_storage};
-use serde::{Serialize, Deserialize};
 
 wasm_bindgen_test_configure!(run_in_browser);
 
@@ -126,7 +126,9 @@ async fn test_indexeddb_clear() {
     // Put multiple items
     for i in 0..5 {
         let data = serde_json::json!({"id": i, "value": format!("item_{}", i)});
-        db.put("clearable", &format!("item{}", i), &data).await.unwrap();
+        db.put("clearable", &format!("item{}", i), &data)
+            .await
+            .unwrap();
     }
 
     // Clear all
@@ -198,7 +200,8 @@ async fn test_indexeddb_concurrent() {
 
     // Verify all were stored
     for i in 0..10 {
-        let retrieved: serde_json::Value = db.get("concurrent", &format!("item{}", i)).await.unwrap();
+        let retrieved: serde_json::Value =
+            db.get("concurrent", &format!("item{}", i)).await.unwrap();
         assert_eq!(retrieved["id"], i);
     }
 }
@@ -356,10 +359,9 @@ async fn test_storage_estimation() {
 
     match result {
         Ok((usage, quota, percentage)) => {
-            web_sys::console::log_1(&format!(
-                "Storage: {} / {} bytes ({:.1}%)",
-                usage, quota, percentage
-            ).into());
+            web_sys::console::log_1(
+                &format!("Storage: {} / {} bytes ({:.1}%)", usage, quota, percentage).into(),
+            );
 
             // Quota should be positive
             assert!(quota > 0);
@@ -369,13 +371,10 @@ async fn test_storage_estimation() {
 
             // Usage should not exceed quota
             assert!(usage <= quota);
-        }
+        },
         Err(e) => {
-            web_sys::console::warn_1(&format!(
-                "Storage estimation not available: {:?}",
-                e
-            ).into());
-        }
+            web_sys::console::warn_1(&format!("Storage estimation not available: {:?}", e).into());
+        },
     }
 }
 
@@ -393,19 +392,24 @@ async fn test_storage_after_operations() {
     let (initial_usage, _, _) = initial_result.unwrap();
 
     // Store some data
-    let db = IndexedDBStore::new("test-storage-tracking", 1).await.unwrap();
+    let db = IndexedDBStore::new("test-storage-tracking", 1)
+        .await
+        .unwrap();
     let large_data: Vec<f32> = (0..10_000).map(|i| i as f32).collect();
     db.put("test", "large_item", &large_data).await.unwrap();
 
     // Get storage again
     let after_result = estimate_storage().await;
     if let Ok((after_usage, _, _)) = after_result {
-        web_sys::console::log_1(&format!(
-            "Storage before: {}, after: {}, delta: {}",
-            initial_usage,
-            after_usage,
-            after_usage as i64 - initial_usage as i64
-        ).into());
+        web_sys::console::log_1(
+            &format!(
+                "Storage before: {}, after: {}, delta: {}",
+                initial_usage,
+                after_usage,
+                after_usage as i64 - initial_usage as i64
+            )
+            .into(),
+        );
 
         // Usage should have increased (or stayed same due to caching)
         assert!(after_usage >= initial_usage);
@@ -430,7 +434,9 @@ async fn test_get_nonexistent_key() {
 /// Test: Delete non-existent key
 #[wasm_bindgen_test]
 async fn test_delete_nonexistent() {
-    let db = IndexedDBStore::new("test-delete-nonexistent", 1).await.unwrap();
+    let db = IndexedDBStore::new("test-delete-nonexistent", 1)
+        .await
+        .unwrap();
 
     // Deleting non-existent key should not error (idempotent)
     let result = db.delete("test", "does-not-exist").await;

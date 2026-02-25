@@ -184,9 +184,7 @@ impl AuthState {
     /// Validate an API key
     pub async fn validate_api_key(&self, key: &str) -> Result<ApiKey, AuthError> {
         let keys = self.api_keys.read().await;
-        keys.get(key)
-            .cloned()
-            .ok_or(AuthError::InvalidApiKey)
+        keys.get(key).cloned().ok_or(AuthError::InvalidApiKey)
     }
 
     /// Revoke an API key
@@ -198,7 +196,11 @@ impl AuthState {
     }
 
     /// Check rate limit for a user
-    pub async fn check_rate_limit(&self, user_id: &str, limit: &RateLimit) -> Result<(), AuthError> {
+    pub async fn check_rate_limit(
+        &self,
+        user_id: &str,
+        limit: &RateLimit,
+    ) -> Result<(), AuthError> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -206,9 +208,7 @@ impl AuthState {
 
         let mut rate_limits = self.rate_limits.write().await;
 
-        let (count, window_start) = rate_limits
-            .entry(user_id.to_string())
-            .or_insert((0, now));
+        let (count, window_start) = rate_limits.entry(user_id.to_string()).or_insert((0, now));
 
         // Reset if window expired
         if now - *window_start >= limit.window_seconds {
@@ -264,9 +264,13 @@ impl IntoResponse for AuthError {
             AuthError::InvalidAuthFormat => (StatusCode::UNAUTHORIZED, self.to_string()),
             AuthError::InvalidToken(_) => (StatusCode::UNAUTHORIZED, self.to_string()),
             AuthError::InvalidApiKey => (StatusCode::UNAUTHORIZED, self.to_string()),
-            AuthError::TokenGenerationFailed(_) => (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()),
+            AuthError::TokenGenerationFailed(_) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, self.to_string())
+            },
             AuthError::InsufficientPermissions => (StatusCode::FORBIDDEN, self.to_string()),
-            AuthError::RateLimitExceeded { .. } => (StatusCode::TOO_MANY_REQUESTS, self.to_string()),
+            AuthError::RateLimitExceeded { .. } => {
+                (StatusCode::TOO_MANY_REQUESTS, self.to_string())
+            },
         };
 
         (status, message).into_response()
@@ -305,7 +309,9 @@ pub async fn extract_auth_user(
         let api_key = auth_state.validate_api_key(key).await?;
 
         // Check rate limit
-        auth_state.check_rate_limit(&api_key.user_id, &api_key.rate_limit).await?;
+        auth_state
+            .check_rate_limit(&api_key.user_id, &api_key.rate_limit)
+            .await?;
 
         return Ok(AuthUser {
             user_id: api_key.user_id,
@@ -340,7 +346,11 @@ pub async fn auth_middleware(
 #[allow(dead_code)]
 pub async fn require_role(
     minimum_role: UserRole,
-) -> impl Fn(axum::extract::Extension<AuthUser>, Request, Next) -> futures::future::BoxFuture<'static, Result<Response, AuthError>> {
+) -> impl Fn(
+    axum::extract::Extension<AuthUser>,
+    Request,
+    Next,
+) -> futures::future::BoxFuture<'static, Result<Response, AuthError>> {
     move |Extension(user): axum::extract::Extension<AuthUser>, request: Request, next: Next| {
         let minimum_role = minimum_role.clone();
         Box::pin(async move {
@@ -373,7 +383,9 @@ mod tests {
     async fn test_jwt_token() {
         let auth_state = AuthState::new("test_secret_key_32_characters_long".to_string());
 
-        let token = auth_state.generate_token("user123", UserRole::User, 24).unwrap();
+        let token = auth_state
+            .generate_token("user123", UserRole::User, 24)
+            .unwrap();
         let claims = auth_state.validate_token(&token).unwrap();
 
         assert_eq!(claims.sub, "user123");
@@ -384,7 +396,10 @@ mod tests {
     async fn test_api_key() {
         let auth_state = AuthState::new("test_secret".to_string());
 
-        let key = auth_state.create_api_key("user123", UserRole::User, None).await.unwrap();
+        let key = auth_state
+            .create_api_key("user123", UserRole::User, None)
+            .await
+            .unwrap();
         let api_key = auth_state.validate_api_key(&key).await.unwrap();
 
         assert_eq!(api_key.user_id, "user123");
@@ -401,8 +416,14 @@ mod tests {
         };
 
         // First two requests should succeed
-        auth_state.check_rate_limit("user123", &limit).await.unwrap();
-        auth_state.check_rate_limit("user123", &limit).await.unwrap();
+        auth_state
+            .check_rate_limit("user123", &limit)
+            .await
+            .unwrap();
+        auth_state
+            .check_rate_limit("user123", &limit)
+            .await
+            .unwrap();
 
         // Third should fail
         let result = auth_state.check_rate_limit("user123", &limit).await;

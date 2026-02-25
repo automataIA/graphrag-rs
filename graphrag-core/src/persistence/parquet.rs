@@ -54,9 +54,9 @@ use arrow::array::{
 #[cfg(feature = "persistent-storage")]
 use arrow::datatypes::{DataType, Field, Schema};
 #[cfg(feature = "persistent-storage")]
-use parquet::arrow::arrow_writer::ArrowWriter;
-#[cfg(feature = "persistent-storage")]
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+#[cfg(feature = "persistent-storage")]
+use parquet::arrow::arrow_writer::ArrowWriter;
 #[cfg(feature = "persistent-storage")]
 use parquet::file::properties::WriterProperties;
 
@@ -280,11 +280,10 @@ impl ParquetPersistence {
             .set_compression(self.get_compression())
             .build();
 
-        let mut writer = ArrowWriter::try_new(file, schema, Some(props)).map_err(|e| {
-            GraphRAGError::Config {
+        let mut writer =
+            ArrowWriter::try_new(file, schema, Some(props)).map_err(|e| GraphRAGError::Config {
                 message: format!("Failed to create ArrowWriter: {}", e),
-            }
-        })?;
+            })?;
 
         writer.write(&batch).map_err(|e| GraphRAGError::Config {
             message: format!("Failed to write batch: {}", e),
@@ -483,11 +482,10 @@ impl ParquetPersistence {
             .set_compression(self.get_compression())
             .build();
 
-        let mut writer = ArrowWriter::try_new(file, schema, Some(props)).map_err(|e| {
-            GraphRAGError::Config {
+        let mut writer =
+            ArrowWriter::try_new(file, schema, Some(props)).map_err(|e| GraphRAGError::Config {
                 message: format!("Failed to create ArrowWriter: {}", e),
-            }
-        })?;
+            })?;
 
         writer.write(&batch).map_err(|e| GraphRAGError::Config {
             message: format!("Failed to write batch: {}", e),
@@ -659,14 +657,9 @@ impl ParquetPersistence {
             .map(|c| Some(c.document_id.0.as_str()))
             .collect();
         let contents: StringArray = chunks.iter().map(|c| Some(c.content.as_str())).collect();
-        let start_offsets: UInt64Array = chunks
-            .iter()
-            .map(|c| Some(c.start_offset as u64))
-            .collect();
-        let end_offsets: UInt64Array = chunks
-            .iter()
-            .map(|c| Some(c.end_offset as u64))
-            .collect();
+        let start_offsets: UInt64Array =
+            chunks.iter().map(|c| Some(c.start_offset as u64)).collect();
+        let end_offsets: UInt64Array = chunks.iter().map(|c| Some(c.end_offset as u64)).collect();
 
         // Build embeddings ListArray
         let mut embedding_builder = ListBuilder::new(arrow::array::Float32Builder::new());
@@ -740,11 +733,10 @@ impl ParquetPersistence {
             .set_compression(self.get_compression())
             .build();
 
-        let mut writer = ArrowWriter::try_new(file, schema, Some(props)).map_err(|e| {
-            GraphRAGError::Config {
+        let mut writer =
+            ArrowWriter::try_new(file, schema, Some(props)).map_err(|e| GraphRAGError::Config {
                 message: format!("Failed to create ArrowWriter: {}", e),
-            }
-        })?;
+            })?;
 
         writer.write(&batch).map_err(|e| GraphRAGError::Config {
             message: format!("Failed to write batch: {}", e),
@@ -893,12 +885,13 @@ impl ParquetPersistence {
                 let mut entities = Vec::new();
                 if !entities_col.is_null(i) {
                     let ent_list = entities_col.value(i);
-                    let ent_strings = ent_list
-                        .as_any()
-                        .downcast_ref::<StringArray>()
-                        .ok_or_else(|| GraphRAGError::Config {
-                            message: "Invalid entities list type".to_string(),
-                        })?;
+                    let ent_strings =
+                        ent_list
+                            .as_any()
+                            .downcast_ref::<StringArray>()
+                            .ok_or_else(|| GraphRAGError::Config {
+                                message: "Invalid entities list type".to_string(),
+                            })?;
 
                     for j in 0..ent_strings.len() {
                         if !ent_strings.is_null(j) {
@@ -911,12 +904,13 @@ impl ParquetPersistence {
                 let mut keywords = Vec::new();
                 if !keywords_col.is_null(i) {
                     let kw_list = keywords_col.value(i);
-                    let kw_strings = kw_list
-                        .as_any()
-                        .downcast_ref::<StringArray>()
-                        .ok_or_else(|| GraphRAGError::Config {
-                            message: "Invalid keywords list type".to_string(),
-                        })?;
+                    let kw_strings =
+                        kw_list
+                            .as_any()
+                            .downcast_ref::<StringArray>()
+                            .ok_or_else(|| GraphRAGError::Config {
+                                message: "Invalid keywords list type".to_string(),
+                            })?;
 
                     for j in 0..kw_strings.len() {
                         if !kw_strings.is_null(j) {
@@ -1039,11 +1033,10 @@ impl ParquetPersistence {
             .set_compression(self.get_compression())
             .build();
 
-        let mut writer = ArrowWriter::try_new(file, schema, Some(props)).map_err(|e| {
-            GraphRAGError::Config {
+        let mut writer =
+            ArrowWriter::try_new(file, schema, Some(props)).map_err(|e| GraphRAGError::Config {
                 message: format!("Failed to create ArrowWriter: {}", e),
-            }
-        })?;
+            })?;
 
         writer.write(&batch).map_err(|e| GraphRAGError::Config {
             message: format!("Failed to write batch: {}", e),
@@ -1054,11 +1047,7 @@ impl ParquetPersistence {
         })?;
 
         #[cfg(feature = "tracing")]
-        tracing::info!(
-            "Saved {} documents to {:?}",
-            documents.len(),
-            file_path
-        );
+        tracing::info!("Saved {} documents to {:?}", documents.len(), file_path);
 
         Ok(())
     }
@@ -1175,11 +1164,7 @@ impl ParquetPersistence {
         }
 
         #[cfg(feature = "tracing")]
-        tracing::info!(
-            "Loaded {} documents from {:?}",
-            documents.len(),
-            file_path
-        );
+        tracing::info!("Loaded {} documents from {:?}", documents.len(), file_path);
 
         Ok(documents)
     }

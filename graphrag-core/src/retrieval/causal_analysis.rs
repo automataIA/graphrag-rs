@@ -146,7 +146,8 @@ impl CausalChain {
 
     /// Get a human-readable description of the chain
     pub fn describe(&self) -> String {
-        let step_descriptions: Vec<String> = self.steps
+        let step_descriptions: Vec<String> = self
+            .steps
             .iter()
             .map(|s| format!("{} --[{}]--> {}", s.source.0, s.relation_type, s.target.0))
             .collect();
@@ -290,10 +291,7 @@ impl CausalAnalyzer {
         });
 
         #[cfg(feature = "tracing")]
-        tracing::info!(
-            causal_chains = chains.len(),
-            "Found valid causal chains"
-        );
+        tracing::info!(causal_chains = chains.len(), "Found valid causal chains");
 
         Ok(chains)
     }
@@ -454,8 +452,14 @@ mod tests {
 
         let chain = &chains[0];
         assert_eq!(chain.steps.len(), 2, "Chain should have 2 steps (A→B, B→C)");
-        assert!(chain.temporal_consistency, "Chain should be temporally consistent");
-        assert!(chain.total_confidence > 0.6, "Chain should have reasonable confidence");
+        assert!(
+            chain.temporal_consistency,
+            "Chain should be temporally consistent"
+        );
+        assert!(
+            chain.total_confidence > 0.6,
+            "Chain should have reasonable confidence"
+        );
     }
 
     #[test]
@@ -463,9 +467,24 @@ mod tests {
         let mut graph = KnowledgeGraph::new();
 
         // Create entities
-        let a = Entity::new(EntityId::new("a".to_string()), "A".to_string(), "EVENT".to_string(), 0.9);
-        let b = Entity::new(EntityId::new("b".to_string()), "B".to_string(), "EVENT".to_string(), 0.9);
-        let c = Entity::new(EntityId::new("c".to_string()), "C".to_string(), "EVENT".to_string(), 0.9);
+        let a = Entity::new(
+            EntityId::new("a".to_string()),
+            "A".to_string(),
+            "EVENT".to_string(),
+            0.9,
+        );
+        let b = Entity::new(
+            EntityId::new("b".to_string()),
+            "B".to_string(),
+            "EVENT".to_string(),
+            0.9,
+        );
+        let c = Entity::new(
+            EntityId::new("c".to_string()),
+            "C".to_string(),
+            "EVENT".to_string(),
+            0.9,
+        );
 
         graph.add_entity(a).unwrap();
         graph.add_entity(b).unwrap();
@@ -493,14 +512,21 @@ mod tests {
         graph.add_relationship(rel_ab).unwrap();
         graph.add_relationship(rel_bc).unwrap();
 
-        let analyzer = CausalAnalyzer::new(Arc::new(graph))
-            .with_temporal_consistency(true); // Require consistency
+        let analyzer = CausalAnalyzer::new(Arc::new(graph)).with_temporal_consistency(true); // Require consistency
 
         let chains = analyzer
-            .find_causal_chains(&EntityId::new("a".to_string()), &EntityId::new("c".to_string()), 5)
+            .find_causal_chains(
+                &EntityId::new("a".to_string()),
+                &EntityId::new("c".to_string()),
+                5,
+            )
             .unwrap();
 
-        assert_eq!(chains.len(), 0, "Should reject temporally inconsistent chain");
+        assert_eq!(
+            chains.len(),
+            0,
+            "Should reject temporally inconsistent chain"
+        );
     }
 
     #[test]
@@ -540,6 +566,10 @@ mod tests {
         // step1: 0.8 * (0.5 + 0.5*0.9) = 0.8 * 0.95 = 0.76
         // step2: 0.9 * (0.5 + 0.5*0.95) = 0.9 * 0.975 = 0.8775
         // product: 0.76 * 0.8775 ≈ 0.667
-        assert!(confidence > 0.65 && confidence < 0.7, "Confidence calculation incorrect: {}", confidence);
+        assert!(
+            confidence > 0.65 && confidence < 0.7,
+            "Confidence calculation incorrect: {}",
+            confidence
+        );
     }
 }

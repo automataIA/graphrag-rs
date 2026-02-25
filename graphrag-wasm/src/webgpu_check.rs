@@ -247,13 +247,15 @@ pub fn is_webgpu_available() -> bool {
 pub async fn get_recommended_backend() -> String {
     match check_webgpu_support().await {
         Ok(info) if info.available => {
-            console::log_1(&"💡 Recommendation: Use Burn + wgpu or WebLLM for GPU acceleration".into());
+            console::log_1(
+                &"💡 Recommendation: Use Burn + wgpu or WebLLM for GPU acceleration".into(),
+            );
             "webgpu".to_string()
-        }
+        },
         _ => {
             console::log_1(&"💡 Recommendation: Use Candle CPU (fallback)".into());
             "cpu".to_string()
-        }
+        },
     }
 }
 
@@ -275,10 +277,10 @@ mod tests {
         match check_webgpu_support().await {
             Ok(info) => {
                 console::log_1(&info.get_summary().into());
-            }
+            },
             Err(e) => {
                 console::error_1(&format!("Error: {:?}", e).into());
-            }
+            },
         }
     }
 

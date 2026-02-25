@@ -65,9 +65,14 @@ impl std::fmt::Display for GpuEmbedderError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             GpuEmbedderError::WebGPUNotAvailable => {
-                write!(f, "WebGPU not available (requires Chrome 113+, Firefox 121+, Safari 18+)")
-            }
-            GpuEmbedderError::ModelNotLoaded => write!(f, "Model not loaded - call load_model() first"),
+                write!(
+                    f,
+                    "WebGPU not available (requires Chrome 113+, Firefox 121+, Safari 18+)"
+                )
+            },
+            GpuEmbedderError::ModelNotLoaded => {
+                write!(f, "Model not loaded - call load_model() first")
+            },
             GpuEmbedderError::InferenceFailed(msg) => write!(f, "Inference failed: {}", msg),
             GpuEmbedderError::InvalidInput(msg) => write!(f, "Invalid input: {}", msg),
         }
@@ -148,10 +153,9 @@ impl GpuEmbedder {
             .call0(&gpu)
             .map_err(|_| GpuEmbedderError::WebGPUNotAvailable)?;
 
-        let adapter =
-            JsFuture::from(js_sys::Promise::from(adapter_promise))
-                .await
-                .map_err(|_| GpuEmbedderError::WebGPUNotAvailable)?;
+        let adapter = JsFuture::from(js_sys::Promise::from(adapter_promise))
+            .await
+            .map_err(|_| GpuEmbedderError::WebGPUNotAvailable)?;
 
         if adapter.is_null() {
             return Err(GpuEmbedderError::WebGPUNotAvailable);
@@ -165,10 +169,9 @@ impl GpuEmbedder {
             .call0(&adapter)
             .map_err(|_| GpuEmbedderError::WebGPUNotAvailable)?;
 
-        let device =
-            JsFuture::from(js_sys::Promise::from(device_promise))
-                .await
-                .map_err(|_| GpuEmbedderError::WebGPUNotAvailable)?;
+        let device = JsFuture::from(js_sys::Promise::from(device_promise))
+            .await
+            .map_err(|_| GpuEmbedderError::WebGPUNotAvailable)?;
 
         Ok(device)
     }
@@ -189,11 +192,13 @@ impl GpuEmbedder {
             return Err(GpuEmbedderError::WebGPUNotAvailable);
         }
 
-        web_sys::console::log_1(&format!(
-            "Loading model: {} ({}d embeddings)",
-            model_name, self.dimension
-        )
-        .into());
+        web_sys::console::log_1(
+            &format!(
+                "Loading model: {} ({}d embeddings)",
+                model_name, self.dimension
+            )
+            .into(),
+        );
 
         // TODO: Full implementation would:
         // 1. Download model from HuggingFace or cache
@@ -233,9 +238,7 @@ impl GpuEmbedder {
         }
 
         if text.is_empty() {
-            return Err(GpuEmbedderError::InvalidInput(
-                "Empty text".to_string(),
-            ));
+            return Err(GpuEmbedderError::InvalidInput("Empty text".to_string()));
         }
 
         // TODO: Full implementation would:
@@ -430,10 +433,7 @@ impl WasmGpuEmbedder {
 
     /// Get embedding dimension
     pub fn dimension(&self) -> usize {
-        self.inner
-            .as_ref()
-            .map(|e| e.dimension())
-            .unwrap_or(0)
+        self.inner.as_ref().map(|e| e.dimension()).unwrap_or(0)
     }
 
     /// Check if GPU is available
@@ -473,10 +473,12 @@ mod tests {
             Ok(embedder) => {
                 assert!(embedder.is_gpu_available());
                 web_sys::console::log_1(&"✅ WebGPU is available".into());
-            }
+            },
             Err(_) => {
-                web_sys::console::log_1(&"⚠️ WebGPU not available (expected in some browsers)".into());
-            }
+                web_sys::console::log_1(
+                    &"⚠️ WebGPU not available (expected in some browsers)".into(),
+                );
+            },
         }
     }
 }

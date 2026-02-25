@@ -120,8 +120,13 @@ impl LayoutParser for PlainTextLayoutParser {
 
             // If heading detected, add it
             if let Some(level) = detected_level {
-                let heading = Heading::new(level, heading_text, current_offset, current_offset + line.len())
-                    .with_line_number(i);
+                let heading = Heading::new(
+                    level,
+                    heading_text,
+                    current_offset,
+                    current_offset + line.len(),
+                )
+                .with_line_number(i);
 
                 headings.push(heading);
             }
@@ -159,7 +164,8 @@ mod tests {
     #[test]
     fn test_underline_detection() {
         let parser = PlainTextLayoutParser::new();
-        let content = "Chapter One\n===========\n\nSome text\n\nSection 1.1\n-----------\n\nMore text";
+        let content =
+            "Chapter One\n===========\n\nSome text\n\nSection 1.1\n-----------\n\nMore text";
 
         let structure = parser.parse(content);
 

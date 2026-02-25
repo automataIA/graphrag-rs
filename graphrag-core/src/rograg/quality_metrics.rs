@@ -4,9 +4,9 @@
 //! the effectiveness and improvement of the ROGRAG system over baseline GraphRAG.
 
 #[cfg(feature = "rograg")]
-use crate::Result;
-#[cfg(feature = "rograg")]
 use crate::rograg::{DecompositionResult, RogragResponse};
+#[cfg(feature = "rograg")]
+use crate::Result;
 #[cfg(feature = "rograg")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "rograg")]
@@ -30,7 +30,7 @@ pub enum MetricsError {
         /// Name of the metric with invalid value.
         metric: String,
         /// The invalid value that was encountered.
-        value: f64
+        value: f64,
     },
 
     /// Insufficient data points for statistical analysis.
@@ -39,7 +39,7 @@ pub enum MetricsError {
     #[error("Insufficient data for analysis: {reason}")]
     InsufficientData {
         /// Explanation of data insufficiency.
-        reason: String
+        reason: String,
     },
 
     /// Metric calculation encountered an error.
@@ -48,7 +48,7 @@ pub enum MetricsError {
     #[error("Metric calculation failed: {reason}")]
     CalculationFailed {
         /// Description of the calculation failure.
-        reason: String
+        reason: String,
     },
 }
 
@@ -955,7 +955,7 @@ impl QualityMetrics {
             retrieval_strategy_used: self.determine_retrieval_strategy(response),
             response_quality,
             processing_time_ms: processing_time.as_millis() as u64,
-            fallback_used: response.processing_stats.fallback_used ,
+            fallback_used: response.processing_stats.fallback_used,
             confidence_score: response.confidence,
             user_satisfaction: None, // Can be updated later with feedback
         };
@@ -985,7 +985,8 @@ impl QualityMetrics {
     /// Calculate response quality metrics
     fn calculate_response_quality(&self, response: &RogragResponse) -> Result<ResponseQuality> {
         // Accuracy score based on confidence and source credibility
-        let accuracy_score = (response.confidence + self.calculate_source_credibility(response)) / 2.0;
+        let accuracy_score =
+            (response.confidence + self.calculate_source_credibility(response)) / 2.0;
 
         // Completeness score based on answer length and source coverage
         let completeness_score = self.calculate_completeness_score(response);
@@ -1000,11 +1001,12 @@ impl QualityMetrics {
         let source_credibility = self.calculate_source_credibility(response);
 
         // Overall quality as weighted average
-        let overall_quality = (accuracy_score * 0.3 +
-                              completeness_score * 0.25 +
-                              coherence_score * 0.2 +
-                              relevance_score * 0.15 +
-                              source_credibility * 0.1).min(1.0);
+        let overall_quality = (accuracy_score * 0.3
+            + completeness_score * 0.25
+            + coherence_score * 0.2
+            + relevance_score * 0.15
+            + source_credibility * 0.1)
+            .min(1.0);
 
         Ok(ResponseQuality {
             accuracy_score,
@@ -1024,7 +1026,7 @@ impl QualityMetrics {
 
         // Normalize components
         let length_score = (answer_length as f32 / 500.0).min(1.0); // Normalize to 500 chars
-        let source_score = (source_count as f32 / 3.0).min(1.0);   // Normalize to 3 sources
+        let source_score = (source_count as f32 / 3.0).min(1.0); // Normalize to 3 sources
         let coverage_score = (subquery_coverage as f32 / 5.0).min(1.0); // Normalize to 5 subqueries
 
         (length_score + source_score + coverage_score) / 3.0
@@ -1040,11 +1042,26 @@ impl QualityMetrics {
         }
 
         // Look for transition words and logical flow
-        let transition_words = ["however", "therefore", "furthermore", "additionally", "meanwhile",
-                               "consequently", "moreover", "nevertheless", "thus", "hence"];
+        let transition_words = [
+            "however",
+            "therefore",
+            "furthermore",
+            "additionally",
+            "meanwhile",
+            "consequently",
+            "moreover",
+            "nevertheless",
+            "thus",
+            "hence",
+        ];
 
-        let transition_count = sentences.iter()
-            .filter(|s| transition_words.iter().any(|t| s.to_lowercase().contains(t)))
+        let transition_count = sentences
+            .iter()
+            .filter(|s| {
+                transition_words
+                    .iter()
+                    .any(|t| s.to_lowercase().contains(t))
+            })
             .count();
 
         // Calculate coherence based on transitions and sentence flow
@@ -1072,9 +1089,8 @@ impl QualityMetrics {
             .filter(|w| w.len() > 3) // Filter short words
             .collect();
 
-        let answer_words: std::collections::HashSet<&str> = answer_lower
-            .split_whitespace()
-            .collect();
+        let answer_words: std::collections::HashSet<&str> =
+            answer_lower.split_whitespace().collect();
 
         if query_words.is_empty() {
             return 1.0;
@@ -1094,7 +1110,9 @@ impl QualityMetrics {
         let count_score = (response.sources.len() as f32 / 5.0).min(1.0);
 
         // Simple diversity check
-        let prefixes: std::collections::HashSet<String> = response.sources.iter()
+        let prefixes: std::collections::HashSet<String> = response
+            .sources
+            .iter()
             .map(|s| s.chars().take(5).collect())
             .collect();
         let diversity_score = prefixes.len() as f32 / response.sources.len() as f32;
@@ -1104,15 +1122,21 @@ impl QualityMetrics {
 
     /// Determine retrieval strategy used
     fn determine_retrieval_strategy(&self, response: &RogragResponse) -> RetrievalStrategy {
-        let logic_form_count = response.subquery_results.iter()
+        let logic_form_count = response
+            .subquery_results
+            .iter()
             .filter(|r| matches!(r.result_type, crate::rograg::SubqueryResultType::LogicForm))
             .count();
 
-        let fuzzy_match_count = response.subquery_results.iter()
+        let fuzzy_match_count = response
+            .subquery_results
+            .iter()
             .filter(|r| matches!(r.result_type, crate::rograg::SubqueryResultType::FuzzyMatch))
             .count();
 
-        let fallback_count = response.subquery_results.iter()
+        let fallback_count = response
+            .subquery_results
+            .iter()
             .filter(|r| matches!(r.result_type, crate::rograg::SubqueryResultType::Fallback))
             .count();
 
@@ -1141,14 +1165,19 @@ impl QualityMetrics {
         let new_quality = metrics.response_quality.overall_quality as f64;
 
         self.performance_stats.avg_processing_time_ms =
-            (self.performance_stats.avg_processing_time_ms * (total - 1.0) + new_processing_time) / total;
+            (self.performance_stats.avg_processing_time_ms * (total - 1.0) + new_processing_time)
+                / total;
 
         self.performance_stats.avg_quality_score =
             (self.performance_stats.avg_quality_score * (total - 1.0) + new_quality) / total;
 
         // Update rates
-        self.performance_stats.fallback_rate =
-            self.query_history.iter().filter(|m| m.fallback_used).count() as f64 / total;
+        self.performance_stats.fallback_rate = self
+            .query_history
+            .iter()
+            .filter(|m| m.fallback_used)
+            .count() as f64
+            / total;
 
         // Error rate would need to be tracked separately
         self.performance_stats.error_rate = 0.0; // Placeholder
@@ -1169,7 +1198,8 @@ impl QualityMetrics {
             return;
         }
 
-        let time_span = recent_queries.first().unwrap().timestamp - recent_queries.last().unwrap().timestamp;
+        let time_span =
+            recent_queries.first().unwrap().timestamp - recent_queries.last().unwrap().timestamp;
         if time_span > 0 {
             self.performance_stats.throughput_qps = recent_queries.len() as f64 / time_span as f64;
         }
@@ -1181,7 +1211,9 @@ impl QualityMetrics {
         if self.real_time_monitor.current_window.len() >= self.real_time_monitor.window_size {
             self.real_time_monitor.current_window.pop_front();
         }
-        self.real_time_monitor.current_window.push_back(metrics.clone());
+        self.real_time_monitor
+            .current_window
+            .push_back(metrics.clone());
 
         // Check for alerts
         self.check_quality_alerts(&metrics);
@@ -1189,14 +1221,22 @@ impl QualityMetrics {
 
     /// Check for quality alerts
     fn check_quality_alerts(&mut self, metrics: &QueryMetrics) {
-        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
 
         // Quality degradation alert
-        if metrics.response_quality.overall_quality < self.real_time_monitor.alert_thresholds.min_quality_score {
+        if metrics.response_quality.overall_quality
+            < self.real_time_monitor.alert_thresholds.min_quality_score
+        {
             self.real_time_monitor.active_alerts.push(QualityAlert {
                 alert_type: AlertType::QualityDegradation,
                 severity: AlertSeverity::High,
-                message: format!("Low quality response: {:.2}", metrics.response_quality.overall_quality),
+                message: format!(
+                    "Low quality response: {:.2}",
+                    metrics.response_quality.overall_quality
+                ),
                 timestamp,
                 metric_value: metrics.response_quality.overall_quality as f64,
                 threshold: self.real_time_monitor.alert_thresholds.min_quality_score as f64,
@@ -1204,53 +1244,89 @@ impl QualityMetrics {
         }
 
         // Performance degradation alert
-        if metrics.processing_time_ms > self.real_time_monitor.alert_thresholds.max_processing_time_ms {
+        if metrics.processing_time_ms
+            > self
+                .real_time_monitor
+                .alert_thresholds
+                .max_processing_time_ms
+        {
             self.real_time_monitor.active_alerts.push(QualityAlert {
                 alert_type: AlertType::PerformanceDegradation,
                 severity: AlertSeverity::Medium,
                 message: format!("Slow processing: {}ms", metrics.processing_time_ms),
                 timestamp,
                 metric_value: metrics.processing_time_ms as f64,
-                threshold: self.real_time_monitor.alert_thresholds.max_processing_time_ms as f64,
+                threshold: self
+                    .real_time_monitor
+                    .alert_thresholds
+                    .max_processing_time_ms as f64,
             });
         }
 
         // Keep only recent alerts (last hour)
         let one_hour_ago = timestamp.saturating_sub(3600);
-        self.real_time_monitor.active_alerts.retain(|alert| alert.timestamp > one_hour_ago);
+        self.real_time_monitor
+            .active_alerts
+            .retain(|alert| alert.timestamp > one_hour_ago);
     }
 
     /// Perform comparative analysis against baseline
-    pub fn perform_comparative_analysis(&self, baseline_metrics: &[QueryMetrics]) -> Result<ComparativeAnalysis> {
+    pub fn perform_comparative_analysis(
+        &self,
+        baseline_metrics: &[QueryMetrics],
+    ) -> Result<ComparativeAnalysis> {
         if !self.config.enable_comparative_analysis {
             return Err(MetricsError::InsufficientData {
                 reason: "Comparative analysis disabled".to_string(),
-            }.into());
+            }
+            .into());
         }
 
         if self.query_history.is_empty() || baseline_metrics.is_empty() {
             return Err(MetricsError::InsufficientData {
                 reason: "Insufficient data for comparison".to_string(),
-            }.into());
+            }
+            .into());
         }
 
-        let rograg_metrics = self.calculate_aggregated_metrics(&self.query_history.iter().collect::<Vec<_>>())?;
-        let baseline_agg = self.calculate_aggregated_metrics(&baseline_metrics.iter().collect::<Vec<_>>())?;
+        let rograg_metrics =
+            self.calculate_aggregated_metrics(&self.query_history.iter().collect::<Vec<_>>())?;
+        let baseline_agg =
+            self.calculate_aggregated_metrics(&baseline_metrics.iter().collect::<Vec<_>>())?;
 
         let improvement_percentages = ImprovementPercentages {
-            accuracy_improvement: self.calculate_improvement_percentage(rograg_metrics.mean_accuracy, baseline_agg.mean_accuracy),
-            completeness_improvement: self.calculate_improvement_percentage(rograg_metrics.mean_completeness, baseline_agg.mean_completeness),
-            coherence_improvement: self.calculate_improvement_percentage(rograg_metrics.mean_coherence, baseline_agg.mean_coherence),
-            relevance_improvement: self.calculate_improvement_percentage(rograg_metrics.mean_relevance, baseline_agg.mean_relevance),
+            accuracy_improvement: self.calculate_improvement_percentage(
+                rograg_metrics.mean_accuracy,
+                baseline_agg.mean_accuracy,
+            ),
+            completeness_improvement: self.calculate_improvement_percentage(
+                rograg_metrics.mean_completeness,
+                baseline_agg.mean_completeness,
+            ),
+            coherence_improvement: self.calculate_improvement_percentage(
+                rograg_metrics.mean_coherence,
+                baseline_agg.mean_coherence,
+            ),
+            relevance_improvement: self.calculate_improvement_percentage(
+                rograg_metrics.mean_relevance,
+                baseline_agg.mean_relevance,
+            ),
             overall_improvement: self.calculate_improvement_percentage(
-                (rograg_metrics.mean_accuracy + rograg_metrics.mean_completeness +
-                 rograg_metrics.mean_coherence + rograg_metrics.mean_relevance) / 4.0,
-                (baseline_agg.mean_accuracy + baseline_agg.mean_completeness +
-                 baseline_agg.mean_coherence + baseline_agg.mean_relevance) / 4.0,
+                (rograg_metrics.mean_accuracy
+                    + rograg_metrics.mean_completeness
+                    + rograg_metrics.mean_coherence
+                    + rograg_metrics.mean_relevance)
+                    / 4.0,
+                (baseline_agg.mean_accuracy
+                    + baseline_agg.mean_completeness
+                    + baseline_agg.mean_coherence
+                    + baseline_agg.mean_relevance)
+                    / 4.0,
             ),
         };
 
-        let statistical_significance = self.calculate_statistical_significance(&rograg_metrics, &baseline_agg)?;
+        let statistical_significance =
+            self.calculate_statistical_significance(&rograg_metrics, &baseline_agg)?;
 
         Ok(ComparativeAnalysis {
             rograg_metrics,
@@ -1258,7 +1334,10 @@ impl QualityMetrics {
             improvement_percentages,
             statistical_significance,
             sample_size: self.query_history.len().min(baseline_metrics.len()),
-            analysis_timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+            analysis_timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
         })
     }
 
@@ -1267,24 +1346,52 @@ impl QualityMetrics {
         if metrics.is_empty() {
             return Err(MetricsError::InsufficientData {
                 reason: "No metrics provided".to_string(),
-            }.into());
+            }
+            .into());
         }
 
         let n = metrics.len() as f64;
 
-        let mean_accuracy = metrics.iter().map(|m| m.response_quality.accuracy_score as f64).sum::<f64>() / n;
-        let mean_completeness = metrics.iter().map(|m| m.response_quality.completeness_score as f64).sum::<f64>() / n;
-        let mean_coherence = metrics.iter().map(|m| m.response_quality.coherence_score as f64).sum::<f64>() / n;
-        let mean_relevance = metrics.iter().map(|m| m.response_quality.relevance_score as f64).sum::<f64>() / n;
-        let mean_processing_time_ms = metrics.iter().map(|m| m.processing_time_ms as f64).sum::<f64>() / n;
+        let mean_accuracy = metrics
+            .iter()
+            .map(|m| m.response_quality.accuracy_score as f64)
+            .sum::<f64>()
+            / n;
+        let mean_completeness = metrics
+            .iter()
+            .map(|m| m.response_quality.completeness_score as f64)
+            .sum::<f64>()
+            / n;
+        let mean_coherence = metrics
+            .iter()
+            .map(|m| m.response_quality.coherence_score as f64)
+            .sum::<f64>()
+            / n;
+        let mean_relevance = metrics
+            .iter()
+            .map(|m| m.response_quality.relevance_score as f64)
+            .sum::<f64>()
+            / n;
+        let mean_processing_time_ms = metrics
+            .iter()
+            .map(|m| m.processing_time_ms as f64)
+            .sum::<f64>()
+            / n;
 
         let success_count = metrics.iter().filter(|m| m.decomposition_success).count();
         let success_rate = success_count as f64 / n;
 
         // Calculate standard deviation of overall quality
-        let quality_scores: Vec<f64> = metrics.iter().map(|m| m.response_quality.overall_quality as f64).collect();
+        let quality_scores: Vec<f64> = metrics
+            .iter()
+            .map(|m| m.response_quality.overall_quality as f64)
+            .collect();
         let mean_quality = quality_scores.iter().sum::<f64>() / n;
-        let variance = quality_scores.iter().map(|&q| (q - mean_quality).powi(2)).sum::<f64>() / n;
+        let variance = quality_scores
+            .iter()
+            .map(|&q| (q - mean_quality).powi(2))
+            .sum::<f64>()
+            / n;
         let std_dev_quality = variance.sqrt();
 
         Ok(AggregatedMetrics {
@@ -1315,13 +1422,22 @@ impl QualityMetrics {
         // Simplified statistical significance calculation
         // In a real implementation, you'd use proper statistical tests
 
-        let effect_size = (rograg_metrics.mean_accuracy - baseline_metrics.mean_accuracy) /
-                         ((rograg_metrics.std_dev_quality + baseline_metrics.std_dev_quality) / 2.0);
+        let effect_size = (rograg_metrics.mean_accuracy - baseline_metrics.mean_accuracy)
+            / ((rograg_metrics.std_dev_quality + baseline_metrics.std_dev_quality) / 2.0);
 
         // Simple heuristic for p-value estimation
         let p_value_accuracy = if effect_size.abs() > 0.5 { 0.01 } else { 0.1 };
-        let p_value_completeness = if rograg_metrics.mean_completeness > baseline_metrics.mean_completeness { 0.05 } else { 0.1 };
-        let p_value_coherence = if rograg_metrics.mean_coherence > baseline_metrics.mean_coherence { 0.05 } else { 0.1 };
+        let p_value_completeness =
+            if rograg_metrics.mean_completeness > baseline_metrics.mean_completeness {
+                0.05
+            } else {
+                0.1
+            };
+        let p_value_coherence = if rograg_metrics.mean_coherence > baseline_metrics.mean_coherence {
+            0.05
+        } else {
+            0.1
+        };
         let p_value_overall = (p_value_accuracy + p_value_completeness + p_value_coherence) / 3.0;
 
         Ok(StatisticalSignificance {
@@ -1397,7 +1513,9 @@ impl QualityMetrics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rograg::{IntentResult, QueryIntent, ProcessingStats, SubqueryResult, SubqueryResultType};
+    use crate::rograg::{
+        IntentResult, ProcessingStats, QueryIntent, SubqueryResult, SubqueryResultType,
+    };
     use std::time::Duration;
 
     #[cfg(feature = "rograg")]
@@ -1407,15 +1525,13 @@ mod tests {
             content: "Entity Name is a young boy character in Mark Twain's novels.".to_string(),
             confidence: 0.8,
             sources: vec!["source1".to_string(), "source2".to_string()],
-            subquery_results: vec![
-                SubqueryResult {
-                    subquery: "What is Entity Name?".to_string(),
-                    result_type: SubqueryResultType::LogicForm,
-                    confidence: 0.8,
-                    content: "Entity Name character info".to_string(),
-                    sources: vec!["source1".to_string()],
-                }
-            ],
+            subquery_results: vec![SubqueryResult {
+                subquery: "What is Entity Name?".to_string(),
+                result_type: SubqueryResultType::LogicForm,
+                confidence: 0.8,
+                content: "Entity Name character info".to_string(),
+                sources: vec!["source1".to_string()],
+            }],
             intent_result: IntentResult {
                 primary_intent: QueryIntent::Factual,
                 secondary_intents: vec![],
@@ -1437,15 +1553,13 @@ mod tests {
 
         DecompositionResult {
             original_query: "What is Entity Name?".to_string(),
-            subqueries: vec![
-                Subquery {
-                    id: "1".to_string(),
-                    text: "What is Entity Name?".to_string(),
-                    query_type: SubqueryType::Definitional,
-                    priority: 1.0,
-                    dependencies: vec![],
-                }
-            ],
+            subqueries: vec![Subquery {
+                id: "1".to_string(),
+                text: "What is Entity Name?".to_string(),
+                query_type: SubqueryType::Definitional,
+                priority: 1.0,
+                dependencies: vec![],
+            }],
             strategy_used: DecompositionStrategy::Semantic,
             confidence: 0.8,
             dependencies: vec![],
@@ -1504,7 +1618,14 @@ mod tests {
         // Record multiple queries
         for i in 0..5 {
             let query = format!("Test query {i}");
-            metrics.record_query(&query, &decomposition, &response, Duration::from_millis(1000 + i as u64 * 100)).unwrap();
+            metrics
+                .record_query(
+                    &query,
+                    &decomposition,
+                    &response,
+                    Duration::from_millis(1000 + i as u64 * 100),
+                )
+                .unwrap();
         }
 
         assert_eq!(metrics.performance_stats.total_queries, 5);
@@ -1535,7 +1656,14 @@ mod tests {
         let response = create_test_response();
         let decomposition = create_test_decomposition();
 
-        metrics.record_query("Test query", &decomposition, &response, Duration::from_millis(1000)).unwrap();
+        metrics
+            .record_query(
+                "Test query",
+                &decomposition,
+                &response,
+                Duration::from_millis(1000),
+            )
+            .unwrap();
 
         let json = metrics.export_to_json().unwrap();
         assert!(json.contains("performance_stats"));

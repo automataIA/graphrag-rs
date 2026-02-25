@@ -21,9 +21,9 @@
 //! └────────┘ └────────┘ └────────┘ └────────┘
 //! ```
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use async_trait::async_trait;
 
 /// Embedding model provider
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -268,10 +268,10 @@ impl EmbeddingRouter {
                     provider: EmbeddingProvider::Local, // TODO: Track actual provider
                     token_count: None,
                 });
-            }
+            },
             Err(e) => {
                 tracing::warn!("Primary provider failed: {}", e);
-            }
+            },
         }
 
         // Try fallbacks
@@ -293,10 +293,10 @@ impl EmbeddingRouter {
                         provider: EmbeddingProvider::Local, // TODO: Track actual provider
                         token_count: None,
                     });
-                }
+                },
                 Err(e) => {
                     tracing::warn!("Fallback {} failed: {}", i, e);
-                }
+                },
             }
         }
 
@@ -304,7 +304,10 @@ impl EmbeddingRouter {
     }
 
     /// Generate batch embeddings
-    pub async fn embed_batch(&self, texts: &[&str]) -> Result<Vec<EmbeddingResult>, EmbeddingError> {
+    pub async fn embed_batch(
+        &self,
+        texts: &[&str],
+    ) -> Result<Vec<EmbeddingResult>, EmbeddingError> {
         let mut results = Vec::with_capacity(texts.len());
         for text in texts {
             results.push(self.embed(text).await?);

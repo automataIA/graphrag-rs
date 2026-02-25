@@ -4,7 +4,7 @@
 //! that wrap existing chunking logic while maintaining a clean, minimal interface.
 
 use crate::{
-    core::{ChunkId, DocumentId, TextChunk, ChunkingStrategy},
+    core::{ChunkId, ChunkingStrategy, DocumentId, TextChunk},
     text::{HierarchicalChunker, SemanticChunker},
 };
 
@@ -50,8 +50,11 @@ impl ChunkingStrategy for HierarchicalChunkingStrategy {
 
         for chunk_content in chunks_text {
             if !chunk_content.trim().is_empty() {
-                let chunk_id = ChunkId::new(format!("{}_{}", self.document_id,
-                    CHUNK_COUNTER.fetch_add(1, Ordering::SeqCst)));
+                let chunk_id = ChunkId::new(format!(
+                    "{}_{}",
+                    self.document_id,
+                    CHUNK_COUNTER.fetch_add(1, Ordering::SeqCst)
+                ));
                 let chunk_start = current_pos;
                 let chunk_end = chunk_start + chunk_content.len();
 
@@ -99,7 +102,8 @@ impl ChunkingStrategy for SemanticChunkingStrategy {
         // or use a synchronous embedding generator
 
         // For now, fall back to a simple sentence-based approach
-        let sentences: Vec<&str> = text.split(&['.', '!', '?'][..])
+        let sentences: Vec<&str> = text
+            .split(&['.', '!', '?'][..])
             .filter(|s| !s.trim().is_empty())
             .collect();
 
@@ -110,8 +114,11 @@ impl ChunkingStrategy for SemanticChunkingStrategy {
         let chunk_size = 5; // sentences per chunk
         for chunk_sentences in sentences.chunks(chunk_size) {
             let chunk_content = chunk_sentences.join(". ") + ".";
-            let chunk_id = ChunkId::new(format!("{}_{}", self.document_id,
-                CHUNK_COUNTER.fetch_add(1, Ordering::SeqCst)));
+            let chunk_id = ChunkId::new(format!(
+                "{}_{}",
+                self.document_id,
+                CHUNK_COUNTER.fetch_add(1, Ordering::SeqCst)
+            ));
             let chunk_start = current_pos;
             let chunk_end = chunk_start + chunk_content.len();
 
@@ -158,7 +165,9 @@ impl ChunkingStrategy for RustCodeChunkingStrategy {
 
         let mut parser = Parser::new();
         let language = tree_sitter_rust::language();
-        parser.set_language(&language).expect("Error loading Rust grammar");
+        parser
+            .set_language(&language)
+            .expect("Error loading Rust grammar");
 
         let tree = parser.parse(text, None).expect("Error parsing Rust code");
         let root_node = tree.root_node();
@@ -170,8 +179,11 @@ impl ChunkingStrategy for RustCodeChunkingStrategy {
 
         // If no chunks found (e.g., just expressions), create a single chunk
         if chunks.is_empty() && !text.trim().is_empty() {
-            let chunk_id = ChunkId::new(format!("{}_{}", self.document_id,
-                CHUNK_COUNTER.fetch_add(1, Ordering::SeqCst)));
+            let chunk_id = ChunkId::new(format!(
+                "{}_{}",
+                self.document_id,
+                CHUNK_COUNTER.fetch_add(1, Ordering::SeqCst)
+            ));
             let chunk = TextChunk::new(
                 chunk_id,
                 self.document_id.clone(),
@@ -192,7 +204,8 @@ impl RustCodeChunkingStrategy {
     fn extract_chunks(&self, node: &tree_sitter::Node, source: &str, chunks: &mut Vec<TextChunk>) {
         match node.kind() {
             // Top-level items that should become chunks
-            "function_item" | "impl_item" | "struct_item" | "enum_item" | "mod_item" | "trait_item" => {
+            "function_item" | "impl_item" | "struct_item" | "enum_item" | "mod_item"
+            | "trait_item" => {
                 let start_byte = node.start_byte();
                 let end_byte = node.end_byte();
 
@@ -203,8 +216,11 @@ impl RustCodeChunkingStrategy {
                 let chunk_content = &source[start_pos..end_pos];
 
                 if chunk_content.len() >= self.min_chunk_size {
-                    let chunk_id = ChunkId::new(format!("{}_{}", self.document_id,
-                        CHUNK_COUNTER.fetch_add(1, Ordering::SeqCst)));
+                    let chunk_id = ChunkId::new(format!(
+                        "{}_{}",
+                        self.document_id,
+                        CHUNK_COUNTER.fetch_add(1, Ordering::SeqCst)
+                    ));
 
                     let chunk = TextChunk::new(
                         chunk_id,
@@ -215,7 +231,7 @@ impl RustCodeChunkingStrategy {
                     );
                     chunks.push(chunk);
                 }
-            }
+            },
 
             // Source file (root) - process children
             "source_file" => {
@@ -224,7 +240,7 @@ impl RustCodeChunkingStrategy {
                     self.extract_chunks(&current, source, chunks);
                     child = current.next_sibling();
                 }
-            }
+            },
 
             // Other nodes - recurse into children
             _ => {
@@ -233,7 +249,7 @@ impl RustCodeChunkingStrategy {
                     self.extract_chunks(&current, source, chunks);
                     child = current.next_sibling();
                 }
-            }
+            },
         }
     }
 }
@@ -275,9 +291,10 @@ impl BoundaryAwareChunkingStrategy {
     ) -> Self {
         Self {
             boundary_detector: crate::text::BoundaryDetector::with_config(boundary_config),
-            coherence_scorer: std::sync::Arc::new(
-                crate::text::SemanticCoherenceScorer::new(coherence_config, embedding_provider),
-            ),
+            coherence_scorer: std::sync::Arc::new(crate::text::SemanticCoherenceScorer::new(
+                coherence_config,
+                embedding_provider,
+            )),
             max_chunk_chars,
             min_chunk_chars,
             document_id,
@@ -329,11 +346,11 @@ impl BoundaryAwareChunkingStrategy {
             Ok(result) => {
                 // Use optimally scored chunks
                 self.create_text_chunks_from_scored(&result.chunks)
-            }
+            },
             Err(_) => {
                 // Fallback: use boundary positions directly
                 self.create_text_chunks_from_boundaries(text, &boundary_positions)
-            }
+            },
         };
 
         // 3. Enforce size constraints
@@ -359,10 +376,10 @@ impl BoundaryAwareChunkingStrategy {
                 );
 
                 // Add coherence score to metadata
-                chunk
-                    .metadata
-                    .custom
-                    .insert("coherence_score".to_string(), sc.coherence_score.to_string());
+                chunk.metadata.custom.insert(
+                    "coherence_score".to_string(),
+                    sc.coherence_score.to_string(),
+                );
                 chunk
                     .metadata
                     .custom
@@ -455,7 +472,8 @@ impl BoundaryAwareChunkingStrategy {
         let mut current_start = chunk.start_offset;
 
         for sentence in sentences {
-            if current_text.len() + sentence.len() > self.max_chunk_chars && !current_text.is_empty()
+            if current_text.len() + sentence.len() > self.max_chunk_chars
+                && !current_text.is_empty()
             {
                 // Create chunk
                 let chunk_id = ChunkId::new(format!(

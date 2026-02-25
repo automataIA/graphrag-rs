@@ -1,10 +1,10 @@
 //! Document collection management and indexing
 
 use crate::core::Result;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentMetadata {
@@ -96,7 +96,8 @@ impl DocumentIndex {
         self.by_size.sort_by(|a, b| b.0.cmp(&a.0)); // Largest first
 
         // Index by content hash for deduplication
-        self.content_hashes.insert(doc.content_hash.clone(), doc.id.clone());
+        self.content_hashes
+            .insert(doc.content_hash.clone(), doc.id.clone());
     }
 
     pub fn find_duplicates(&self, content_hash: &str) -> Option<&String> {
@@ -104,7 +105,10 @@ impl DocumentIndex {
     }
 
     pub fn documents_by_type(&self, doc_type: &DocumentType) -> Vec<&String> {
-        self.by_type.get(doc_type).map(|docs| docs.iter().collect()).unwrap_or_default()
+        self.by_type
+            .get(doc_type)
+            .map(|docs| docs.iter().collect())
+            .unwrap_or_default()
     }
 }
 
@@ -201,15 +205,18 @@ impl DocumentManager {
         if let Some(collection_id) = &self.current_collection {
             if let Some(collection) = self.collections.get_mut(collection_id) {
                 // Check for duplicates
-                if let Some(existing_id) = collection.index.find_duplicates(&metadata.content_hash) {
+                if let Some(existing_id) = collection.index.find_duplicates(&metadata.content_hash)
+                {
                     return Err(crate::core::GraphRAGError::Config {
-                        message: format!("Document already exists with ID: {existing_id}")
+                        message: format!("Document already exists with ID: {existing_id}"),
                     });
                 }
 
                 collection.index.add_document(&metadata);
                 collection.total_size_bytes += metadata.size_bytes;
-                collection.documents.insert(metadata.id.clone(), metadata.clone());
+                collection
+                    .documents
+                    .insert(metadata.id.clone(), metadata.clone());
 
                 tracing::debug!(
                     path = %metadata.path.display(),
@@ -228,12 +235,14 @@ impl DocumentManager {
 
         let content_hash = self.calculate_content_hash(&content);
         let language = self.detect_language(&content);
-        let document_type = path.extension()
+        let document_type = path
+            .extension()
             .and_then(|ext| ext.to_str())
             .map(DocumentType::from_extension)
             .unwrap_or(DocumentType::Unknown);
 
-        let title = path.file_stem()
+        let title = path
+            .file_stem()
             .and_then(|stem| stem.to_str())
             .unwrap_or("untitled")
             .to_string();
@@ -273,7 +282,8 @@ impl DocumentManager {
         // Look for common English words
         let english_indicators = ["the", "and", "or", "but", "in", "on", "at", "to"];
         let word_count = content.split_whitespace().count();
-        let english_word_count = english_indicators.iter()
+        let english_word_count = english_indicators
+            .iter()
             .map(|word| content.matches(word).count())
             .sum::<usize>();
 
@@ -286,7 +296,8 @@ impl DocumentManager {
 
     /// Get current collection
     pub fn get_current_collection(&self) -> Option<&DocumentCollection> {
-        self.current_collection.as_ref()
+        self.current_collection
+            .as_ref()
             .and_then(|id| self.collections.get(id))
     }
 
@@ -307,7 +318,7 @@ impl DocumentManager {
             Ok(())
         } else {
             Err(crate::core::GraphRAGError::Config {
-                message: format!("Collection not found: {collection_id}")
+                message: format!("Collection not found: {collection_id}"),
             })
         }
     }

@@ -1,59 +1,61 @@
-/// Text chunking utilities module
-pub mod chunking;
-/// Semantic chunking based on embedding similarity
-pub mod semantic_chunking;
-/// Document structure representation
-pub mod document_structure;
 /// Text analysis utilities
 pub mod analysis;
-/// TF-IDF keyword extraction
-pub mod keyword_extraction;
+/// Semantic boundary detection for BAR-RAG
+pub mod boundary_detection;
+/// Chunk enrichment pipeline
+pub mod chunk_enricher;
+/// Text chunking utilities module
+pub mod chunking;
+/// Trait-based chunking strategies
+pub mod chunking_strategies;
+/// LLM-based contextual chunk enrichment (Anthropic Contextual Retrieval pattern)
+pub mod contextual_enricher;
+/// Document structure representation
+pub mod document_structure;
 /// Extractive summarization
 pub mod extractive_summarizer;
+/// TF-IDF keyword extraction
+pub mod keyword_extraction;
+/// Late Chunking for context-preserving embeddings (Jina AI technique)
+pub mod late_chunking;
 /// Layout parser trait
 pub mod layout_parser;
 /// Document layout parsers
 pub mod parsers;
-/// Chunk enrichment pipeline
-pub mod chunk_enricher;
-/// Trait-based chunking strategies
-pub mod chunking_strategies;
-/// Semantic boundary detection for BAR-RAG
-pub mod boundary_detection;
+/// Semantic chunking based on embedding similarity
+pub mod semantic_chunking;
 /// Semantic coherence scoring for BAR-RAG
 pub mod semantic_coherence;
 
-pub use semantic_chunking::{
-    SemanticChunk, SemanticChunker, SemanticChunkerConfig, BreakpointStrategy,
-};
-pub use document_structure::{
-    DocumentStructure, Heading, Section, HeadingHierarchy, SectionNumber,
-    SectionNumberFormat, StructureStatistics,
-};
 pub use analysis::{TextAnalyzer, TextStats};
-pub use keyword_extraction::TfIdfKeywordExtractor;
-pub use extractive_summarizer::ExtractiveSummarizer;
-pub use layout_parser::{LayoutParser, LayoutParserFactory};
+pub use boundary_detection::{Boundary, BoundaryDetectionConfig, BoundaryDetector, BoundaryType};
 pub use chunk_enricher::{ChunkEnricher, EnrichmentStatistics};
 pub use chunking_strategies::{
-    HierarchicalChunkingStrategy, SemanticChunkingStrategy, BoundaryAwareChunkingStrategy,
+    BoundaryAwareChunkingStrategy, HierarchicalChunkingStrategy, SemanticChunkingStrategy,
 };
-pub use boundary_detection::{
-    BoundaryDetector, BoundaryDetectionConfig, Boundary, BoundaryType,
+pub use contextual_enricher::{ContextualEnricher, ContextualEnricherConfig};
+pub use document_structure::{
+    DocumentStructure, Heading, HeadingHierarchy, Section, SectionNumber, SectionNumberFormat,
+    StructureStatistics,
 };
-pub use semantic_coherence::{
-    SemanticCoherenceScorer, CoherenceConfig, ScoredChunk, OptimalSplit,
+pub use extractive_summarizer::ExtractiveSummarizer;
+pub use keyword_extraction::TfIdfKeywordExtractor;
+pub use late_chunking::{JinaLateChunkingClient, LateChunkingConfig, LateChunkingStrategy};
+pub use layout_parser::{LayoutParser, LayoutParserFactory};
+pub use semantic_chunking::{
+    BreakpointStrategy, SemanticChunk, SemanticChunker, SemanticChunkerConfig,
 };
+pub use semantic_coherence::{CoherenceConfig, OptimalSplit, ScoredChunk, SemanticCoherenceScorer};
 
 #[cfg(feature = "code-chunking")]
 pub use chunking_strategies::RustCodeChunkingStrategy;
 
-use crate::{
-    core::{ChunkId, Document, TextChunk, ChunkingStrategy},
-    Result,
-};
 #[cfg(feature = "parallel-processing")]
 use crate::parallel::{ParallelProcessor, PerformanceMonitor};
+use crate::{
+    core::{ChunkId, ChunkingStrategy, Document, TextChunk},
+    Result,
+};
 use chunking::HierarchicalChunker;
 
 /// Text processing utilities for chunking and preprocessing
@@ -98,7 +100,8 @@ impl TextProcessor {
     /// Split text into chunks with overlap using hierarchical boundary preservation
     pub fn chunk_text_hierarchical(&self, document: &Document) -> Result<Vec<TextChunk>> {
         let chunker = HierarchicalChunker::new().with_min_size(50);
-        let chunks_text = chunker.chunk_text(&document.content, self.chunk_size, self.chunk_overlap);
+        let chunks_text =
+            chunker.chunk_text(&document.content, self.chunk_size, self.chunk_overlap);
 
         let mut chunks = Vec::new();
         let mut chunk_counter = 0;
@@ -246,7 +249,11 @@ impl TextProcessor {
     /// let strategy = HierarchicalChunkingStrategy::new(500, 50, document.id.clone());
     /// let chunks = processor.chunk_with_strategy(&document, &strategy)?;
     /// ```
-    pub fn chunk_with_strategy(&self, document: &Document, strategy: &dyn ChunkingStrategy) -> Result<Vec<TextChunk>> {
+    pub fn chunk_with_strategy(
+        &self,
+        document: &Document,
+        strategy: &dyn ChunkingStrategy,
+    ) -> Result<Vec<TextChunk>> {
         let chunks = strategy.chunk(&document.content);
         Ok(chunks)
     }
@@ -394,10 +401,7 @@ impl TextProcessor {
         }
 
         // Sequential fallback
-        documents
-            .iter()
-            .map(|doc| self.chunk_text(doc))
-            .collect()
+        documents.iter().map(|doc| self.chunk_text(doc)).collect()
     }
 
     /// Parallel extraction of keywords from multiple texts
@@ -608,7 +612,9 @@ mod tests {
 
         assert!(!chunks.is_empty());
         // At least some chunks should have enriched metadata
-        let has_metadata = chunks.iter().any(|c| c.metadata.chapter.is_some() || !c.metadata.keywords.is_empty());
+        let has_metadata = chunks
+            .iter()
+            .any(|c| c.metadata.chapter.is_some() || !c.metadata.keywords.is_empty());
         assert!(has_metadata, "Chunks should have enriched metadata");
     }
 
@@ -624,7 +630,9 @@ mod tests {
         let parser = Box::new(crate::text::parsers::MarkdownLayoutParser::new());
         let mut enricher = ChunkEnricher::new_default(parser);
 
-        let chunks = processor.chunk_text_with_enrichment(&document, &mut enricher).unwrap();
+        let chunks = processor
+            .chunk_text_with_enrichment(&document, &mut enricher)
+            .unwrap();
 
         assert!(!chunks.is_empty());
         // Verify metadata is present

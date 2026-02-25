@@ -416,9 +416,15 @@ mod tests {
     fn test_structure_statistics() {
         let mut structure = DocumentStructure::new();
 
-        structure.headings.push(Heading::new(1, "H1".to_string(), 0, 2));
-        structure.headings.push(Heading::new(2, "H2".to_string(), 10, 12));
-        structure.headings.push(Heading::new(2, "H2b".to_string(), 20, 23));
+        structure
+            .headings
+            .push(Heading::new(1, "H1".to_string(), 0, 2));
+        structure
+            .headings
+            .push(Heading::new(2, "H2".to_string(), 10, 12));
+        structure
+            .headings
+            .push(Heading::new(2, "H2b".to_string(), 20, 23));
 
         let stats = structure.get_statistics();
         assert_eq!(stats.total_headings, 3);

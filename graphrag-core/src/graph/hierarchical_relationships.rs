@@ -30,9 +30,7 @@ pub struct RelationshipHierarchy {
 impl RelationshipHierarchy {
     /// Create a new empty hierarchy
     pub fn new() -> Self {
-        Self {
-            levels: Vec::new(),
-        }
+        Self { levels: Vec::new() }
     }
 
     /// Add a new level to the hierarchy
@@ -51,7 +49,10 @@ impl RelationshipHierarchy {
     }
 
     /// Find clusters containing a specific relationship
-    pub fn find_clusters_for_relationship(&self, rel_id: &str) -> Vec<(&HierarchyLevel, &RelationshipCluster)> {
+    pub fn find_clusters_for_relationship(
+        &self,
+        rel_id: &str,
+    ) -> Vec<(&HierarchyLevel, &RelationshipCluster)> {
         let mut results = Vec::new();
 
         for level in &self.levels {
@@ -295,11 +296,7 @@ impl HierarchyBuilder {
             // Add relationships to cluster
             for idx in rel_indices {
                 if let Some(rel) = self.relationships.get(idx) {
-                    let rel_id = format!("{}_{}_{}",
-                        rel.source.0,
-                        rel.target.0,
-                        rel.relation_type
-                    );
+                    let rel_id = format!("{}_{}_{}", rel.source.0, rel.target.0, rel.relation_type);
                     cluster.add_relationship(rel_id);
                 }
             }
@@ -311,10 +308,16 @@ impl HierarchyBuilder {
 
             // Generate summary if Ollama client available
             if let Some(ref ollama_client) = self.ollama_client {
-                let summary = self.generate_cluster_summary(&cluster, &self.relationships, ollama_client).await?;
+                let summary = self
+                    .generate_cluster_summary(&cluster, &self.relationships, ollama_client)
+                    .await?;
                 cluster.summary = summary;
             } else {
-                cluster.summary = format!("Cluster {} with {} relationships", cluster_id, cluster.size());
+                cluster.summary = format!(
+                    "Cluster {} with {} relationships",
+                    cluster_id,
+                    cluster.size()
+                );
             }
 
             // Calculate cohesion score
@@ -335,7 +338,10 @@ impl HierarchyBuilder {
     }
 
     /// Build a graph where relationships are nodes
-    fn build_relationship_graph(&self, relationships: &[Relationship]) -> petgraph::Graph<usize, f32> {
+    fn build_relationship_graph(
+        &self,
+        relationships: &[Relationship],
+    ) -> petgraph::Graph<usize, f32> {
         use petgraph::Graph;
 
         let mut graph = Graph::new();
@@ -450,10 +456,9 @@ impl HierarchyBuilder {
                 graph.node_weight(edge.source()),
                 graph.node_weight(edge.target()),
             ) {
-                if let (Some(&src_node), Some(&tgt_node)) = (
-                    node_mapping.get(&src_rel_id),
-                    node_mapping.get(&tgt_rel_id),
-                ) {
+                if let (Some(&src_node), Some(&tgt_node)) =
+                    (node_mapping.get(&src_rel_id), node_mapping.get(&tgt_rel_id))
+                {
                     leiden_graph.add_edge(src_node, tgt_node, *edge.weight());
                 }
             }
@@ -464,8 +469,8 @@ impl HierarchyBuilder {
             resolution,
             max_cluster_size: 50, // Allow larger clusters for relationship graphs
             use_lcc: true,
-            seed: Some(42),       // Reproducible results
-            max_levels: 1,        // Single-level clustering for now
+            seed: Some(42), // Reproducible results
+            max_levels: 1,  // Single-level clustering for now
             min_improvement: 0.001,
         };
 
@@ -566,7 +571,7 @@ Theme:"#,
                 );
 
                 Ok(format!("Cluster of {} relationships", total))
-            }
+            },
         }
     }
 
@@ -606,10 +611,7 @@ Theme:"#,
             if let Some(&rel_idx) = rel_graph.node_weight(node_idx) {
                 // Check if this relationship belongs to our cluster
                 if let Some(rel) = self.relationships.get(rel_idx) {
-                    let rel_id = format!(
-                        "{}_{}_{}",
-                        rel.source.0, rel.target.0, rel.relation_type
-                    );
+                    let rel_id = format!("{}_{}_{}", rel.source.0, rel.target.0, rel.relation_type);
 
                     if cluster_rel_ids.contains(&rel_id) {
                         // Count outgoing edges to other cluster members
@@ -820,7 +822,10 @@ mod tests {
         let cohesion = builder.calculate_cohesion(&cluster, &rel_graph);
 
         // Single relationship should have perfect cohesion
-        assert_eq!(cohesion, 1.0, "Single relationship should have cohesion 1.0");
+        assert_eq!(
+            cohesion, 1.0,
+            "Single relationship should have cohesion 1.0"
+        );
     }
 
     #[test]

@@ -8,11 +8,11 @@
 //! 2. Tree-sitter AST-based chunking for embedded code snippets - preserves syntactic boundaries
 
 use graphrag_core::{
-    core::{DocumentId, Document, TextChunk, ChunkingStrategy},
-    text::{TextProcessor, HierarchicalChunkingStrategy},
+    core::{ChunkingStrategy, Document, DocumentId, TextChunk},
+    text::{HierarchicalChunkingStrategy, TextProcessor},
 };
-use std::time::Instant;
 use std::path::Path;
+use std::time::Instant;
 
 #[cfg(feature = "code-chunking")]
 use graphrag_core::text::RustCodeChunkingStrategy;
@@ -112,7 +112,6 @@ fn demonstrate_hierarchical_chunking(document: &Document) -> (Vec<TextChunk>, Ch
 
     (chunks, metrics)
 }
-
 
 #[cfg(feature = "code-chunking")]
 fn demonstrate_tree_sitter_chunking() -> (Vec<TextChunk>, ChunkingMetrics) {
@@ -225,8 +224,14 @@ fn estimate_complexity(text: &str) -> u8 {
 
     // Show first chunk as example
     if !chunks.is_empty() {
-        println!("   Example chunk: {}", chunks[0].content.chars().take(80).collect::<String>());
-        println!("   Chunk type: {}", extract_function_name(&chunks[0].content).unwrap_or("unknown"));
+        println!(
+            "   Example chunk: {}",
+            chunks[0].content.chars().take(80).collect::<String>()
+        );
+        println!(
+            "   Chunk type: {}",
+            extract_function_name(&chunks[0].content).unwrap_or("unknown")
+        );
     }
 
     (chunks, metrics)
@@ -235,7 +240,9 @@ fn estimate_complexity(text: &str) -> u8 {
 #[cfg(not(feature = "code-chunking"))]
 fn demonstrate_tree_sitter_chunking() -> (Vec<TextChunk>, ChunkingMetrics) {
     println!("\n🔹 Tree-sitter AST Chunking");
-    println!("   (Feature 'code-chunking' not enabled - would demonstrate AST-based code chunking)");
+    println!(
+        "   (Feature 'code-chunking' not enabled - would demonstrate AST-based code chunking)"
+    );
 
     let chunks = Vec::new();
     let metrics = ChunkingMetrics {
@@ -291,8 +298,13 @@ fn analyze_boundary_preservation(chunks: &[TextChunk]) -> f64 {
 
         // Check if chunk ends at a natural boundary
         let last_char = trimmed.chars().last().unwrap_or(' ');
-        if last_char == '.' || last_char == '!' || last_char == '?' ||
-           last_char == ':' || last_char == ';' || last_char == '\n' {
+        if last_char == '.'
+            || last_char == '!'
+            || last_char == '?'
+            || last_char == ':'
+            || last_char == ';'
+            || last_char == '\n'
+        {
             well_terminated += 1;
         }
     }
@@ -311,7 +323,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let document = create_document(content);
 
     println!("   Document loaded: {} characters", document.content.len());
-    println!("   First 100 chars: {}", document.content.chars().take(100).collect::<String>().replace('\n', " "));
+    println!(
+        "   First 100 chars: {}",
+        document
+            .content
+            .chars()
+            .take(100)
+            .collect::<String>()
+            .replace('\n', " ")
+    );
 
     // Demonstrate different chunking strategies
     println!("\n🔧 Testing Different Chunking Strategies:");
@@ -333,8 +353,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let hierarchical_boundary_score = analyze_boundary_preservation(&hierarchical_chunks);
 
-    println!("Hierarchical: {:.1}% of chunks end at natural boundaries",
-             hierarchical_boundary_score * 100.0);
+    println!(
+        "Hierarchical: {:.1}% of chunks end at natural boundaries",
+        hierarchical_boundary_score * 100.0
+    );
 
     if !tree_sitter_chunks.is_empty() {
         println!("Tree-sitter: Preserves syntactic boundaries for all code chunks");
@@ -344,13 +366,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n⚡ Performance Comparison:");
     println!("==========================");
 
-    let total_time = hierarchical_metrics.processing_time_ms +
-                    tree_sitter_metrics.processing_time_ms;
+    let total_time =
+        hierarchical_metrics.processing_time_ms + tree_sitter_metrics.processing_time_ms;
 
-    println!("Hierarchical:  {:.1}% of total time",
-             (hierarchical_metrics.processing_time_ms as f64 / total_time as f64) * 100.0);
-    println!("Tree-sitter:   {:.1}% of total time",
-             (tree_sitter_metrics.processing_time_ms as f64 / total_time as f64) * 100.0);
+    println!(
+        "Hierarchical:  {:.1}% of total time",
+        (hierarchical_metrics.processing_time_ms as f64 / total_time as f64) * 100.0
+    );
+    println!(
+        "Tree-sitter:   {:.1}% of total time",
+        (tree_sitter_metrics.processing_time_ms as f64 / total_time as f64) * 100.0
+    );
 
     // cAST Benefits Summary
     println!("\n🏆 cAST (Context-Aware Splitting) Benefits:");
@@ -365,9 +391,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📈 Chunk Size Distribution:");
     println!("===========================");
 
-    for (name, chunks) in [
-        ("Hierarchical", &hierarchical_chunks),
-    ] {
+    for (name, chunks) in [("Hierarchical", &hierarchical_chunks)] {
         if !chunks.is_empty() {
             let sizes: Vec<usize> = chunks.iter().map(|c| c.content.len()).collect();
             let median = if !sizes.is_empty() {
@@ -378,9 +402,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 0
             };
 
-            println!("{}: Min={}, Median={}, Max={}",
-                     name, sizes.iter().min().unwrap(),
-                     median, sizes.iter().max().unwrap());
+            println!(
+                "{}: Min={}, Median={}, Max={}",
+                name,
+                sizes.iter().min().unwrap(),
+                median,
+                sizes.iter().max().unwrap()
+            );
         }
     }
 
@@ -408,7 +436,8 @@ mod tests {
 
     #[test]
     fn test_chunking_strategies() {
-        let content = "Test paragraph one. Test paragraph two.\n\nNew paragraph with different content.";
+        let content =
+            "Test paragraph one. Test paragraph two.\n\nNew paragraph with different content.";
         let document = create_document(content.to_string());
 
         // Test hierarchical chunking

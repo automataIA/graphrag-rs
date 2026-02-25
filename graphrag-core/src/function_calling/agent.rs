@@ -150,7 +150,7 @@ impl GraphRAGAgent {
             QueryStrategy::EntitySearch => self.plan_entity_search(&potential_entities),
             QueryStrategy::RelationshipExploration => {
                 self.plan_relationship_exploration(&potential_entities)
-            }
+            },
             QueryStrategy::ContextualAnalysis => self.plan_contextual_analysis(&potential_entities),
             QueryStrategy::Adaptive => self.plan_adaptive_search(query, &potential_entities),
         };
@@ -334,7 +334,7 @@ impl GraphRAGAgent {
                             ));
                         }
                     }
-                }
+                },
                 "entity_expand" => {
                     if result.result["relationships"].is_array() {
                         let relationships: Vec<_> =
@@ -346,7 +346,7 @@ impl GraphRAGAgent {
                             ));
                         }
                     }
-                }
+                },
                 "relationship_traverse" => {
                     if result.result["paths"].is_array() {
                         let paths: Vec<_> = result.result["paths"].members().collect();
@@ -361,7 +361,7 @@ impl GraphRAGAgent {
                             );
                         }
                     }
-                }
+                },
                 "get_entity_context" => {
                     if result.result["context_chunks"].is_array() {
                         let chunks: Vec<_> = result.result["context_chunks"].members().collect();
@@ -372,8 +372,8 @@ impl GraphRAGAgent {
                             ));
                         }
                     }
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
 

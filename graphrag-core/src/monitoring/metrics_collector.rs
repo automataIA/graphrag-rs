@@ -6,8 +6,8 @@ use crate::core::error::Result;
 use crate::core::traits::{AsyncMetricsCollector, AsyncTimer};
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 /// Comprehensive metrics collector for GraphRAG operations
 #[derive(Clone)]
@@ -45,16 +45,14 @@ impl MetricsCollector {
 
     /// Get the current value of a counter
     pub fn get_counter(&self, name: &str) -> Option<u64> {
-        self.counters.get(name).map(|counter| {
-            counter.load(Ordering::Relaxed)
-        })
+        self.counters
+            .get(name)
+            .map(|counter| counter.load(Ordering::Relaxed))
     }
 
     /// Get the current value of a gauge
     pub fn get_gauge(&self, name: &str) -> Option<f64> {
-        self.gauges.get(name).map(|gauge| {
-            *gauge.read().unwrap()
-        })
+        self.gauges.get(name).map(|gauge| *gauge.read().unwrap())
     }
 
     /// Get histogram statistics
@@ -93,9 +91,7 @@ impl MetricsCollector {
     pub fn get_all_counters(&self) -> HashMap<String, u64> {
         self.counters
             .iter()
-            .map(|entry| {
-                (entry.key().clone(), entry.value().load(Ordering::Relaxed))
-            })
+            .map(|entry| (entry.key().clone(), entry.value().load(Ordering::Relaxed)))
             .collect()
     }
 
@@ -103,9 +99,7 @@ impl MetricsCollector {
     pub fn get_all_gauges(&self) -> HashMap<String, f64> {
         self.gauges
             .iter()
-            .map(|entry| {
-                (entry.key().clone(), *entry.value().read().unwrap())
-            })
+            .map(|entry| (entry.key().clone(), *entry.value().read().unwrap()))
             .collect()
     }
 
@@ -127,10 +121,7 @@ impl MetricsCollector {
             if tags.is_empty() {
                 return name.to_string();
             }
-            let tag_str: Vec<String> = tags
-                .iter()
-                .map(|(k, v)| format!("{}={}", k, v))
-                .collect();
+            let tag_str: Vec<String> = tags.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
             format!("{}:{}", name, tag_str.join(","))
         } else {
             name.to_string()
@@ -164,7 +155,8 @@ impl AsyncMetricsCollector for MetricsCollector {
         }
 
         let key = Self::metric_key(name, tags);
-        let gauge = self.gauges
+        let gauge = self
+            .gauges
             .entry(key)
             .or_insert_with(|| Arc::new(std::sync::RwLock::new(0.0)));
 
@@ -177,7 +169,8 @@ impl AsyncMetricsCollector for MetricsCollector {
         }
 
         let key = Self::metric_key(name, tags);
-        let hist = self.histograms
+        let hist = self
+            .histograms
             .entry(key)
             .or_insert_with(|| Arc::new(std::sync::RwLock::new(Vec::new())));
 

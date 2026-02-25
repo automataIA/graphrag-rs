@@ -6,9 +6,9 @@
 //! Test Type: Integration Tests (multiple components, no external services)
 //! Data Source: Real text documents from tests/fixtures/documents/
 
-use graphrag_core::{Document, DocumentId};
-use graphrag_core::text::{TextProcessor, ChunkEnricher};
 use graphrag_core::text::parsers::MarkdownLayoutParser;
+use graphrag_core::text::{ChunkEnricher, TextProcessor};
+use graphrag_core::{Document, DocumentId};
 use std::fs;
 
 /// Helper function to load fixture files
@@ -31,8 +31,14 @@ fn test_complete_pipeline_on_real_article() {
     let content = load_fixture("sample_article.txt");
 
     // Verify fixture loaded correctly
-    assert!(content.len() > 1000, "Fixture should contain substantial content");
-    assert!(content.contains("Knowledge Graphs"), "Fixture should contain expected content");
+    assert!(
+        content.len() > 1000,
+        "Fixture should contain substantial content"
+    );
+    assert!(
+        content.contains("Knowledge Graphs"),
+        "Fixture should contain expected content"
+    );
 
     // 2. Create document
     let document = Document::new(
@@ -42,10 +48,10 @@ fn test_complete_pipeline_on_real_article() {
     );
 
     // 3. Run text processing pipeline (INTEGRATION of multiple components)
-    let processor = TextProcessor::new(500, 50)
-        .expect("TextProcessor should initialize");
+    let processor = TextProcessor::new(500, 50).expect("TextProcessor should initialize");
 
-    let chunks = processor.chunk_and_enrich(&document)
+    let chunks = processor
+        .chunk_and_enrich(&document)
         .expect("Pipeline should process document successfully");
 
     // 4. Verify results against expectations for this specific document
@@ -70,7 +76,9 @@ fn test_complete_pipeline_on_real_article() {
 
     // Check that headings contain expected content
     let has_intro_heading = chunks.iter().any(|c| {
-        c.metadata.chapter.as_ref()
+        c.metadata
+            .chapter
+            .as_ref()
             .map(|ch| ch.contains("Introduction"))
             .unwrap_or(false)
     });
@@ -129,10 +137,10 @@ fn test_markdown_parsing_on_technical_doc() {
     // Use TextProcessor with Markdown-aware enricher
     let parser = Box::new(MarkdownLayoutParser::new());
     let mut enricher = ChunkEnricher::new_default(parser);
-    let processor = TextProcessor::new(400, 50)
-        .expect("TextProcessor should initialize");
+    let processor = TextProcessor::new(400, 50).expect("TextProcessor should initialize");
 
-    let chunks = processor.chunk_text_with_enrichment(&document, &mut enricher)
+    let chunks = processor
+        .chunk_text_with_enrichment(&document, &mut enricher)
         .expect("Should process Markdown document");
 
     // Verify multiple chunks created
@@ -142,7 +150,9 @@ fn test_markdown_parsing_on_technical_doc() {
     let h1_chunks: Vec<_> = chunks
         .iter()
         .filter(|c| {
-            c.metadata.chapter.as_ref()
+            c.metadata
+                .chapter
+                .as_ref()
                 .map(|ch| ch.starts_with("GraphRAG System"))
                 .unwrap_or(false)
         })
@@ -155,7 +165,9 @@ fn test_markdown_parsing_on_technical_doc() {
 
     // Check for nested heading structure
     let has_h2 = chunks.iter().any(|c| {
-        c.metadata.section.as_ref()
+        c.metadata
+            .section
+            .as_ref()
             .map(|s| s.contains("Overview") || s.contains("Implementation"))
             .unwrap_or(false)
     });
@@ -166,9 +178,7 @@ fn test_markdown_parsing_on_technical_doc() {
     );
 
     // Verify subsections detected
-    let has_subsections = chunks.iter().any(|c| {
-        c.metadata.subsection.is_some()
-    });
+    let has_subsections = chunks.iter().any(|c| c.metadata.subsection.is_some());
 
     assert!(
         has_subsections,
@@ -190,10 +200,10 @@ fn test_keyword_extraction_quality() {
         content,
     );
 
-    let processor = TextProcessor::new(800, 50)
-        .expect("TextProcessor should initialize");
+    let processor = TextProcessor::new(800, 50).expect("TextProcessor should initialize");
 
-    let chunks = processor.chunk_and_enrich(&document)
+    let chunks = processor
+        .chunk_and_enrich(&document)
         .expect("Should process document");
 
     // Find chunks about "Knowledge Graphs"
@@ -202,7 +212,10 @@ fn test_keyword_extraction_quality() {
         .filter(|c| c.content.contains("knowledge graph"))
         .collect();
 
-    assert!(!kg_chunks.is_empty(), "Should have chunks about knowledge graphs");
+    assert!(
+        !kg_chunks.is_empty(),
+        "Should have chunks about knowledge graphs"
+    );
 
     // Check keyword quality in these chunks
     for chunk in &kg_chunks {
@@ -214,7 +227,9 @@ fn test_keyword_extraction_quality() {
 
         // Keywords should be lowercase
         assert!(
-            keywords_str.chars().all(|c| !c.is_uppercase() || !c.is_alphabetic()),
+            keywords_str
+                .chars()
+                .all(|c| !c.is_uppercase() || !c.is_alphabetic()),
             "Keywords should be normalized to lowercase"
         );
 
@@ -247,10 +262,10 @@ fn test_chunk_overlap_on_real_text() {
     );
 
     let overlap = 100;
-    let processor = TextProcessor::new(500, overlap)
-        .expect("TextProcessor should initialize");
+    let processor = TextProcessor::new(500, overlap).expect("TextProcessor should initialize");
 
-    let chunks = processor.chunk_text(&document)
+    let chunks = processor
+        .chunk_text(&document)
         .expect("Should chunk document");
 
     assert!(chunks.len() >= 2, "Need at least 2 chunks to test overlap");
@@ -276,8 +291,8 @@ fn test_chunk_overlap_on_real_text() {
 
         // Check for meaningful overlap (not necessarily exact due to word boundaries)
         // At least some content should be similar
-        let has_overlap = next.content.contains(&current_end[..50])
-            || current_end.contains(&next_start[..50]);
+        let has_overlap =
+            next.content.contains(&current_end[..50]) || current_end.contains(&next_start[..50]);
 
         assert!(
             has_overlap,
@@ -300,8 +315,14 @@ fn test_document_statistics_on_real_content() {
     let word_count = content.split_whitespace().count();
     let char_count = content.len();
 
-    assert!(line_count > 50, "Fixture should have substantial line count");
-    assert!(word_count > 400, "Fixture should have substantial word count");
+    assert!(
+        line_count > 50,
+        "Fixture should have substantial line count"
+    );
+    assert!(
+        word_count > 400,
+        "Fixture should have substantial word count"
+    );
 
     let document = Document::new(
         DocumentId::new("fixture_stats".to_string()),
@@ -309,10 +330,10 @@ fn test_document_statistics_on_real_content() {
         content,
     );
 
-    let processor = TextProcessor::new(500, 50)
-        .expect("TextProcessor should initialize");
+    let processor = TextProcessor::new(500, 50).expect("TextProcessor should initialize");
 
-    let chunks = processor.chunk_text(&document)
+    let chunks = processor
+        .chunk_text(&document)
         .expect("Should process document");
 
     // Verify total chunk content roughly equals original
@@ -351,12 +372,15 @@ fn test_edge_cases_with_fixtures() {
         minimal.to_string(),
     );
 
-    let processor = TextProcessor::new(100, 20)
-        .expect("TextProcessor should initialize");
+    let processor = TextProcessor::new(100, 20).expect("TextProcessor should initialize");
 
-    let chunks = processor.chunk_and_enrich(&document)
+    let chunks = processor
+        .chunk_and_enrich(&document)
         .expect("Should handle minimal document");
 
     assert!(chunks.len() >= 1, "Should create at least one chunk");
-    assert!(chunks[0].metadata.chapter.is_some(), "Should detect title heading");
+    assert!(
+        chunks[0].metadata.chapter.is_some(),
+        "Should detect title heading"
+    );
 }

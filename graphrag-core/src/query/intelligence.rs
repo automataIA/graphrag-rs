@@ -8,8 +8,8 @@
 //! - Natural language to structured query conversion
 //! - Query performance analysis
 
-use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 
 /// Query intelligence engine
 pub struct QueryIntelligence {
@@ -297,13 +297,37 @@ impl QueryIntelligence {
     fn load_default_synonyms(&mut self) {
         // Common synonyms
         self.add_synonym("find", vec!["search".to_string(), "locate".to_string()]);
-        self.add_synonym("person", vec!["individual".to_string(), "people".to_string()]);
-        self.add_synonym("company", vec!["organization".to_string(), "business".to_string(), "firm".to_string()]);
+        self.add_synonym(
+            "person",
+            vec!["individual".to_string(), "people".to_string()],
+        );
+        self.add_synonym(
+            "company",
+            vec![
+                "organization".to_string(),
+                "business".to_string(),
+                "firm".to_string(),
+            ],
+        );
         self.add_synonym("show", vec!["display".to_string(), "present".to_string()]);
         self.add_synonym("get", vec!["retrieve".to_string(), "fetch".to_string()]);
-        self.add_synonym("large", vec!["big".to_string(), "huge".to_string(), "significant".to_string()]);
+        self.add_synonym(
+            "large",
+            vec![
+                "big".to_string(),
+                "huge".to_string(),
+                "significant".to_string(),
+            ],
+        );
         self.add_synonym("small", vec!["tiny".to_string(), "minor".to_string()]);
-        self.add_synonym("important", vec!["significant".to_string(), "critical".to_string(), "key".to_string()]);
+        self.add_synonym(
+            "important",
+            vec![
+                "significant".to_string(),
+                "critical".to_string(),
+                "key".to_string(),
+            ],
+        );
     }
 
     /// Load default query templates
@@ -336,9 +360,8 @@ impl QueryIntelligence {
     /// Load default stop words
     fn load_default_stop_words(&mut self) {
         let stop_words = vec![
-            "a", "an", "and", "are", "as", "at", "be", "by", "for",
-            "from", "has", "he", "in", "is", "it", "its", "of", "on",
-            "that", "the", "to", "was", "will", "with",
+            "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has", "he", "in",
+            "is", "it", "its", "of", "on", "that", "the", "to", "was", "will", "with",
         ];
 
         for word in stop_words {
@@ -382,8 +405,10 @@ mod tests {
         let result = engine.rewrite_query(query);
 
         // Should expand "find" and "large"
-        assert!(result.expanded_terms.contains(&"search".to_string()) ||
-                result.expanded_terms.contains(&"big".to_string()));
+        assert!(
+            result.expanded_terms.contains(&"search".to_string())
+                || result.expanded_terms.contains(&"big".to_string())
+        );
     }
 
     #[test]
@@ -412,7 +437,13 @@ mod tests {
     #[test]
     fn test_custom_synonyms() {
         let mut engine = QueryIntelligence::new();
-        engine.add_synonym("AI", vec!["artificial intelligence".to_string(), "machine learning".to_string()]);
+        engine.add_synonym(
+            "AI",
+            vec![
+                "artificial intelligence".to_string(),
+                "machine learning".to_string(),
+            ],
+        );
 
         let query = "AI applications";
         let result = engine.rewrite_query(query);

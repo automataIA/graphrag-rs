@@ -50,7 +50,7 @@ impl Default for GleaningConfig {
                 "EVENT".to_string(),
                 "CONCEPT".to_string(),
             ],
-            temperature: 0.1, // Low temperature for consistent extraction
+            temperature: 0.0, // Zero temperature for deterministic JSON extraction
             max_tokens: 1500,
         }
     }
@@ -85,13 +85,14 @@ impl GleaningEntityExtractor {
     /// * `ollama_client` - Ollama client for LLM inference (REQUIRED)
     /// * `config` - Gleaning configuration
     pub fn new(ollama_client: OllamaClient, config: GleaningConfig) -> Self {
+        // Extract keep_alive before ollama_client is moved into the extractor
+        let keep_alive = ollama_client.config().keep_alive.clone();
+
         // Create LLM extractor with configured entity types
-        let llm_extractor = LLMEntityExtractor::new(
-            ollama_client,
-            config.entity_types.clone(),
-        )
-        .with_temperature(config.temperature)
-        .with_max_tokens(config.max_tokens);
+        let llm_extractor = LLMEntityExtractor::new(ollama_client, config.entity_types.clone())
+            .with_temperature(config.temperature)
+            .with_max_tokens(config.max_tokens)
+            .with_keep_alive(keep_alive);
 
         Self {
             llm_extractor,
@@ -204,8 +205,10 @@ impl GleaningEntityExtractor {
         }
 
         // Convert back to domain entities and relationships
-        let final_entities = self.convert_data_to_entities(&all_entity_data, &chunk.id, &chunk.content)?;
-        let final_relationships = self.convert_data_to_relationships(&all_relationship_data, &final_entities)?;
+        let final_entities =
+            self.convert_data_to_entities(&all_entity_data, &chunk.id, &chunk.content)?;
+        let final_relationships =
+            self.convert_data_to_relationships(&all_relationship_data, &final_entities)?;
 
         // Deduplicate relationships
         let deduplicated_relationships = self.deduplicate_relationships(final_relationships);
@@ -260,11 +263,11 @@ impl GleaningEntityExtractor {
                             new_entity.name
                         );
                     }
-                }
+                },
                 None => {
                     // New entity, add it
                     merged.insert(key, new_entity);
-                }
+                },
             }
         }
 
@@ -284,7 +287,10 @@ impl GleaningEntityExtractor {
     }
 
     /// Convert domain relationships to RelationshipData
-    fn convert_relationships_to_data(&self, relationships: &[Relationship]) -> Vec<RelationshipData> {
+    fn convert_relationships_to_data(
+        &self,
+        relationships: &[Relationship],
+    ) -> Vec<RelationshipData> {
         relationships
             .iter()
             .map(|r| RelationshipData {
@@ -527,13 +533,11 @@ mod tests {
         let config = GleaningConfig::default();
         let extractor = GleaningEntityExtractor::new(ollama_client, config);
 
-        let existing = vec![
-            EntityData {
-                name: "Tom Sawyer".to_string(),
-                entity_type: "PERSON".to_string(),
-                description: "A boy".to_string(),
-            },
-        ];
+        let existing = vec![EntityData {
+            name: "Tom Sawyer".to_string(),
+            entity_type: "PERSON".to_string(),
+            description: "A boy".to_string(),
+        }];
 
         let new = vec![
             EntityData {

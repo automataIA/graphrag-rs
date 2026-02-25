@@ -3,7 +3,7 @@
 //! Extracts entities and relationships from text using WebLLM (Qwen) when available,
 //! or falls back to simple rule-based extraction.
 
-use crate::webllm::{WebLLM, ChatMessage};
+use crate::webllm::{ChatMessage, WebLLM};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -71,31 +71,33 @@ JSON:"#,
             // Try to parse JSON
             match serde_json::from_str::<ExtractionResult>(json_str) {
                 Ok(result) => {
-                    web_sys::console::log_1(&format!(
-                        "✅ Extracted {} entities, {} relationships",
-                        result.entities.len(),
-                        result.relationships.len()
-                    ).into());
+                    web_sys::console::log_1(
+                        &format!(
+                            "✅ Extracted {} entities, {} relationships",
+                            result.entities.len(),
+                            result.relationships.len()
+                        )
+                        .into(),
+                    );
                     Ok(result)
-                }
+                },
                 Err(e) => {
-                    web_sys::console::warn_1(&format!(
-                        "⚠️  Failed to parse JSON: {}. Response: {}",
-                        e, json_str
-                    ).into());
+                    web_sys::console::warn_1(
+                        &format!("⚠️  Failed to parse JSON: {}. Response: {}", e, json_str).into(),
+                    );
 
                     // Return empty result instead of error
                     Ok(ExtractionResult {
                         entities: Vec::new(),
                         relationships: Vec::new(),
                     })
-                }
+                },
             }
-        }
+        },
         Err(e) => {
             web_sys::console::error_1(&format!("❌ LLM inference failed: {}", e).into());
             Err(format!("LLM inference failed: {}", e))
-        }
+        },
     }
 }
 
@@ -115,13 +117,12 @@ pub async fn batch_extract_entities(
             Ok(result) => {
                 all_entities.extend(result.entities);
                 all_relationships.extend(result.relationships);
-            }
+            },
             Err(e) => {
-                web_sys::console::warn_1(&format!(
-                    "⚠️  Failed to extract from chunk {}: {}",
-                    idx + 1, e
-                ).into());
-            }
+                web_sys::console::warn_1(
+                    &format!("⚠️  Failed to extract from chunk {}: {}", idx + 1, e).into(),
+                );
+            },
         }
 
         // Small delay to avoid rate limits
@@ -152,10 +153,26 @@ pub fn extract_entities_simple(text: &str) -> ExtractionResult {
 
     // Common technical terms to identify as TECHNOLOGY entities
     let tech_terms = [
-        "GraphRAG", "LLM", "language model", "knowledge graph", "neural network",
-        "embedding", "retrieval", "generation", "WebGPU", "WASM", "Rust",
-        "entity extraction", "relationship", "vector", "semantic search",
-        "transformer", "attention", "tokenizer", "ONNX", "WebLLM",
+        "GraphRAG",
+        "LLM",
+        "language model",
+        "knowledge graph",
+        "neural network",
+        "embedding",
+        "retrieval",
+        "generation",
+        "WebGPU",
+        "WASM",
+        "Rust",
+        "entity extraction",
+        "relationship",
+        "vector",
+        "semantic search",
+        "transformer",
+        "attention",
+        "tokenizer",
+        "ONNX",
+        "WebLLM",
     ];
 
     // Extract capitalized phrases (potential PERSON/ORGANIZATION/CONCEPT entities)
@@ -206,7 +223,9 @@ pub fn extract_entities_simple(text: &str) -> ExtractionResult {
                 relationships.push(Relationship {
                     from: subj.to_string(),
                     relation: "USES".to_string(),
-                    to: obj.trim_end_matches(|c: char| !c.is_alphanumeric()).to_string(),
+                    to: obj
+                        .trim_end_matches(|c: char| !c.is_alphanumeric())
+                        .to_string(),
                 });
             }
         }
@@ -222,17 +241,22 @@ pub fn extract_entities_simple(text: &str) -> ExtractionResult {
                 relationships.push(Relationship {
                     from: subj.to_string(),
                     relation: "COMBINES".to_string(),
-                    to: obj.trim_end_matches(|c: char| !c.is_alphanumeric()).to_string(),
+                    to: obj
+                        .trim_end_matches(|c: char| !c.is_alphanumeric())
+                        .to_string(),
                 });
             }
         }
     }
 
-    web_sys::console::log_1(&format!(
-        "✅ Simple extraction: {} entities, {} relationships",
-        entities.len(),
-        relationships.len()
-    ).into());
+    web_sys::console::log_1(
+        &format!(
+            "✅ Simple extraction: {} entities, {} relationships",
+            entities.len(),
+            relationships.len()
+        )
+        .into(),
+    );
 
     ExtractionResult {
         entities,

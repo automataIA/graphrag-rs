@@ -6,8 +6,8 @@
 //!
 //! This allows users to choose between privacy (WebLLM) and performance (Ollama).
 
-use wasm_bindgen::prelude::*;
 use serde::{Deserialize, Serialize};
+use wasm_bindgen::prelude::*;
 
 /// LLM provider type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -197,14 +197,14 @@ impl UnifiedLlmClient {
                 } else {
                     Err(JsValue::from_str("WebLLM client not initialized"))
                 }
-            }
+            },
             LlmProviderType::OllamaHttp => {
                 if let Some(ref ollama) = self.ollama_client {
                     ollama.generate(prompt).await
                 } else {
                     Err(JsValue::from_str("Ollama client not initialized"))
                 }
-            }
+            },
         }
     }
 
@@ -218,14 +218,14 @@ impl UnifiedLlmClient {
                 } else {
                     Err(JsValue::from_str("WebLLM client not initialized"))
                 }
-            }
+            },
             LlmProviderType::OllamaHttp => {
                 if let Some(ref ollama) = self.ollama_client {
                     ollama.chat(message).await
                 } else {
                     Err(JsValue::from_str("Ollama client not initialized"))
                 }
-            }
+            },
         }
     }
 
@@ -236,14 +236,14 @@ impl UnifiedLlmClient {
             LlmProviderType::WebLLM => {
                 // WebLLM is always "available" but may need initialization
                 Ok(true)
-            }
+            },
             LlmProviderType::OllamaHttp => {
                 if let Some(ref ollama) = self.ollama_client {
                     ollama.check_availability().await
                 } else {
                     Ok(false)
                 }
-            }
+            },
         }
     }
 }

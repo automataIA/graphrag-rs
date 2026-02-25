@@ -6,14 +6,14 @@
 //! - LLM integration with WebLLM
 //! - Storage persistence
 
-use wasm_bindgen_test::*;
 use graphrag_wasm::{
-    GraphRAG,
     embedder::WasmEmbedder,
-    webllm::is_webllm_available,
-    storage::{IndexedDBStore, CacheStore, estimate_storage},
+    storage::{estimate_storage, CacheStore, IndexedDBStore},
     voy_bindings::check_voy_available,
+    webllm::is_webllm_available,
+    GraphRAG,
 };
+use wasm_bindgen_test::*;
 
 wasm_bindgen_test_configure!(run_in_browser);
 
@@ -31,7 +31,9 @@ async fn test_complete_rag_pipeline() {
     let mut graph = GraphRAG::new(384).unwrap();
 
     // Step 2: Create embedder (would generate real embeddings in production)
-    let _embedder = WasmEmbedder::new("test-model".to_string(), 384).await.unwrap();
+    let _embedder = WasmEmbedder::new("test-model".to_string(), 384)
+        .await
+        .unwrap();
 
     // Step 3: Add documents
     let documents = vec![
@@ -42,15 +44,11 @@ async fn test_complete_rag_pipeline() {
 
     for (i, doc) in documents.iter().enumerate() {
         // Generate dummy embedding (in production, use embedder.embed())
-        let embedding: Vec<f32> = (0..384).map(|j| {
-            ((j + i * 10) as f32) / 384.0
-        }).collect();
+        let embedding: Vec<f32> = (0..384).map(|j| ((j + i * 10) as f32) / 384.0).collect();
 
-        let result = graph.add_document(
-            format!("doc{}", i),
-            doc.to_string(),
-            embedding
-        ).await;
+        let result = graph
+            .add_document(format!("doc{}", i), doc.to_string(), embedding)
+            .await;
 
         assert!(result.is_ok());
     }
@@ -90,12 +88,15 @@ async fn test_storage_quota() {
     let result = estimate_storage().await;
 
     if let Ok((usage, quota, percentage)) = result {
-        web_sys::console::log_1(&format!(
-            "Storage: {}MB used / {}MB total ({}%)",
-            usage / 1_000_000,
-            quota / 1_000_000,
-            percentage
-        ).into());
+        web_sys::console::log_1(
+            &format!(
+                "Storage: {}MB used / {}MB total ({}%)",
+                usage / 1_000_000,
+                quota / 1_000_000,
+                percentage
+            )
+            .into(),
+        );
 
         assert!(quota > 0);
         assert!(percentage >= 0.0 && percentage <= 100.0);
@@ -130,8 +131,14 @@ async fn test_document_persistence() {
     db.put("documents", "doc2", &doc2).await.unwrap();
 
     // Retrieve documents
-    let retrieved1 = db.get::<serde_json::Value>("documents", "doc1").await.unwrap();
-    let retrieved2 = db.get::<serde_json::Value>("documents", "doc2").await.unwrap();
+    let retrieved1 = db
+        .get::<serde_json::Value>("documents", "doc1")
+        .await
+        .unwrap();
+    let retrieved2 = db
+        .get::<serde_json::Value>("documents", "doc2")
+        .await
+        .unwrap();
 
     assert_eq!(retrieved1["id"], "doc1");
     assert_eq!(retrieved2["id"], "doc2");
@@ -190,15 +197,12 @@ async fn test_hybrid_search() {
     ];
 
     for (i, (doc_type, text)) in docs.iter().enumerate() {
-        let embedding: Vec<f32> = (0..384).map(|j| {
-            ((j + i * 20) as f32) / 384.0
-        }).collect();
+        let embedding: Vec<f32> = (0..384).map(|j| ((j + i * 20) as f32) / 384.0).collect();
 
-        graph.add_document(
-            format!("{}_{}", doc_type, i),
-            text.to_string(),
-            embedding
-        ).await.unwrap();
+        graph
+            .add_document(format!("{}_{}", doc_type, i), text.to_string(), embedding)
+            .await
+            .unwrap();
     }
 
     graph.build_index().await.unwrap();
@@ -224,15 +228,16 @@ async fn test_incremental_updates() {
 
     // Add initial batch
     for i in 0..10 {
-        let embedding: Vec<f32> = (0..384).map(|j| {
-            ((j + i * 10) as f32) / 384.0
-        }).collect();
+        let embedding: Vec<f32> = (0..384).map(|j| ((j + i * 10) as f32) / 384.0).collect();
 
-        graph.add_document(
-            format!("doc{}", i),
-            format!("Initial document {}", i),
-            embedding
-        ).await.unwrap();
+        graph
+            .add_document(
+                format!("doc{}", i),
+                format!("Initial document {}", i),
+                embedding,
+            )
+            .await
+            .unwrap();
     }
 
     graph.build_index().await.unwrap();
@@ -240,15 +245,16 @@ async fn test_incremental_updates() {
 
     // Add more documents
     for i in 10..20 {
-        let embedding: Vec<f32> = (0..384).map(|j| {
-            ((j + i * 10) as f32) / 384.0
-        }).collect();
+        let embedding: Vec<f32> = (0..384).map(|j| ((j + i * 10) as f32) / 384.0).collect();
 
-        graph.add_document(
-            format!("doc{}", i),
-            format!("New document {}", i),
-            embedding
-        ).await.unwrap();
+        graph
+            .add_document(
+                format!("doc{}", i),
+                format!("New document {}", i),
+                embedding,
+            )
+            .await
+            .unwrap();
     }
 
     // Rebuild index with new documents
@@ -272,11 +278,10 @@ async fn test_error_recovery() {
 
     // Add a document
     let embedding: Vec<f32> = vec![0.5; 384];
-    graph.add_document(
-        "doc1".to_string(),
-        "Test document".to_string(),
-        embedding
-    ).await.unwrap();
+    graph
+        .add_document("doc1".to_string(), "Test document".to_string(), embedding)
+        .await
+        .unwrap();
 
     // Query should now work
     let result2 = graph.query(query_embedding, 1).await;
@@ -292,15 +297,12 @@ async fn test_memory_management() {
 
     // Add many documents
     for i in 0..100 {
-        let embedding: Vec<f32> = (0..384).map(|j| {
-            ((j + i) as f32) / 384.0
-        }).collect();
+        let embedding: Vec<f32> = (0..384).map(|j| ((j + i) as f32) / 384.0).collect();
 
-        graph.add_document(
-            format!("doc{}", i),
-            format!("Document {}", i),
-            embedding
-        ).await.unwrap();
+        graph
+            .add_document(format!("doc{}", i), format!("Document {}", i), embedding)
+            .await
+            .unwrap();
     }
 
     assert_eq!(graph.document_count(), 100);
@@ -313,11 +315,13 @@ async fn test_memory_management() {
 
     // Should be able to add new documents after clearing
     let embedding: Vec<f32> = vec![0.5; 384];
-    let result = graph.add_document(
-        "new_doc".to_string(),
-        "New document after clear".to_string(),
-        embedding
-    ).await;
+    let result = graph
+        .add_document(
+            "new_doc".to_string(),
+            "New document after clear".to_string(),
+            embedding,
+        )
+        .await;
 
     assert!(result.is_ok());
     assert_eq!(graph.document_count(), 1);
@@ -335,17 +339,23 @@ async fn test_concurrent_operations() {
     let embedding1: Vec<f32> = vec![0.5; 384];
     let embedding2: Vec<f32> = vec![0.5; 768];
 
-    graph1.add_document(
-        "doc1".to_string(),
-        "Document for graph 1".to_string(),
-        embedding1
-    ).await.unwrap();
+    graph1
+        .add_document(
+            "doc1".to_string(),
+            "Document for graph 1".to_string(),
+            embedding1,
+        )
+        .await
+        .unwrap();
 
-    graph2.add_document(
-        "doc1".to_string(),
-        "Document for graph 2".to_string(),
-        embedding2
-    ).await.unwrap();
+    graph2
+        .add_document(
+            "doc1".to_string(),
+            "Document for graph 2".to_string(),
+            embedding2,
+        )
+        .await
+        .unwrap();
 
     assert_eq!(graph1.document_count(), 1);
     assert_eq!(graph2.document_count(), 1);

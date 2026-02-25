@@ -67,19 +67,19 @@ impl QueryInput {
                 } else {
                     Some(Action::ExecuteQuery(content))
                 }
-            }
+            },
             // Clear input (consume the key, don't pass to scrolling)
             (KeyCode::Char('d'), KeyModifiers::CONTROL) => {
                 self.textarea = TextArea::default();
                 self.textarea.set_cursor_line_style(Style::default());
                 self.textarea.set_placeholder_text("Enter query or /command... (e.g., \"What are the main entities?\" or \"/config file.json5\")");
-                Some(Action::Noop)  // Return Noop to indicate key was consumed
-            }
+                Some(Action::Noop) // Return Noop to indicate key was consumed
+            },
             // Let textarea handle everything else - return Noop to indicate consumption
             _ => {
                 self.textarea.input(key);
-                Some(Action::Noop)  // Key was consumed by input
-            }
+                Some(Action::Noop) // Key was consumed by input
+            },
         }
     }
 
@@ -95,7 +95,7 @@ impl super::Component for QueryInput {
             Action::FocusQueryInput => {
                 self.set_focused(true);
                 None
-            }
+            },
             _ => None,
         }
     }
@@ -116,13 +116,15 @@ impl super::Component for QueryInput {
         let block = Block::default()
             .title(title)
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(border_color).add_modifier(
-                if self.focused {
-                    Modifier::BOLD
-                } else {
-                    Modifier::empty()
-                },
-            ));
+            .border_style(
+                Style::default()
+                    .fg(border_color)
+                    .add_modifier(if self.focused {
+                        Modifier::BOLD
+                    } else {
+                        Modifier::empty()
+                    }),
+            );
 
         self.textarea.set_block(block);
         self.textarea.set_cursor_style(if self.focused {

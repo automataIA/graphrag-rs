@@ -180,7 +180,8 @@ impl SemanticChunker {
         let mut diffs = Vec::new();
 
         for i in 0..embeddings.len().saturating_sub(self.config.buffer_size) {
-            let sim = self.cosine_similarity(&embeddings[i], &embeddings[i + self.config.buffer_size]);
+            let sim =
+                self.cosine_similarity(&embeddings[i], &embeddings[i + self.config.buffer_size]);
 
             // Convert similarity to difference (distance)
             // Higher distance = more dissimilar = potential breakpoint
@@ -247,9 +248,8 @@ impl SemanticChunker {
     fn calculate_std_threshold(&self, diffs: &[f32]) -> f32 {
         let mean: f32 = diffs.iter().sum::<f32>() / diffs.len() as f32;
 
-        let variance: f32 = diffs.iter()
-            .map(|&x| (x - mean).powi(2))
-            .sum::<f32>() / diffs.len() as f32;
+        let variance: f32 =
+            diffs.iter().map(|&x| (x - mean).powi(2)).sum::<f32>() / diffs.len() as f32;
 
         let std_dev = variance.sqrt();
 

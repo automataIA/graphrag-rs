@@ -11,8 +11,8 @@
 
 #![allow(dead_code)]
 
-use leptos::prelude::*;
 use leptos::ev::SubmitEvent;
+use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Community data structure for UI display

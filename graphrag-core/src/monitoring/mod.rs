@@ -13,10 +13,9 @@ pub mod benchmark;
 pub mod metrics_collector;
 
 pub use benchmark::{
-    BenchmarkConfig, BenchmarkDataset, BenchmarkQuery, BenchmarkRunner,
-    BenchmarkSummary, LatencyMetrics, QualityMetrics, QueryBenchmark,
-    TokenMetrics,
+    BenchmarkConfig, BenchmarkDataset, BenchmarkQuery, BenchmarkRunner, BenchmarkSummary,
+    LatencyMetrics, QualityMetrics, QueryBenchmark, TokenMetrics,
 };
 
 #[cfg(feature = "dashmap")]
-pub use metrics_collector::{MetricsCollector, HistogramStats};
+pub use metrics_collector::{HistogramStats, MetricsCollector};

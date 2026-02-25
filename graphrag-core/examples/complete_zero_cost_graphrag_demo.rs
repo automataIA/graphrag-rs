@@ -8,10 +8,10 @@
 //! 4. Query the system with LLM-enhanced summarization
 
 use graphrag_core::{
+    async_graphrag::AsyncGraphRAG,
     config::{Config, ZeroCostApproachConfig},
     core::{Document, DocumentId, Result},
     text::TextProcessor,
-    async_graphrag::AsyncGraphRAG,
 };
 use indexmap::IndexMap;
 use std::collections::HashMap;
@@ -60,9 +60,21 @@ fn demo_approach_selections() -> Result<()> {
     println!("{}", "=".repeat(40));
 
     let approaches = vec![
-        ("Pure Algorithmic", "pure_algorithmic", "$0 indexing, $0 query"),
-        ("E2GraphRAG-style", "e2_graphrag", "$0.05 indexing, $0.001 query"),
-        ("LazyGraphRAG-style", "lazy_graphrag", "$0.10 indexing, $0.0014 query"),
+        (
+            "Pure Algorithmic",
+            "pure_algorithmic",
+            "$0 indexing, $0 query",
+        ),
+        (
+            "E2GraphRAG-style",
+            "e2_graphrag",
+            "$0.05 indexing, $0.001 query",
+        ),
+        (
+            "LazyGraphRAG-style",
+            "lazy_graphrag",
+            "$0.10 indexing, $0.0014 query",
+        ),
     ];
 
     for (name, approach_key, cost) in approaches {
@@ -72,14 +84,16 @@ fn demo_approach_selections() -> Result<()> {
         match approach_key {
             "pure_algorithmic" => {
                 println!("   ✨ Features: No LLM, pure algorithms, BM25 + PageRank");
-            }
+            },
             "e2_graphrag" => {
                 println!("   ✨ Features: Pattern-based NER, multiple keyword algorithms");
-            }
+            },
             "lazy_graphrag" => {
-                println!("   ✨ Features: LLM for queries only, concept extraction + co-occurrence");
-            }
-            _ => {}
+                println!(
+                    "   ✨ Features: LLM for queries only, concept extraction + co-occurrence"
+                );
+            },
+            _ => {},
         }
         println!();
     }
@@ -102,7 +116,8 @@ complex neural networks capable of understanding patterns in vast amounts of dat
 Deep learning, a subfield of machine learning, uses artificial neural networks with multiple
 layers to progressively extract higher-level features from raw input. This approach has
 revolutionized fields like computer vision, natural language processing, and speech recognition.
-            "#.to_string(),
+            "#
+            .to_string(),
             chunks: vec![],
             metadata: IndexMap::from([
                 ("category".to_string(), "technical".to_string()),
@@ -123,7 +138,8 @@ The system operates in two main phases:
 
 Key advantages include the ability to answer global questions about the entire dataset
 and provide contextual awareness that traditional RAG systems lack.
-            "#.to_string(),
+            "#
+            .to_string(),
             chunks: vec![],
             metadata: IndexMap::from([
                 ("category".to_string(), "system_design".to_string()),
@@ -147,7 +163,8 @@ Key NLP tasks include:
 
 The advent of pre-trained language models has dramatically improved performance across
 all these tasks, enabling more accurate and contextually aware language understanding.
-            "#.to_string(),
+            "#
+            .to_string(),
             chunks: vec![],
             metadata: IndexMap::from([
                 ("category".to_string(), "nlp".to_string()),
@@ -162,9 +179,18 @@ all these tasks, enabling more accurate and contextually aware language understa
 /// Create configurations for each approach
 fn create_approach_configurations() -> Vec<(String, Config)> {
     vec![
-        ("Pure Algorithmic".to_string(), create_pure_algorithmic_config()),
-        ("E2GraphRAG with LLM Summarization".to_string(), create_e2_graphrag_config()),
-        ("LazyGraphRAG with Progressive Summarization".to_string(), create_lazy_graphrag_config()),
+        (
+            "Pure Algorithmic".to_string(),
+            create_pure_algorithmic_config(),
+        ),
+        (
+            "E2GraphRAG with LLM Summarization".to_string(),
+            create_e2_graphrag_config(),
+        ),
+        (
+            "LazyGraphRAG with Progressive Summarization".to_string(),
+            create_lazy_graphrag_config(),
+        ),
     ]
 }
 
@@ -191,7 +217,11 @@ fn create_pure_algorithmic_config() -> Config {
         },
         entities: graphrag_core::config::EntityConfig {
             min_confidence: 0.7,
-            entity_types: vec!["PERSON".to_string(), "ORG".to_string(), "CONCEPT".to_string()],
+            entity_types: vec![
+                "PERSON".to_string(),
+                "ORG".to_string(),
+                "CONCEPT".to_string(),
+            ],
             use_gleaning: false,
             max_gleaning_rounds: 3,
             enable_triple_reflection: false,
@@ -221,6 +251,9 @@ fn create_pure_algorithmic_config() -> Config {
             fallback_to_hash: true,
             max_tokens: Some(2048),
             temperature: Some(0.7),
+            enable_caching: true,
+            keep_alive: None,
+            num_ctx: None,
         },
         zero_cost_approach: ZeroCostApproachConfig {
             approach: "pure_algorithmic".to_string(),
@@ -329,7 +362,11 @@ fn create_e2_graphrag_config() -> Config {
     config.output_dir = "./output/e2_graphrag_demo".to_string();
     config.zero_cost_approach.approach = "e2_graphrag".to_string();
     config.zero_cost_approach.e2_graphrag.enabled = true;
-    config.zero_cost_approach.e2_graphrag.ner_extraction.entity_types = vec![
+    config
+        .zero_cost_approach
+        .e2_graphrag
+        .ner_extraction
+        .entity_types = vec![
         "PERSON".to_string(),
         "ORGANIZATION".to_string(),
         "CONCEPT".to_string(),
@@ -345,10 +382,19 @@ fn create_lazy_graphrag_config() -> Config {
     config.output_dir = "./output/lazy_graphrag_demo".to_string();
     config.zero_cost_approach.approach = "lazy_graphrag".to_string();
     config.zero_cost_approach.lazy_graphrag.enabled = true;
-    config.zero_cost_approach.lazy_graphrag.query_expansion.enabled = true;
-    config.zero_cost_approach.lazy_graphrag.relevance_scoring.enabled = true;
+    config
+        .zero_cost_approach
+        .lazy_graphrag
+        .query_expansion
+        .enabled = true;
+    config
+        .zero_cost_approach
+        .lazy_graphrag
+        .relevance_scoring
+        .enabled = true;
     config.summarization.llm_config.enabled = true;
-    config.summarization.llm_config.strategy = graphrag_core::summarization::LLMStrategy::Progressive;
+    config.summarization.llm_config.strategy =
+        graphrag_core::summarization::LLMStrategy::Progressive;
     config.summarization.llm_config.temperature = 0.35; // Higher for progressive
     config
 }
@@ -361,8 +407,18 @@ async fn test_approach_with_config(
 ) -> Result<()> {
     println!("📊 Configuration loaded for {}", approach_name);
     println!("   Output directory: {}", config.output_dir);
-    println!("   Zero-cost approach: {}", config.zero_cost_approach.approach);
-    println!("   LLM summarization: {}", if config.summarization.llm_config.enabled { "Enabled" } else { "Disabled" });
+    println!(
+        "   Zero-cost approach: {}",
+        config.zero_cost_approach.approach
+    );
+    println!(
+        "   LLM summarization: {}",
+        if config.summarization.llm_config.enabled {
+            "Enabled"
+        } else {
+            "Disabled"
+        }
+    );
 
     // Create GraphRAG instance
     let mut graphrag = AsyncGraphRAG::new(config.clone()).await?;
@@ -409,22 +465,22 @@ async fn test_approach_with_config(
         "pure_algorithmic" => {
             println!("   📈 Using BM25 + PageRank for retrieval");
             println!("   📊 Results based on keyword matching and graph centrality");
-        }
+        },
         "e2_graphrag" => {
             println!("   🏷️  Using pattern-based entity extraction");
             println!("   🔗 Building relationships with mutual information");
             if config.summarization.llm_config.enabled {
                 println!("   🤖 Enhancing with LLM-based hierarchical summaries");
             }
-        }
+        },
         "lazy_graphrag" => {
             println!("   💡 Using concept extraction + co-occurrence analysis");
             println!("   🎯 Applying relevance testing with LLM assistance");
             println!("   📊 Progressive abstraction with LLM summarization");
-        }
+        },
         _ => {
             println!("   ❓ Using default approach");
-        }
+        },
     }
 
     // Show cost analysis
@@ -443,7 +499,7 @@ fn show_cost_analysis(config: &Config) {
             println!("   Indexing cost: $0 (pure algorithms)");
             println!("   Query cost: $0 (no LLM calls)");
             println!("   Storage: Minimal (vectors + graph structure)");
-        }
+        },
         "e2_graphrag" => {
             println!("   Indexing cost: ~$0.05 (pattern-based processing)");
             if config.summarization.llm_config.enabled {
@@ -451,21 +507,30 @@ fn show_cost_analysis(config: &Config) {
             } else {
                 println!("   Query cost: ~$0.001 (algorithmic only)");
             }
-        }
+        },
         "lazy_graphrag" => {
             println!("   Indexing cost: ~$0.10 (concept extraction)");
             println!("   Query cost: ~$0.0014 (LLM for expansion + scoring)");
             println!("   LLM usage: Query-time only (deferred approach)");
-        }
+        },
         _ => {
             println!("   Costs: Varies by approach");
-        }
+        },
     }
 
     if config.summarization.llm_config.enabled {
-        println!("   🤖 LLM Model: {}", config.summarization.llm_config.model_name);
-        println!("   📝 Strategy: {:?}", config.summarization.llm_config.strategy);
-        println!("   🌡️ Temperature: {:.2}", config.summarization.llm_config.temperature);
+        println!(
+            "   🤖 LLM Model: {}",
+            config.summarization.llm_config.model_name
+        );
+        println!(
+            "   📝 Strategy: {:?}",
+            config.summarization.llm_config.strategy
+        );
+        println!(
+            "   🌡️ Temperature: {:.2}",
+            config.summarization.llm_config.temperature
+        );
     }
 }
 
@@ -478,7 +543,12 @@ fn demo_budget_optimization() -> Result<()> {
         ("Free Tier", 0.0, "pure_algorithmic", "Unlimited queries"),
         ("Basic Research", 0.50, "e2_graphrag", "~500 queries/day"),
         ("Professional", 2.0, "lazy_graphrag", "~700 queries/day"),
-        ("Enterprise", 10.0, "lazy_graphrag", "Unlimited premium queries"),
+        (
+            "Enterprise",
+            10.0,
+            "lazy_graphrag",
+            "Unlimited premium queries",
+        ),
     ];
 
     for (tier, daily_budget, recommended_approach, query_capacity) in budgets {
@@ -489,14 +559,14 @@ fn demo_budget_optimization() -> Result<()> {
         match recommended_approach {
             "pure_algorithmic" => {
                 println!("   Features: Complete offline processing, no API costs");
-            }
+            },
             "e2_graphrag" => {
                 println!("   Features: Enhanced entity recognition, moderate LLM usage");
-            }
+            },
             "lazy_graphrag" => {
                 println!("   Features: State-of-the-art quality, query-time LLM optimization");
-            }
-            _ => {}
+            },
+            _ => {},
         }
         println!();
     }

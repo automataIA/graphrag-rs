@@ -28,9 +28,9 @@
 //! }).await?;
 //! ```
 
+use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
-use serde::{Deserialize, Serialize};
 
 /// Message for chat completions
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,7 +83,9 @@ pub enum WebLLMError {
 impl std::fmt::Display for WebLLMError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            WebLLMError::NotLoaded => write!(f, "WebLLM not loaded. Add <script> tag to index.html"),
+            WebLLMError::NotLoaded => {
+                write!(f, "WebLLM not loaded. Add <script> tag to index.html")
+            },
             WebLLMError::InitializationFailed(msg) => write!(f, "Initialization failed: {}", msg),
             WebLLMError::InferenceFailed(msg) => write!(f, "Inference failed: {}", msg),
             WebLLMError::WebGPUNotAvailable => write!(f, "WebGPU not available in this browser"),
@@ -94,7 +96,9 @@ impl std::fmt::Display for WebLLMError {
 impl From<JsValue> for WebLLMError {
     fn from(value: JsValue) -> Self {
         WebLLMError::InferenceFailed(
-            value.as_string().unwrap_or_else(|| "Unknown error".to_string())
+            value
+                .as_string()
+                .unwrap_or_else(|| "Unknown error".to_string()),
         )
     }
 }
@@ -127,8 +131,7 @@ impl WebLLM {
     /// WebLLM instance or error
     pub async fn new(model_id: &str) -> Result<Self, WebLLMError> {
         // Check if WebLLM is loaded
-        let window = web_sys::window()
-            .ok_or(WebLLMError::NotLoaded)?;
+        let window = web_sys::window().ok_or(WebLLMError::NotLoaded)?;
 
         let webllm = js_sys::Reflect::get(&window, &JsValue::from_str("webllm"))
             .map_err(|_| WebLLMError::NotLoaded)?;
@@ -162,15 +165,11 @@ impl WebLLM {
     /// # Arguments
     /// * `model_id` - Model identifier
     /// * `on_progress` - Callback for progress updates (progress: f64, text: String)
-    pub async fn new_with_progress<F>(
-        model_id: &str,
-        on_progress: F,
-    ) -> Result<Self, WebLLMError>
+    pub async fn new_with_progress<F>(model_id: &str, on_progress: F) -> Result<Self, WebLLMError>
     where
         F: Fn(f64, String) + 'static,
     {
-        let window = web_sys::window()
-            .ok_or(WebLLMError::NotLoaded)?;
+        let window = web_sys::window().ok_or(WebLLMError::NotLoaded)?;
 
         let webllm = js_sys::Reflect::get(&window, &JsValue::from_str("webllm"))
             .map_err(|_| WebLLMError::NotLoaded)?;
@@ -202,7 +201,8 @@ impl WebLLM {
             &config,
             &JsValue::from_str("initProgressCallback"),
             callback.as_ref().unchecked_ref(),
-        ).map_err(|_| WebLLMError::InitializationFailed("Failed to set callback".to_string()))?;
+        )
+        .map_err(|_| WebLLMError::InitializationFailed("Failed to set callback".to_string()))?;
 
         // Get CreateMLCEngine function
         let create_engine_fn = js_sys::Reflect::get(&webllm, &JsValue::from_str("CreateMLCEngine"))
@@ -244,10 +244,18 @@ impl WebLLM {
         let messages_array = js_sys::Array::new();
         for msg in messages {
             let obj = js_sys::Object::new();
-            js_sys::Reflect::set(&obj, &JsValue::from_str("role"), &JsValue::from_str(&msg.role))
-                .map_err(|_| WebLLMError::InferenceFailed("Failed to set role".to_string()))?;
-            js_sys::Reflect::set(&obj, &JsValue::from_str("content"), &JsValue::from_str(&msg.content))
-                .map_err(|_| WebLLMError::InferenceFailed("Failed to set content".to_string()))?;
+            js_sys::Reflect::set(
+                &obj,
+                &JsValue::from_str("role"),
+                &JsValue::from_str(&msg.role),
+            )
+            .map_err(|_| WebLLMError::InferenceFailed("Failed to set role".to_string()))?;
+            js_sys::Reflect::set(
+                &obj,
+                &JsValue::from_str("content"),
+                &JsValue::from_str(&msg.content),
+            )
+            .map_err(|_| WebLLMError::InferenceFailed("Failed to set content".to_string()))?;
             messages_array.push(&obj);
         }
 
@@ -259,7 +267,11 @@ impl WebLLM {
         // Build request object
         let request = js_sys::Object::new();
         js_sys::Reflect::set(&request, &JsValue::from_str("messages"), &messages_array)?;
-        js_sys::Reflect::set(&request, &JsValue::from_str("stream"), &JsValue::from_bool(false))?;
+        js_sys::Reflect::set(
+            &request,
+            &JsValue::from_str("stream"),
+            &JsValue::from_bool(false),
+        )?;
         js_sys::Reflect::set(
             &request,
             &JsValue::from_str("temperature"),
@@ -287,7 +299,9 @@ impl WebLLM {
         let message = js_sys::Reflect::get(&first, &JsValue::from_str("message"))?;
         let content = js_sys::Reflect::get(&message, &JsValue::from_str("content"))?;
 
-        content.as_string().ok_or(WebLLMError::InferenceFailed("No content in response".to_string()))
+        content.as_string().ok_or(WebLLMError::InferenceFailed(
+            "No content in response".to_string(),
+        ))
     }
 
     /// Simple chat with a single user message
@@ -298,7 +312,8 @@ impl WebLLM {
     /// # Returns
     /// Assistant's response
     pub async fn ask(&self, user_message: &str) -> Result<String, WebLLMError> {
-        self.chat(vec![ChatMessage::user(user_message)], None, None).await
+        self.chat(vec![ChatMessage::user(user_message)], None, None)
+            .await
     }
 
     /// Get the model ID
@@ -330,10 +345,18 @@ impl WebLLM {
         let messages_array = js_sys::Array::new();
         for msg in messages {
             let obj = js_sys::Object::new();
-            js_sys::Reflect::set(&obj, &JsValue::from_str("role"), &JsValue::from_str(&msg.role))
-                .map_err(|_| WebLLMError::InferenceFailed("Failed to set role".to_string()))?;
-            js_sys::Reflect::set(&obj, &JsValue::from_str("content"), &JsValue::from_str(&msg.content))
-                .map_err(|_| WebLLMError::InferenceFailed("Failed to set content".to_string()))?;
+            js_sys::Reflect::set(
+                &obj,
+                &JsValue::from_str("role"),
+                &JsValue::from_str(&msg.role),
+            )
+            .map_err(|_| WebLLMError::InferenceFailed("Failed to set role".to_string()))?;
+            js_sys::Reflect::set(
+                &obj,
+                &JsValue::from_str("content"),
+                &JsValue::from_str(&msg.content),
+            )
+            .map_err(|_| WebLLMError::InferenceFailed("Failed to set content".to_string()))?;
             messages_array.push(&obj);
         }
 
@@ -345,7 +368,11 @@ impl WebLLM {
         // Build request object with streaming enabled
         let request = js_sys::Object::new();
         js_sys::Reflect::set(&request, &JsValue::from_str("messages"), &messages_array)?;
-        js_sys::Reflect::set(&request, &JsValue::from_str("stream"), &JsValue::from_bool(true))?;
+        js_sys::Reflect::set(
+            &request,
+            &JsValue::from_str("stream"),
+            &JsValue::from_bool(true),
+        )?;
         js_sys::Reflect::set(
             &request,
             &JsValue::from_str("temperature"),
@@ -371,16 +398,21 @@ impl WebLLM {
         let mut full_response = String::new();
         let iter = js_sys::try_iter(&async_iter)
             .map_err(|_| WebLLMError::InferenceFailed("Failed to get iterator".to_string()))?
-            .ok_or(WebLLMError::InferenceFailed("No iterator returned".to_string()))?;
+            .ok_or(WebLLMError::InferenceFailed(
+                "No iterator returned".to_string(),
+            ))?;
 
         for chunk_result in iter {
-            let chunk = chunk_result.map_err(|_| WebLLMError::InferenceFailed("Iteration error".to_string()))?;
+            let chunk = chunk_result
+                .map_err(|_| WebLLMError::InferenceFailed("Iteration error".to_string()))?;
 
             // Extract delta content from chunk
             if let Ok(choices) = js_sys::Reflect::get(&chunk, &JsValue::from_str("choices")) {
                 if let Ok(first) = js_sys::Reflect::get(&choices, &0_u32.into()) {
                     if let Ok(delta) = js_sys::Reflect::get(&first, &JsValue::from_str("delta")) {
-                        if let Ok(content) = js_sys::Reflect::get(&delta, &JsValue::from_str("content")) {
+                        if let Ok(content) =
+                            js_sys::Reflect::get(&delta, &JsValue::from_str("content"))
+                        {
                             if let Some(text) = content.as_string() {
                                 full_response.push_str(&text);
                                 on_chunk(text);
@@ -408,12 +440,11 @@ impl WasmWebLLM {
     /// # Arguments
     /// * `model_id` - Model identifier (e.g., "Phi-3-mini-4k-instruct-q4f16_1-MLC")
     pub async fn new(model_id: String) -> Result<WasmWebLLM, JsValue> {
-        let llm = WebLLM::new(&model_id).await
+        let llm = WebLLM::new(&model_id)
+            .await
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-        Ok(WasmWebLLM {
-            inner: Some(llm),
-        })
+        Ok(WasmWebLLM { inner: Some(llm) })
     }
 
     /// Initialize with progress callback
@@ -421,19 +452,21 @@ impl WasmWebLLM {
     /// # Arguments
     /// * `model_id` - Model identifier
     /// * `on_progress` - JavaScript callback function(progress: number, text: string)
-    pub async fn new_with_progress(model_id: String, on_progress: js_sys::Function) -> Result<WasmWebLLM, JsValue> {
+    pub async fn new_with_progress(
+        model_id: String,
+        on_progress: js_sys::Function,
+    ) -> Result<WasmWebLLM, JsValue> {
         let llm = WebLLM::new_with_progress(&model_id, move |progress, text| {
             let _ = on_progress.call2(
                 &JsValue::NULL,
                 &JsValue::from_f64(progress),
                 &JsValue::from_str(&text),
             );
-        }).await
+        })
+        .await
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-        Ok(WasmWebLLM {
-            inner: Some(llm),
-        })
+        Ok(WasmWebLLM { inner: Some(llm) })
     }
 
     /// Send a simple message and get response
@@ -445,7 +478,8 @@ impl WasmWebLLM {
     /// Assistant's response
     pub async fn ask(&self, message: String) -> Result<String, JsValue> {
         if let Some(llm) = &self.inner {
-            llm.ask(&message).await
+            llm.ask(&message)
+                .await
                 .map_err(|e| JsValue::from_str(&e.to_string()))
         } else {
             Err(JsValue::from_str("LLM not initialized"))
@@ -458,12 +492,18 @@ impl WasmWebLLM {
     /// * `messages` - JSON array of {role: string, content: string}
     /// * `temperature` - Sampling temperature (optional)
     /// * `max_tokens` - Maximum tokens (optional)
-    pub async fn chat(&self, messages: JsValue, temperature: Option<f64>, max_tokens: Option<u32>) -> Result<String, JsValue> {
+    pub async fn chat(
+        &self,
+        messages: JsValue,
+        temperature: Option<f64>,
+        max_tokens: Option<u32>,
+    ) -> Result<String, JsValue> {
         if let Some(llm) = &self.inner {
             let msgs: Vec<ChatMessage> = serde_wasm_bindgen::from_value(messages)
                 .map_err(|e| JsValue::from_str(&format!("Failed to parse messages: {}", e)))?;
 
-            llm.chat(msgs, temperature, max_tokens).await
+            llm.chat(msgs, temperature, max_tokens)
+                .await
                 .map_err(|e| JsValue::from_str(&e.to_string()))
         } else {
             Err(JsValue::from_str("LLM not initialized"))
@@ -472,7 +512,10 @@ impl WasmWebLLM {
 
     /// Get the model ID
     pub fn model_id(&self) -> String {
-        self.inner.as_ref().map(|llm| llm.model_id().to_string()).unwrap_or_default()
+        self.inner
+            .as_ref()
+            .map(|llm| llm.model_id().to_string())
+            .unwrap_or_default()
     }
 
     /// Stream chat response with real-time token generation
@@ -606,7 +649,8 @@ impl WebLLMClient {
     /// Ensure engine is initialized
     async fn ensure_initialized(&mut self) -> Result<(), JsValue> {
         if self.engine.is_none() {
-            let engine = WebLLM::new(&self.model).await
+            let engine = WebLLM::new(&self.model)
+                .await
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;
             self.engine = Some(engine);
         }
@@ -618,7 +662,9 @@ impl WebLLMClient {
     pub async fn generate(&mut self, prompt: String) -> Result<String, JsValue> {
         self.ensure_initialized().await?;
 
-        let engine = self.engine.as_ref()
+        let engine = self
+            .engine
+            .as_ref()
             .ok_or_else(|| JsValue::from_str("Engine not initialized"))?;
 
         let mut messages = Vec::new();
@@ -631,7 +677,9 @@ impl WebLLMClient {
         // Add user prompt
         messages.push(ChatMessage::user(prompt));
 
-        engine.chat(messages, Some(self.temperature as f64), None).await
+        engine
+            .chat(messages, Some(self.temperature as f64), None)
+            .await
             .map_err(|e| JsValue::from_str(&e.to_string()))
     }
 

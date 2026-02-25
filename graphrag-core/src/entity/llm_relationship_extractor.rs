@@ -5,7 +5,7 @@
 //! together in a single LLM call, following the best practices from Microsoft
 //! GraphRAG and LightRAG.
 
-use crate::core::{Entity, EntityId, TextChunk, Result, GraphRAGError};
+use crate::core::{Entity, EntityId, GraphRAGError, Result, TextChunk};
 use serde::{Deserialize, Serialize};
 
 /// Extracted relationship with metadata
@@ -95,7 +95,9 @@ impl LLMRelationshipExtractor {
                     fallback_to_hash: config.fallback_to_hash,
                     max_tokens: None,
                     temperature: None,
-                    enable_caching: true, // Default to enabled
+                    enable_caching: true,
+                    keep_alive: config.keep_alive.clone(),
+                    num_ctx: config.num_ctx,
                 };
 
                 Some(crate::ollama::OllamaClient::new(local_config))
@@ -188,10 +190,7 @@ Return ONLY valid JSON, nothing else."#,
     ///
     /// - Returns `GraphRAGError::Config` if Ollama client is not configured
     /// - Returns `GraphRAGError::EntityExtraction` if LLM generation fails
-    pub async fn extract_with_llm(
-        &self,
-        chunk: &TextChunk,
-    ) -> Result<ExtractionResult> {
+    pub async fn extract_with_llm(&self, chunk: &TextChunk) -> Result<ExtractionResult> {
         if let Some(client) = &self.ollama_client {
             let prompt = self.build_extraction_prompt(&chunk.content);
 
@@ -227,7 +226,7 @@ Return ONLY valid JSON, nothing else."#,
                                 "Successfully extracted entities and relationships"
                             );
                             Ok(result)
-                        }
+                        },
                         Err(_e) => {
                             #[cfg(feature = "tracing")]
                             tracing::warn!(
@@ -241,9 +240,9 @@ Return ONLY valid JSON, nothing else."#,
                                 entities: Vec::new(),
                                 relationships: Vec::new(),
                             })
-                        }
+                        },
                     }
-                }
+                },
                 Err(e) => {
                     #[cfg(feature = "tracing")]
                     tracing::error!(
@@ -254,7 +253,7 @@ Return ONLY valid JSON, nothing else."#,
                     Err(GraphRAGError::EntityExtraction {
                         message: format!("LLM extraction failed: {}", e),
                     })
-                }
+                },
             }
         } else {
             Err(GraphRAGError::Config {
@@ -363,7 +362,7 @@ JSON:"#,
                                 reason: val.reason,
                                 suggested_fix: val.suggested_fix,
                             })
-                        }
+                        },
                         Err(_e) => {
                             #[cfg(feature = "tracing")]
                             tracing::warn!(
@@ -379,9 +378,9 @@ JSON:"#,
                                 reason: "Failed to parse validation response".to_string(),
                                 suggested_fix: None,
                             })
-                        }
+                        },
                     }
-                }
+                },
                 Err(e) => {
                     #[cfg(feature = "tracing")]
                     tracing::error!(
@@ -396,7 +395,7 @@ JSON:"#,
                         reason: format!("Validation LLM call failed: {}", e),
                         suggested_fix: None,
                     })
-                }
+                },
             }
         } else {
             // No LLM available, assume valid
@@ -501,7 +500,10 @@ JSON:"#,
         match (&entity1.entity_type[..], &entity2.entity_type[..]) {
             // Person-Person relationships
             ("PERSON", "PERSON") | ("CHARACTER", "CHARACTER") | ("SPEAKER", "SPEAKER") => {
-                if window.contains("said") || window.contains("replied") || window.contains("responded") {
+                if window.contains("said")
+                    || window.contains("replied")
+                    || window.contains("responded")
+                {
                     Some(("RESPONDS_TO".to_string(), 0.85))
                 } else if window.contains("asked") || window.contains("questioned") {
                     Some(("QUESTIONS".to_string(), 0.85))
@@ -519,7 +521,7 @@ JSON:"#,
                     // Default for co-occurring persons
                     Some(("INTERACTS_WITH".to_string(), 0.60))
                 }
-            }
+            },
 
             // Person-Concept relationships
             ("PERSON", "CONCEPT") | ("CHARACTER", "CONCEPT") | ("SPEAKER", "CONCEPT") => {
@@ -532,23 +534,26 @@ JSON:"#,
                 } else {
                     Some(("MENTIONS".to_string(), 0.70))
                 }
-            }
+            },
 
             // Reverse: Concept-Person
             ("CONCEPT", "PERSON") | ("CONCEPT", "CHARACTER") | ("CONCEPT", "SPEAKER") => {
                 Some(("DISCUSSED_BY".to_string(), 0.70))
-            }
+            },
 
             // Person-Organization relationships
             ("PERSON", "ORGANIZATION") | ("ORGANIZATION", "PERSON") => {
                 if window.contains("works for") || window.contains("employed by") {
                     Some(("WORKS_FOR".to_string(), 0.90))
-                } else if window.contains("founded") || window.contains("CEO") || window.contains("leads") {
+                } else if window.contains("founded")
+                    || window.contains("CEO")
+                    || window.contains("leads")
+                {
                     Some(("LEADS".to_string(), 0.90))
                 } else {
                     Some(("ASSOCIATED_WITH".to_string(), 0.65))
                 }
-            }
+            },
 
             // Person-Location relationships
             ("PERSON", "LOCATION") | ("CHARACTER", "LOCATION") => {
@@ -561,7 +566,7 @@ JSON:"#,
                 } else {
                     Some(("LOCATED_IN".to_string(), 0.70))
                 }
-            }
+            },
 
             // Organization-Location relationships
             ("ORGANIZATION", "LOCATION") | ("LOCATION", "ORGANIZATION") => {
@@ -570,7 +575,7 @@ JSON:"#,
                 } else {
                     Some(("LOCATED_IN".to_string(), 0.75))
                 }
-            }
+            },
 
             // Concept-Concept relationships
             ("CONCEPT", "CONCEPT") => {
@@ -581,15 +586,13 @@ JSON:"#,
                 } else {
                     Some(("ASSOCIATED_WITH".to_string(), 0.60))
                 }
-            }
+            },
 
             // Event relationships
             ("PERSON", "EVENT") | ("CHARACTER", "EVENT") => {
                 Some(("PARTICIPATES_IN".to_string(), 0.75))
-            }
-            ("EVENT", "LOCATION") => {
-                Some(("OCCURS_IN".to_string(), 0.80))
-            }
+            },
+            ("EVENT", "LOCATION") => Some(("OCCURS_IN".to_string(), 0.80)),
 
             // Default fallback
             _ => {
@@ -599,7 +602,7 @@ JSON:"#,
                 } else {
                     None
                 }
-            }
+            },
         }
     }
 }
@@ -744,20 +747,25 @@ mod tests {
         // Test validation method when Ollama is not configured
         let extractor = LLMRelationshipExtractor::new(None).unwrap();
 
-        let result = extractor.validate_triple(
-            "Socrates",
-            "TAUGHT",
-            "Plato",
-            "Socrates taught Plato."
-        ).await;
+        let result = extractor
+            .validate_triple("Socrates", "TAUGHT", "Plato", "Socrates taught Plato.")
+            .await;
 
         // Should gracefully fallback with high confidence when no LLM is available
-        assert!(result.is_ok(), "Should gracefully handle missing Ollama client");
+        assert!(
+            result.is_ok(),
+            "Should gracefully handle missing Ollama client"
+        );
 
         let validation = result.unwrap();
         assert!(validation.is_valid, "Fallback should assume valid");
-        assert_eq!(validation.confidence, 1.0, "Fallback should have high confidence");
-        assert!(validation.reason.contains("not configured"),
-            "Reason should explain Ollama is not configured");
+        assert_eq!(
+            validation.confidence, 1.0,
+            "Fallback should have high confidence"
+        );
+        assert!(
+            validation.reason.contains("not configured"),
+            "Reason should explain Ollama is not configured"
+        );
     }
 }

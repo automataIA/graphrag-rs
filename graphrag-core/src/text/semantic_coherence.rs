@@ -104,10 +104,7 @@ pub struct SemanticCoherenceScorer {
 
 impl SemanticCoherenceScorer {
     /// Create a new semantic coherence scorer
-    pub fn new(
-        config: CoherenceConfig,
-        embedding_provider: Arc<dyn EmbeddingProvider>,
-    ) -> Self {
+    pub fn new(config: CoherenceConfig, embedding_provider: Arc<dyn EmbeddingProvider>) -> Self {
         Self {
             config,
             embedding_provider,
@@ -172,8 +169,8 @@ impl SemanticCoherenceScorer {
             adjacent_similarities.push(sim);
         }
 
-        let adjacent_avg = adjacent_similarities.iter().sum::<f32>()
-            / adjacent_similarities.len() as f32;
+        let adjacent_avg =
+            adjacent_similarities.iter().sum::<f32>() / adjacent_similarities.len() as f32;
 
         // Calculate window-based similarities
         let window_avg = if self.config.coherence_window_size > 1 {
@@ -250,7 +247,10 @@ impl SemanticCoherenceScorer {
 
             // Generate candidate chunks with current splits
             let current_chunks = self.create_chunks(text, &current_splits).await?;
-            let current_score = current_chunks.iter().map(|c| c.coherence_score).sum::<f32>()
+            let current_score = current_chunks
+                .iter()
+                .map(|c| c.coherence_score)
+                .sum::<f32>()
                 / current_chunks.len() as f32;
 
             // Try adding each candidate boundary
@@ -295,8 +295,8 @@ impl SemanticCoherenceScorer {
 
         // Generate final chunks
         let final_chunks = self.create_chunks(text, &current_splits).await?;
-        let overall_coherence = final_chunks.iter().map(|c| c.coherence_score).sum::<f32>()
-            / final_chunks.len() as f32;
+        let overall_coherence =
+            final_chunks.iter().map(|c| c.coherence_score).sum::<f32>() / final_chunks.len() as f32;
 
         Ok(OptimalSplit {
             split_positions: current_splits,
@@ -600,8 +600,7 @@ mod tests {
         let provider = Arc::new(MockEmbeddingProvider::new(384));
         let scorer = SemanticCoherenceScorer::new(config, provider);
 
-        let text =
-            "Sentence one. Sentence two. Sentence three. Sentence four. Sentence five.";
+        let text = "Sentence one. Sentence two. Sentence three. Sentence four. Sentence five.";
 
         // Valid splits (each chunk has 2+ sentences)
         let splits = vec![26]; // After "Sentence two."

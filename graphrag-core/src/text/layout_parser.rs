@@ -1,7 +1,7 @@
 //! Layout parser trait and factory for document structure detection
 
-use crate::text::document_structure::DocumentStructure;
 use crate::core::Document;
+use crate::text::document_structure::DocumentStructure;
 
 /// Trait for document layout parsers
 pub trait LayoutParser: Send + Sync {
@@ -31,13 +31,20 @@ impl LayoutParserFactory {
         }
 
         // Detect from content
-        if document.content.contains("<h1") || document.content.contains("<h2")
-            || document.content.contains("<html") || document.content.contains("<!DOCTYPE") {
+        if document.content.contains("<h1")
+            || document.content.contains("<h2")
+            || document.content.contains("<html")
+            || document.content.contains("<!DOCTYPE")
+        {
             return Box::new(crate::text::parsers::HtmlLayoutParser::new());
         }
 
         // Check for markdown headings
-        if document.content.lines().any(|line| line.trim_start().starts_with('#')) {
+        if document
+            .content
+            .lines()
+            .any(|line| line.trim_start().starts_with('#'))
+        {
             return Box::new(crate::text::parsers::MarkdownLayoutParser::new());
         }
 
@@ -50,7 +57,9 @@ impl LayoutParserFactory {
         match format.to_lowercase().as_str() {
             "markdown" | "md" => Box::new(crate::text::parsers::MarkdownLayoutParser::new()),
             "html" | "htm" => Box::new(crate::text::parsers::HtmlLayoutParser::new()),
-            "text" | "txt" | "plain" => Box::new(crate::text::parsers::PlainTextLayoutParser::new()),
+            "text" | "txt" | "plain" => {
+                Box::new(crate::text::parsers::PlainTextLayoutParser::new())
+            },
             _ => Box::new(crate::text::parsers::PlainTextLayoutParser::new()),
         }
     }

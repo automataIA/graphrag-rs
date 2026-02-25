@@ -31,7 +31,7 @@ pub enum DecompositionError {
     #[error("Query too complex to decompose: {message}")]
     TooComplex {
         /// Error message describing the complexity issue.
-        message: String
+        message: String,
     },
 
     /// The query structure is invalid or malformed.
@@ -41,7 +41,7 @@ pub enum DecompositionError {
     #[error("Invalid query structure: {message}")]
     InvalidStructure {
         /// Error message describing the structural problem.
-        message: String
+        message: String,
     },
 
     /// A specific decomposition strategy encountered an error.
@@ -53,7 +53,7 @@ pub enum DecompositionError {
         /// Name of the strategy that failed.
         strategy: String,
         /// Reason for the failure.
-        reason: String
+        reason: String,
     },
 
     /// No valid subqueries could be generated from the input.
@@ -462,7 +462,12 @@ impl SemanticQueryDecomposer {
                 SubqueryType::Relationship => {
                     // Find prerequisite entity queries
                     for (j, prereq) in subqueries.iter().enumerate() {
-                        if j < i && matches!(prereq.query_type, SubqueryType::Entity | SubqueryType::Definitional) {
+                        if j < i
+                            && matches!(
+                                prereq.query_type,
+                                SubqueryType::Entity | SubqueryType::Definitional
+                            )
+                        {
                             dependencies.push(QueryDependency {
                                 dependent_id: subquery.id.clone(),
                                 prerequisite_id: prereq.id.clone(),
@@ -470,12 +475,17 @@ impl SemanticQueryDecomposer {
                             });
                         }
                     }
-                }
+                },
 
                 // Attribute queries depend on entity identification
                 SubqueryType::Attribute => {
                     for (j, prereq) in subqueries.iter().enumerate() {
-                        if j < i && matches!(prereq.query_type, SubqueryType::Entity | SubqueryType::Definitional) {
+                        if j < i
+                            && matches!(
+                                prereq.query_type,
+                                SubqueryType::Entity | SubqueryType::Definitional
+                            )
+                        {
                             dependencies.push(QueryDependency {
                                 dependent_id: subquery.id.clone(),
                                 prerequisite_id: prereq.id.clone(),
@@ -483,15 +493,19 @@ impl SemanticQueryDecomposer {
                             });
                         }
                     }
-                }
+                },
 
                 // Comparative queries depend on entity or attribute queries
                 SubqueryType::Comparative => {
                     for (j, prereq) in subqueries.iter().enumerate() {
-                        if j < i && matches!(
-                            prereq.query_type,
-                            SubqueryType::Entity | SubqueryType::Attribute | SubqueryType::Definitional
-                        ) {
+                        if j < i
+                            && matches!(
+                                prereq.query_type,
+                                SubqueryType::Entity
+                                    | SubqueryType::Attribute
+                                    | SubqueryType::Definitional
+                            )
+                        {
                             dependencies.push(QueryDependency {
                                 dependent_id: subquery.id.clone(),
                                 prerequisite_id: prereq.id.clone(),
@@ -499,7 +513,7 @@ impl SemanticQueryDecomposer {
                             });
                         }
                     }
-                }
+                },
 
                 // Temporal queries may reference prior queries for context
                 SubqueryType::Temporal => {
@@ -514,7 +528,7 @@ impl SemanticQueryDecomposer {
                             break; // Only take first relevant context
                         }
                     }
-                }
+                },
 
                 // Causal queries may have sequential dependencies
                 SubqueryType::Causal => {
@@ -523,7 +537,9 @@ impl SemanticQueryDecomposer {
                         let prev_query = &subqueries[i - 1];
                         if matches!(
                             prev_query.query_type,
-                            SubqueryType::Entity | SubqueryType::Temporal | SubqueryType::Relationship
+                            SubqueryType::Entity
+                                | SubqueryType::Temporal
+                                | SubqueryType::Relationship
                         ) {
                             dependencies.push(QueryDependency {
                                 dependent_id: subquery.id.clone(),
@@ -532,12 +548,12 @@ impl SemanticQueryDecomposer {
                             });
                         }
                     }
-                }
+                },
 
                 // Entity and Definitional queries typically have no dependencies
                 SubqueryType::Entity | SubqueryType::Definitional => {
                     // No dependencies - these are usually first
-                }
+                },
             }
         }
 

@@ -93,14 +93,14 @@ fn main() -> graphrag_core::Result<()> {
     println!("\n🔗 Step 3: Adding relationships...");
 
     let relationships = vec![
-        ("e1", "e2", "INCLUDES", 0.95), // AI includes ML
-        ("e2", "e3", "INCLUDES", 0.90), // ML includes DL
-        ("e3", "e4", "USES", 0.88),     // DL uses Neural Networks
-        ("e2", "e5", "INCLUDES", 0.85), // ML includes NLP
-        ("e2", "e6", "INCLUDES", 0.83), // ML includes CV
-        ("e5", "e7", "USES", 0.92),     // NLP uses Transformers
+        ("e1", "e2", "INCLUDES", 0.95),   // AI includes ML
+        ("e2", "e3", "INCLUDES", 0.90),   // ML includes DL
+        ("e3", "e4", "USES", 0.88),       // DL uses Neural Networks
+        ("e2", "e5", "INCLUDES", 0.85),   // ML includes NLP
+        ("e2", "e6", "INCLUDES", 0.83),   // ML includes CV
+        ("e5", "e7", "USES", 0.92),       // NLP uses Transformers
         ("e7", "e8", "IMPLEMENTS", 0.89), // Transformers implements GPT
-        ("e3", "e6", "USED_IN", 0.80),  // DL used in CV
+        ("e3", "e6", "USED_IN", 0.80),    // DL used in CV
     ];
 
     for (src, tgt, rel_type, confidence) in relationships {
@@ -137,8 +137,14 @@ fn main() -> graphrag_core::Result<()> {
 
     println!("\n  Community detection complete!");
     println!("  - Total levels: {}", communities.levels.len());
-    println!("  - Entity mapping: {}",
-        if communities.entity_mapping.is_some() { "✅ Enabled" } else { "❌ Disabled" });
+    println!(
+        "  - Entity mapping: {}",
+        if communities.entity_mapping.is_some() {
+            "✅ Enabled"
+        } else {
+            "❌ Disabled"
+        }
+    );
 
     // Step 5: Analyze communities at each level
     println!("\n📊 Step 5: Analyzing community structure...");
@@ -147,17 +153,17 @@ fn main() -> graphrag_core::Result<()> {
 
     for level in 0..communities.levels.len() {
         if let Some(level_map) = communities.levels.get(&level) {
-            let unique_communities: std::collections::HashSet<_> =
-                level_map.values().collect();
+            let unique_communities: std::collections::HashSet<_> = level_map.values().collect();
 
-            println!("\n  Level {}: {} communities", level, unique_communities.len());
+            println!(
+                "\n  Level {}: {} communities",
+                level,
+                unique_communities.len()
+            );
 
             for &community_id in unique_communities {
-                let entities = communities.get_community_entities(
-                    community_id,
-                    level,
-                    &leiden_graph
-                );
+                let entities =
+                    communities.get_community_entities(community_id, level, &leiden_graph);
 
                 if !entities.is_empty() {
                     println!("\n    Community {} (Level {}):", community_id, level);
@@ -166,21 +172,19 @@ fn main() -> graphrag_core::Result<()> {
                     // Get entity metadata
                     let metadata_list = communities.get_entities_metadata(&entities);
                     for metadata in metadata_list {
-                        println!("        - {} [{}] (confidence: {:.2})",
-                            metadata.name,
-                            metadata.entity_type,
-                            metadata.confidence
+                        println!(
+                            "        - {} [{}] (confidence: {:.2})",
+                            metadata.name, metadata.entity_type, metadata.confidence
                         );
                     }
 
                     // Get community statistics
-                    let (count, avg_conf, types) = communities.get_community_stats(
-                        community_id,
-                        level,
-                        &leiden_graph
+                    let (count, avg_conf, types) =
+                        communities.get_community_stats(community_id, level, &leiden_graph);
+                    println!(
+                        "      Stats: {} entities, avg confidence: {:.2}",
+                        count, avg_conf
                     );
-                    println!("      Stats: {} entities, avg confidence: {:.2}",
-                        count, avg_conf);
                     println!("      Entity types: {:?}", types);
                 }
             }
@@ -210,8 +214,8 @@ fn main() -> graphrag_core::Result<()> {
 
     // Test different query types
     let test_queries = vec![
-        "Give me an overview of AI",              // Broad → high level
-        "Transformers",                            // Specific → low level
+        "Give me an overview of AI", // Broad → high level
+        "Transformers",              // Specific → low level
         "What is the relationship between Deep Learning and Neural Networks?", // Very specific
     ];
 
@@ -226,7 +230,10 @@ fn main() -> graphrag_core::Result<()> {
         );
 
         println!("  Complexity: {:?}", analysis.complexity);
-        println!("  Suggested Level: {} (auto-selected)", analysis.suggested_level);
+        println!(
+            "  Suggested Level: {} (auto-selected)",
+            analysis.suggested_level
+        );
         println!("  Analysis scores:");
         println!("    - Keywords: {:.2}", analysis.keyword_score);
         println!("    - Length: {:.2}", analysis.length_score);
@@ -235,7 +242,10 @@ fn main() -> graphrag_core::Result<()> {
         if results.is_empty() {
             println!("    No relevant communities found");
         } else {
-            println!("    Found {} relevant community/communities:", results.len());
+            println!(
+                "    Found {} relevant community/communities:",
+                results.len()
+            );
             for (level, community_id, summary) in &results {
                 println!("      [Level {}, Community {}]", level, community_id);
                 let preview = if summary.len() > 80 {
@@ -259,12 +269,11 @@ fn main() -> graphrag_core::Result<()> {
 
     // Adaptive retrieval (automatic)
     println!("\n  Adaptive (auto-select):");
-    let adaptive_results = communities_mut.adaptive_retrieve(
-        query,
-        &leiden_graph,
-        routing_config,
+    let adaptive_results = communities_mut.adaptive_retrieve(query, &leiden_graph, routing_config);
+    println!(
+        "    Found {} results (auto-selected level)",
+        adaptive_results.len()
     );
-    println!("    Found {} results (auto-selected level)", adaptive_results.len());
 
     println!("\n✅ Hierarchical GraphRAG with Adaptive Routing demo completed!");
     println!("{}", "=".repeat(80));

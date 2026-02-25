@@ -235,11 +235,17 @@ impl AsyncMockLLM {
         }
 
         if question_lower.contains("main character") || question_lower.contains("protagonist") {
-            return Ok("The text features several important characters who drive the narrative forward.".to_string());
+            return Ok(
+                "The text features several important characters who drive the narrative forward."
+                    .to_string(),
+            );
         }
 
         if question_lower.contains("event") || question_lower.contains("scene") {
-            return Ok("The text contains various significant events and scenes that advance the story.".to_string());
+            return Ok(
+                "The text contains various significant events and scenes that advance the story."
+                    .to_string(),
+            );
         }
 
         Ok(
@@ -404,7 +410,7 @@ impl AsyncLanguageModel for AsyncMockLLM {
                     return Err(GraphRAGError::Generation {
                         message: format!("Task join error: {e}"),
                     })
-                }
+                },
             }
         }
 

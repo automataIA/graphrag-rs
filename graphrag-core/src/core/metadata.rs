@@ -246,7 +246,10 @@ mod tests {
         assert!(metadata.get_deepest_heading().is_none());
 
         metadata.chapter = Some("Chapter 1".to_string());
-        assert_eq!(metadata.get_deepest_heading(), Some(&"Chapter 1".to_string()));
+        assert_eq!(
+            metadata.get_deepest_heading(),
+            Some(&"Chapter 1".to_string())
+        );
 
         metadata.section = Some("Section 1.1".to_string());
         assert_eq!(
@@ -290,10 +293,7 @@ mod tests {
             .add_custom("date".to_string(), "2024-01-01".to_string());
 
         assert_eq!(metadata.custom.len(), 2);
-        assert_eq!(
-            metadata.custom.get("author"),
-            Some(&"John Doe".to_string())
-        );
+        assert_eq!(metadata.custom.get("author"), Some(&"John Doe".to_string()));
     }
 
     #[test]

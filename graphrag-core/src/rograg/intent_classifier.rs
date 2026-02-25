@@ -25,7 +25,7 @@ pub enum IntentClassificationError {
     #[error("Unable to classify query intent: {query}")]
     CannotClassify {
         /// The query text that could not be classified.
-        query: String
+        query: String,
     },
 
     /// Multiple intents detected with similar confidence scores.
@@ -35,7 +35,7 @@ pub enum IntentClassificationError {
     #[error("Ambiguous intent detected: {intents:?}")]
     AmbiguousIntent {
         /// List of competing intents with similar confidence scores.
-        intents: Vec<QueryIntent>
+        intents: Vec<QueryIntent>,
     },
 
     /// Classification confidence below acceptable threshold.
@@ -45,7 +45,7 @@ pub enum IntentClassificationError {
     #[error("Insufficient confidence for classification: {confidence}")]
     InsufficientConfidence {
         /// The confidence score that was below the threshold.
-        confidence: f32
+        confidence: f32,
     },
 }
 
@@ -311,100 +311,156 @@ impl IntentClassifier {
     /// Initialize intent patterns
     fn initialize_patterns(&mut self) -> Result<()> {
         // Factual intent patterns
-        self.add_intent_pattern(QueryIntent::Factual, IntentPattern {
-            keywords: ["what", "which", "how many", "how much"].iter().map(|s| s.to_string()).collect(),
-            patterns: vec![
-                regex::Regex::new(r"\bwhat (?:is|are|was|were)\b")?,
-                regex::Regex::new(r"\bwhich (?:is|are|was|were)\b")?,
-                regex::Regex::new(r"\bhow many\b")?,
-                regex::Regex::new(r"\bhow much\b")?,
-            ],
-            weight: 1.0,
-            requires_all: false,
-        });
+        self.add_intent_pattern(
+            QueryIntent::Factual,
+            IntentPattern {
+                keywords: ["what", "which", "how many", "how much"]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+                patterns: vec![
+                    regex::Regex::new(r"\bwhat (?:is|are|was|were)\b")?,
+                    regex::Regex::new(r"\bwhich (?:is|are|was|were)\b")?,
+                    regex::Regex::new(r"\bhow many\b")?,
+                    regex::Regex::new(r"\bhow much\b")?,
+                ],
+                weight: 1.0,
+                requires_all: false,
+            },
+        );
 
         // Definitional intent patterns
-        self.add_intent_pattern(QueryIntent::Definitional, IntentPattern {
-            keywords: ["define", "definition", "meaning", "explain", "what is"].iter().map(|s| s.to_string()).collect(),
-            patterns: vec![
-                regex::Regex::new(r"\bdefine\b")?,
-                regex::Regex::new(r"\bdefinition of\b")?,
-                regex::Regex::new(r"\bmeaning of\b")?,
-                regex::Regex::new(r"\bexplain what\b")?,
-                regex::Regex::new(r"\bwhat (?:is|are) (?:the )?(?:concept|idea|notion) of\b")?,
-            ],
-            weight: 1.0,
-            requires_all: false,
-        });
+        self.add_intent_pattern(
+            QueryIntent::Definitional,
+            IntentPattern {
+                keywords: ["define", "definition", "meaning", "explain", "what is"]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+                patterns: vec![
+                    regex::Regex::new(r"\bdefine\b")?,
+                    regex::Regex::new(r"\bdefinition of\b")?,
+                    regex::Regex::new(r"\bmeaning of\b")?,
+                    regex::Regex::new(r"\bexplain what\b")?,
+                    regex::Regex::new(r"\bwhat (?:is|are) (?:the )?(?:concept|idea|notion) of\b")?,
+                ],
+                weight: 1.0,
+                requires_all: false,
+            },
+        );
 
         // Relational intent patterns
-        self.add_intent_pattern(QueryIntent::Relational, IntentPattern {
-            keywords: ["relationship", "related", "connection", "between", "and"].iter().map(|s| s.to_string()).collect(),
-            patterns: vec![
-                regex::Regex::new(r"\brelationship between\b")?,
-                regex::Regex::new(r"\bhow (?:is|are) .+ related to\b")?,
-                regex::Regex::new(r"\bconnection between\b")?,
-                regex::Regex::new(r"\b\w+ and \w+\b")?, // Simple pattern for "X and Y"
-            ],
-            weight: 1.0,
-            requires_all: false,
-        });
+        self.add_intent_pattern(
+            QueryIntent::Relational,
+            IntentPattern {
+                keywords: ["relationship", "related", "connection", "between", "and"]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+                patterns: vec![
+                    regex::Regex::new(r"\brelationship between\b")?,
+                    regex::Regex::new(r"\bhow (?:is|are) .+ related to\b")?,
+                    regex::Regex::new(r"\bconnection between\b")?,
+                    regex::Regex::new(r"\b\w+ and \w+\b")?, // Simple pattern for "X and Y"
+                ],
+                weight: 1.0,
+                requires_all: false,
+            },
+        );
 
         // Temporal intent patterns
-        self.add_intent_pattern(QueryIntent::Temporal, IntentPattern {
-            keywords: ["when", "time", "date", "year", "before", "after", "during"].iter().map(|s| s.to_string()).collect(),
-            patterns: vec![
-                regex::Regex::new(r"\bwhen (?:did|was|were|will|is|are)\b")?,
-                regex::Regex::new(r"\bwhat (?:time|date|year)\b")?,
-                regex::Regex::new(r"\bbefore .+ happened\b")?,
-                regex::Regex::new(r"\bafter .+ happened\b")?,
-                regex::Regex::new(r"\bduring .+ period\b")?,
-            ],
-            weight: 1.0,
-            requires_all: false,
-        });
+        self.add_intent_pattern(
+            QueryIntent::Temporal,
+            IntentPattern {
+                keywords: ["when", "time", "date", "year", "before", "after", "during"]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+                patterns: vec![
+                    regex::Regex::new(r"\bwhen (?:did|was|were|will|is|are)\b")?,
+                    regex::Regex::new(r"\bwhat (?:time|date|year)\b")?,
+                    regex::Regex::new(r"\bbefore .+ happened\b")?,
+                    regex::Regex::new(r"\bafter .+ happened\b")?,
+                    regex::Regex::new(r"\bduring .+ period\b")?,
+                ],
+                weight: 1.0,
+                requires_all: false,
+            },
+        );
 
         // Causal intent patterns
-        self.add_intent_pattern(QueryIntent::Causal, IntentPattern {
-            keywords: ["why", "because", "cause", "reason", "result", "due to"].iter().map(|s| s.to_string()).collect(),
-            patterns: vec![
-                regex::Regex::new(r"\bwhy (?:did|was|were|is|are|do|does)\b")?,
-                regex::Regex::new(r"\bwhat (?:caused|causes)\b")?,
-                regex::Regex::new(r"\breason for\b")?,
-                regex::Regex::new(r"\bdue to what\b")?,
-                regex::Regex::new(r"\bwhat led to\b")?,
-            ],
-            weight: 1.0,
-            requires_all: false,
-        });
+        self.add_intent_pattern(
+            QueryIntent::Causal,
+            IntentPattern {
+                keywords: ["why", "because", "cause", "reason", "result", "due to"]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+                patterns: vec![
+                    regex::Regex::new(r"\bwhy (?:did|was|were|is|are|do|does)\b")?,
+                    regex::Regex::new(r"\bwhat (?:caused|causes)\b")?,
+                    regex::Regex::new(r"\breason for\b")?,
+                    regex::Regex::new(r"\bdue to what\b")?,
+                    regex::Regex::new(r"\bwhat led to\b")?,
+                ],
+                weight: 1.0,
+                requires_all: false,
+            },
+        );
 
         // Comparative intent patterns
-        self.add_intent_pattern(QueryIntent::Comparative, IntentPattern {
-            keywords: ["compare", "difference", "versus", "vs", "better", "worse", "similar"].iter().map(|s| s.to_string()).collect(),
-            patterns: vec![
-                regex::Regex::new(r"\bcompare .+ (?:to|with|and)\b")?,
-                regex::Regex::new(r"\bdifference between\b")?,
-                regex::Regex::new(r"\b.+ (?:versus|vs) .+\b")?,
-                regex::Regex::new(r"\bwhich is (?:better|worse)\b")?,
-                regex::Regex::new(r"\bhow (?:similar|different)\b")?,
-            ],
-            weight: 1.0,
-            requires_all: false,
-        });
+        self.add_intent_pattern(
+            QueryIntent::Comparative,
+            IntentPattern {
+                keywords: [
+                    "compare",
+                    "difference",
+                    "versus",
+                    "vs",
+                    "better",
+                    "worse",
+                    "similar",
+                ]
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+                patterns: vec![
+                    regex::Regex::new(r"\bcompare .+ (?:to|with|and)\b")?,
+                    regex::Regex::new(r"\bdifference between\b")?,
+                    regex::Regex::new(r"\b.+ (?:versus|vs) .+\b")?,
+                    regex::Regex::new(r"\bwhich is (?:better|worse)\b")?,
+                    regex::Regex::new(r"\bhow (?:similar|different)\b")?,
+                ],
+                weight: 1.0,
+                requires_all: false,
+            },
+        );
 
         // Summary intent patterns
-        self.add_intent_pattern(QueryIntent::Summary, IntentPattern {
-            keywords: ["summarize", "overview", "summary", "tell me about", "describe"].iter().map(|s| s.to_string()).collect(),
-            patterns: vec![
-                regex::Regex::new(r"\bsummarize\b")?,
-                regex::Regex::new(r"\bgive (?:me )?(?:an )?overview\b")?,
-                regex::Regex::new(r"\btell me about\b")?,
-                regex::Regex::new(r"\bdescribe .+\b")?,
-                regex::Regex::new(r"\bwhat (?:can you tell me )?about\b")?,
-            ],
-            weight: 1.0,
-            requires_all: false,
-        });
+        self.add_intent_pattern(
+            QueryIntent::Summary,
+            IntentPattern {
+                keywords: [
+                    "summarize",
+                    "overview",
+                    "summary",
+                    "tell me about",
+                    "describe",
+                ]
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+                patterns: vec![
+                    regex::Regex::new(r"\bsummarize\b")?,
+                    regex::Regex::new(r"\bgive (?:me )?(?:an )?overview\b")?,
+                    regex::Regex::new(r"\btell me about\b")?,
+                    regex::Regex::new(r"\bdescribe .+\b")?,
+                    regex::Regex::new(r"\bwhat (?:can you tell me )?about\b")?,
+                ],
+                weight: 1.0,
+                requires_all: false,
+            },
+        );
 
         // Initialize inappropriate content patterns
         if self.config.enable_inappropriate_detection {
@@ -419,7 +475,10 @@ impl IntentClassifier {
 
     /// Add an intent pattern
     fn add_intent_pattern(&mut self, intent: QueryIntent, pattern: IntentPattern) {
-        self.intent_patterns.entry(intent).or_default().push(pattern);
+        self.intent_patterns
+            .entry(intent)
+            .or_default()
+            .push(pattern);
     }
 
     /// Classify the intent of a query.
@@ -490,11 +549,14 @@ impl IntentClassifier {
         }
 
         let (primary_intent, primary_score) = sorted_intents[0].clone();
-        let secondary_intents: Vec<(QueryIntent, f32)> = sorted_intents.into_iter().skip(1).take(2).collect();
+        let secondary_intents: Vec<(QueryIntent, f32)> =
+            sorted_intents.into_iter().skip(1).take(2).collect();
 
         // Check for ambiguity
         let is_ambiguous = if self.config.enable_ambiguity_detection {
-            secondary_intents.iter().any(|(_, score)| *score > primary_score * 0.8)
+            secondary_intents
+                .iter()
+                .any(|(_, score)| *score > primary_score * 0.8)
         } else {
             false
         };
@@ -540,7 +602,9 @@ impl IntentClassifier {
             let mut pattern_score = 0.0;
 
             // Check keyword matches
-            let keyword_matches = pattern.keywords.iter()
+            let keyword_matches = pattern
+                .keywords
+                .iter()
                 .filter(|keyword| query.contains(&keyword.to_lowercase()))
                 .count();
 
@@ -553,7 +617,9 @@ impl IntentClassifier {
             }
 
             // Check regex pattern matches
-            let regex_matches = pattern.patterns.iter()
+            let regex_matches = pattern
+                .patterns
+                .iter()
                 .filter(|regex| regex.is_match(query))
                 .count();
 
@@ -569,14 +635,21 @@ impl IntentClassifier {
 
     /// Check if query contains inappropriate content
     fn is_inappropriate(&self, query: &str) -> bool {
-        self.inappropriate_patterns.iter().any(|pattern| pattern.is_match(query))
+        self.inappropriate_patterns
+            .iter()
+            .any(|pattern| pattern.is_match(query))
     }
 
     /// Calculate query complexity
     fn calculate_complexity(&self, query: &str) -> f32 {
         let word_count = query.split_whitespace().count();
-        let sentence_count = query.chars().filter(|&c| c == '.' || c == '?' || c == '!').count().max(1);
-        let avg_word_length = query.chars().filter(|c| c.is_alphabetic()).count() as f32 / word_count.max(1) as f32;
+        let sentence_count = query
+            .chars()
+            .filter(|&c| c == '.' || c == '?' || c == '!')
+            .count()
+            .max(1);
+        let avg_word_length =
+            query.chars().filter(|c| c.is_alphabetic()).count() as f32 / word_count.max(1) as f32;
 
         // Complexity factors
         let length_complexity = (word_count as f32 / 20.0).min(1.0); // Normalize to 20 words
@@ -584,11 +657,22 @@ impl IntentClassifier {
         let word_length_complexity = (avg_word_length / 8.0).min(1.0); // Normalize to 8 chars per word
 
         // Check for complex constructs
-        let has_conjunctions = query.contains(" and ") || query.contains(" or ") || query.contains(" but ");
-        let has_subordination = query.contains(" because ") || query.contains(" since ") || query.contains(" although ");
-        let construct_complexity = if has_conjunctions || has_subordination { 0.3 } else { 0.0 };
+        let has_conjunctions =
+            query.contains(" and ") || query.contains(" or ") || query.contains(" but ");
+        let has_subordination = query.contains(" because ")
+            || query.contains(" since ")
+            || query.contains(" although ");
+        let construct_complexity = if has_conjunctions || has_subordination {
+            0.3
+        } else {
+            0.0
+        };
 
-        (length_complexity * 0.3 + sentence_complexity * 0.2 + word_length_complexity * 0.2 + construct_complexity).min(1.0)
+        (length_complexity * 0.3
+            + sentence_complexity * 0.2
+            + word_length_complexity * 0.2
+            + construct_complexity)
+            .min(1.0)
     }
 
     /// Suggest query reformulation
@@ -601,9 +685,14 @@ impl IntentClassifier {
 
         // Suggest more specific reformulations based on common patterns
         if query_lower.starts_with("tell me about") {
-            Some("Try asking a more specific question like 'What is...?' or 'How does...?'".to_string())
+            Some(
+                "Try asking a more specific question like 'What is...?' or 'How does...?'"
+                    .to_string(),
+            )
         } else if query_lower.contains(" and ") {
-            Some("Try breaking your question into separate parts or focus on one aspect".to_string())
+            Some(
+                "Try breaking your question into separate parts or focus on one aspect".to_string(),
+            )
         } else if query.split_whitespace().count() > 20 {
             Some("Try using a shorter, more focused question".to_string())
         } else if !query.ends_with('?') && !query.ends_with('.') && !query.ends_with('!') {
@@ -631,7 +720,9 @@ impl IntentClassifier {
 
     /// Get intent statistics
     pub fn get_statistics(&self) -> IntentClassificationStats {
-        let total_patterns = self.intent_patterns.values()
+        let total_patterns = self
+            .intent_patterns
+            .values()
             .map(|patterns| patterns.len())
             .sum();
 
@@ -704,7 +795,9 @@ mod tests {
     #[test]
     fn test_definitional_intent() {
         let classifier = IntentClassifier::new().unwrap();
-        let result = classifier.classify("Define the concept of friendship").unwrap();
+        let result = classifier
+            .classify("Define the concept of friendship")
+            .unwrap();
 
         assert_eq!(result.primary_intent, QueryIntent::Definitional);
         assert!(result.confidence > 0.5);
@@ -714,7 +807,9 @@ mod tests {
     #[test]
     fn test_relational_intent() {
         let classifier = IntentClassifier::new().unwrap();
-        let result = classifier.classify("How is Entity Name related to Second Entity?").unwrap();
+        let result = classifier
+            .classify("How is Entity Name related to Second Entity?")
+            .unwrap();
 
         assert_eq!(result.primary_intent, QueryIntent::Relational);
         assert!(result.confidence > 0.5);
@@ -724,7 +819,9 @@ mod tests {
     #[test]
     fn test_temporal_intent() {
         let classifier = IntentClassifier::new().unwrap();
-        let result = classifier.classify("When did Entity Name main activity?").unwrap();
+        let result = classifier
+            .classify("When did Entity Name main activity?")
+            .unwrap();
 
         assert_eq!(result.primary_intent, QueryIntent::Temporal);
         assert!(result.confidence > 0.5);
@@ -734,7 +831,9 @@ mod tests {
     #[test]
     fn test_causal_intent() {
         let classifier = IntentClassifier::new().unwrap();
-        let result = classifier.classify("Why did Entity Name trick his friends?").unwrap();
+        let result = classifier
+            .classify("Why did Entity Name trick his friends?")
+            .unwrap();
 
         assert_eq!(result.primary_intent, QueryIntent::Causal);
         assert!(result.confidence > 0.5);
@@ -744,7 +843,9 @@ mod tests {
     #[test]
     fn test_comparative_intent() {
         let classifier = IntentClassifier::new().unwrap();
-        let result = classifier.classify("Compare Entity Name and Second Entity").unwrap();
+        let result = classifier
+            .classify("Compare Entity Name and Second Entity")
+            .unwrap();
 
         assert_eq!(result.primary_intent, QueryIntent::Comparative);
         assert!(result.confidence > 0.5);
