@@ -14,7 +14,7 @@ rustup target add wasm32-unknown-unknown
 cargo install trunk
 
 # Run development server
-cd /home/dio/graphrag-rs/graphrag-wasm
+cd graphrag-wasm
 trunk serve
 
 # Open http://localhost:8080
@@ -266,10 +266,9 @@ Effect::new(move |_| {
 
 ## Roadmap
 
-### Phase 1 (Current)
+### Phase 1 (Foundation — Done)
 - ✅ Complete UI/UX
 - ✅ Document management
-- ✅ Mock graph building
 - ✅ Query interface
 
 ### Phase 2 (Completed!)
@@ -326,10 +325,11 @@ Built with:
 
 **Ready to build knowledge graphs in your browser? Run `trunk serve` and start exploring!** 🚀
 
-**Files:**
-- `/home/dio/graphrag-rs/graphrag-wasm/src/main.rs` - Main implementation (1,043 lines)
-- `/home/dio/graphrag-rs/graphrag-wasm/Cargo.toml` - Configuration
-- `/home/dio/graphrag-rs/graphrag-wasm/index.html` - HTML entry
+**Key files:**
+- `src/main.rs` - Main UI implementation
+- `Cargo.toml` - Dependencies and feature flags
+- `index.html` - HTML entry point
+- `Trunk.toml` - Build configuration
 
 **Status:** ✅ Fully functional GraphRAG pipeline with WebLLM synthesis!
 

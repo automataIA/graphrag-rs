@@ -5,6 +5,7 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+publish = false  # Not published to crates.io (internal use only)
 
 [lib]
 name = "graphrag_py"

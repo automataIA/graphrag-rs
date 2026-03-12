@@ -8,6 +8,7 @@ repository.workspace = true
 description = "REST API server for GraphRAG"
 keywords = ["graphrag", "server", "api", "rest"]
 categories = ["web-programming::http-server"]
+publish = false  # Not published to crates.io (internal use only)
 
 [[bin]]
 name = "graphrag-server"

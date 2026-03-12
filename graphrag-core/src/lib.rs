@@ -369,7 +369,10 @@ impl GraphRAG {
             Some(d) => d.clone(),
             None => return false,
         };
-        let workspace_name = self.config.auto_save.workspace_name
+        let workspace_name = self
+            .config
+            .auto_save
+            .workspace_name
             .as_deref()
             .unwrap_or("default");
 
@@ -378,7 +381,7 @@ impl GraphRAG {
             Err(e) => {
                 tracing::warn!("Could not open workspace base dir '{}': {}", base_dir, e);
                 return false;
-            }
+            },
         };
 
         if !manager.workspace_exists(workspace_name) {
@@ -395,11 +398,15 @@ impl GraphRAG {
                 );
                 self.knowledge_graph = Some(graph);
                 true
-            }
+            },
             Err(e) => {
-                tracing::warn!("Failed to load graph from workspace '{}': {}", workspace_name, e);
+                tracing::warn!(
+                    "Failed to load graph from workspace '{}': {}",
+                    workspace_name,
+                    e
+                );
                 false
-            }
+            },
         }
     }
 
@@ -413,11 +420,16 @@ impl GraphRAG {
             Some(d) => d,
             None => return Ok(()),
         };
-        let workspace_name = self.config.auto_save.workspace_name
+        let workspace_name = self
+            .config
+            .auto_save
+            .workspace_name
             .as_deref()
             .unwrap_or("default");
 
-        let graph = self.knowledge_graph.as_ref()
+        let graph = self
+            .knowledge_graph
+            .as_ref()
             .ok_or_else(|| GraphRAGError::Config {
                 message: "Knowledge graph not initialized".to_string(),
             })?;
@@ -503,7 +515,18 @@ impl GraphRAG {
     /// The selection is controlled by `config.approach` and mapped from TomlConfig's [mode] section.
     #[cfg(feature = "async")]
     pub async fn build_graph(&mut self) -> Result<()> {
-        use indicatif::{ProgressBar, ProgressStyle};
+        use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
+
+        // When running inside a TUI, suppress indicatif output to avoid corrupting
+        // ratatui's raw-mode terminal (the default draw target writes to stderr).
+        let suppress = self.config.suppress_progress_bars;
+        let make_pb = move |total: u64, style: ProgressStyle| -> ProgressBar {
+            let pb = ProgressBar::new(total).with_style(style);
+            if suppress {
+                pb.set_draw_target(ProgressDrawTarget::hidden());
+            }
+            pb
+        };
 
         let graph = self
             .knowledge_graph
@@ -577,9 +600,7 @@ impl GraphRAG {
                     None
                 };
 
-                // Create progress bar for entity extraction
-                let pb = ProgressBar::new(total_chunks as u64);
-                pb.set_style(
+                let pb = make_pb(total_chunks as u64,
                     ProgressStyle::default_bar()
                         .template("   [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} chunks ({eta})")
                         .expect("Invalid progress bar template")
@@ -731,9 +752,7 @@ impl GraphRAG {
                     let atomic_extractor = AtomicFactExtractor::new(client.clone())
                         .with_max_tokens(self.config.entities.max_fact_tokens);
 
-                    // Create progress bar for atomic extraction
-                    let pb_atomic = ProgressBar::new(total_chunks as u64);
-                    pb_atomic.set_style(
+                    let pb_atomic = make_pb(total_chunks as u64,
                         ProgressStyle::default_bar()
                             .template("   [{elapsed_precise}] [{bar:40.magenta/blue}] {pos}/{len} atomic facts ({eta})")
                             .expect("Invalid progress bar template")
@@ -842,8 +861,7 @@ impl GraphRAG {
                     .with_max_tokens(self.config.ollama.max_tokens.unwrap_or(1500) as usize)
                     .with_keep_alive(self.config.ollama.keep_alive.clone());
 
-                let pb = ProgressBar::new(total_chunks as u64);
-                pb.set_style(
+                let pb = make_pb(total_chunks as u64,
                     ProgressStyle::default_bar()
                         .template("   [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} chunks ({eta})")
                         .expect("Invalid progress bar template")
@@ -859,7 +877,11 @@ impl GraphRAG {
                     ));
 
                     #[cfg(feature = "tracing")]
-                    tracing::info!("Processing chunk {}/{} (LLM single-pass)", idx + 1, total_chunks);
+                    tracing::info!(
+                        "Processing chunk {}/{} (LLM single-pass)",
+                        idx + 1,
+                        total_chunks
+                    );
 
                     match extractor.extract_from_chunk(chunk).await {
                         Ok((entities, relationships)) => {
@@ -912,8 +934,7 @@ impl GraphRAG {
                     })?,
                 );
 
-                let pb = ProgressBar::new(total_chunks as u64);
-                pb.set_style(
+                let pb = make_pb(total_chunks as u64,
                     ProgressStyle::default_bar()
                         .template(
                             "   [{elapsed_precise}] [{bar:40.magenta/blue}] {pos}/{len} chunks ({eta})",
@@ -924,20 +945,15 @@ impl GraphRAG {
                 pb.set_message("Extracting entities with GLiNER-Relex");
 
                 for (idx, chunk) in chunks.iter().enumerate() {
-                    pb.set_message(format!(
-                        "Chunk {}/{} (GLiNER-Relex)",
-                        idx + 1,
-                        total_chunks
-                    ));
+                    pb.set_message(format!("Chunk {}/{} (GLiNER-Relex)", idx + 1, total_chunks));
 
                     let ext = Arc::clone(&extractor);
                     let ch = chunk.clone();
-                    let result =
-                        tokio::task::spawn_blocking(move || ext.extract_from_chunk(&ch))
-                            .await
-                            .map_err(|e| crate::core::error::GraphRAGError::EntityExtraction {
-                                message: format!("spawn_blocking join error: {e}"),
-                            })?;
+                    let result = tokio::task::spawn_blocking(move || ext.extract_from_chunk(&ch))
+                        .await
+                        .map_err(|e| crate::core::error::GraphRAGError::EntityExtraction {
+                            message: format!("spawn_blocking join error: {e}"),
+                        })?;
 
                     match result {
                         Ok((entities, relationships)) => {
@@ -984,8 +1000,8 @@ impl GraphRAG {
             let extractor = EntityExtractor::new(self.config.entities.min_confidence)?;
 
             // Create progress bar for pattern-based extraction
-            let pb = ProgressBar::new(total_chunks as u64);
-            pb.set_style(
+            let pb = make_pb(
+                total_chunks as u64,
                 ProgressStyle::default_bar()
                     .template(
                         "   [{elapsed_precise}] [{bar:40.green/blue}] {pos}/{len} chunks ({eta})",
@@ -1022,8 +1038,7 @@ impl GraphRAG {
                 let all_entities: Vec<_> = graph.entities().cloned().collect();
 
                 // Create progress bar for relationship extraction
-                let rel_pb = ProgressBar::new(total_chunks as u64);
-                rel_pb.set_style(
+                let rel_pb = make_pb(total_chunks as u64,
                 ProgressStyle::default_bar()
                     .template("   [{elapsed_precise}] [{bar:40.yellow/blue}] {pos}/{len} chunks ({eta})")
                     .expect("Invalid progress bar template")
@@ -1555,7 +1570,9 @@ impl GraphRAG {
         let prompt_tokens = (prompt.len() / 4) as u32;
         let total = prompt_tokens + max_answer_tokens;
         let with_margin = (total as f32 * 1.20) as u32;
-        let num_ctx = (((with_margin + 1023) / 1024) * 1024).max(4096).min(131_072);
+        let num_ctx = (((with_margin + 1023) / 1024) * 1024)
+            .max(4096)
+            .min(131_072);
 
         let params = crate::ollama::OllamaGenerationParams {
             num_predict: Some(max_answer_tokens),

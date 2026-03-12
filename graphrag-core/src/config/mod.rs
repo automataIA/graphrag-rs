@@ -107,6 +107,11 @@ pub struct Config {
     /// Advanced features configuration (Phases 2-3)
     #[serde(default)]
     pub advanced_features: AdvancedFeaturesConfig,
+
+    /// Suppress indicatif progress bars (use hidden draw target).
+    /// Set to `true` when running inside a TUI to avoid corrupting the terminal.
+    #[serde(default)]
+    pub suppress_progress_bars: bool,
 }
 
 /// GLiNER-Relex extractor configuration (joint NER + RE via ONNX Runtime)
@@ -145,11 +150,7 @@ impl Default for GlinerConfig {
                 "location".into(),
                 "concept".into(),
             ],
-            relation_labels: vec![
-                "related to".into(),
-                "part of".into(),
-                "causes".into(),
-            ],
+            relation_labels: vec!["related to".into(), "part of".into(), "causes".into()],
             entity_threshold: 0.4,
             relation_threshold: 0.5,
             use_gpu: false,
@@ -1500,6 +1501,7 @@ impl Default for Config {
             summarization: crate::summarization::HierarchicalConfig::default(),
             zero_cost_approach: ZeroCostApproachConfig::default(),
             advanced_features: AdvancedFeaturesConfig::default(),
+            suppress_progress_bars: false,
         }
     }
 }
@@ -1687,6 +1689,7 @@ impl Config {
                 .as_str()
                 .unwrap_or("./output")
                 .to_string(),
+            suppress_progress_bars: parsed["suppress_progress_bars"].as_bool().unwrap_or(false),
             chunk_size: parsed["chunk_size"]
                 .as_usize()
                 .unwrap_or(default_chunk_size()),
@@ -1863,11 +1866,20 @@ impl Config {
                 num_ctx: parsed["ollama"]["num_ctx"].as_u32(),
             },
             gliner: GlinerConfig {
-                enabled:            parsed["gliner"]["enabled"].as_bool().unwrap_or(false),
-                model_path:         parsed["gliner"]["model_path"].as_str().unwrap_or("").to_string(),
-                tokenizer_path:     parsed["gliner"]["tokenizer_path"].as_str().unwrap_or("").to_string(),
-                mode:               parsed["gliner"]["mode"].as_str().unwrap_or("span").to_string(),
-                entity_labels:      if parsed["gliner"]["entity_labels"].is_array() {
+                enabled: parsed["gliner"]["enabled"].as_bool().unwrap_or(false),
+                model_path: parsed["gliner"]["model_path"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string(),
+                tokenizer_path: parsed["gliner"]["tokenizer_path"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string(),
+                mode: parsed["gliner"]["mode"]
+                    .as_str()
+                    .unwrap_or("span")
+                    .to_string(),
+                entity_labels: if parsed["gliner"]["entity_labels"].is_array() {
                     parsed["gliner"]["entity_labels"]
                         .members()
                         .filter_map(|v| v.as_str().map(|s| s.to_string()))
@@ -1875,7 +1887,7 @@ impl Config {
                 } else {
                     vec!["person".into(), "organization".into(), "location".into()]
                 },
-                relation_labels:    if parsed["gliner"]["relation_labels"].is_array() {
+                relation_labels: if parsed["gliner"]["relation_labels"].is_array() {
                     parsed["gliner"]["relation_labels"]
                         .members()
                         .filter_map(|v| v.as_str().map(|s| s.to_string()))
@@ -1883,9 +1895,11 @@ impl Config {
                 } else {
                     vec!["related to".into(), "part of".into()]
                 },
-                entity_threshold:   parsed["gliner"]["entity_threshold"].as_f32().unwrap_or(0.4),
-                relation_threshold: parsed["gliner"]["relation_threshold"].as_f32().unwrap_or(0.5),
-                use_gpu:            parsed["gliner"]["use_gpu"].as_bool().unwrap_or(false),
+                entity_threshold: parsed["gliner"]["entity_threshold"].as_f32().unwrap_or(0.4),
+                relation_threshold: parsed["gliner"]["relation_threshold"]
+                    .as_f32()
+                    .unwrap_or(0.5),
+                use_gpu: parsed["gliner"]["use_gpu"].as_bool().unwrap_or(false),
             },
             enhancements: enhancements::EnhancementsConfig {
                 enabled: parsed["enhancements"]["enabled"].as_bool().unwrap_or(true),

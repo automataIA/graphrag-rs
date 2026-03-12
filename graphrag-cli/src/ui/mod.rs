@@ -1,6 +1,7 @@
 //! UI module containing components and layout utilities
 
 pub mod components;
+pub mod markdown;
 pub mod spinner;
 
 pub use components::{

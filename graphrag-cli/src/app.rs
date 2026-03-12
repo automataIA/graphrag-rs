@@ -1,7 +1,7 @@
 //! Main application logic and event loop
 
 use crate::{
-    action::{Action, StatusType},
+    action::{Action, QueryExplainedPayload, QueryMode, SourceRef, StatusType},
     commands::SlashCommand,
     handlers::{FileOperations, GraphRAGHandler},
     query_history::{QueryEntry, QueryHistory},
@@ -51,6 +51,10 @@ pub struct App {
     workspace_metadata: Option<WorkspaceMetadata>,
     /// Configuration file path
     config_path: Option<PathBuf>,
+    /// Active query mode (Ask / Explain / Reason)
+    query_mode: QueryMode,
+    /// Currently focused pane: 0=input, 1=results, 2=raw, 3=info
+    focused_pane: u8,
     /// Theme
     #[allow(dead_code)]
     theme: Theme,
@@ -79,8 +83,20 @@ impl App {
             workspace_manager,
             workspace_metadata: None,
             config_path,
+            query_mode: QueryMode::default(),
+            focused_pane: 0,
             theme: Theme::default(),
         })
+    }
+
+    /// Set focused pane and update all component focus states.
+    /// pane: 0=input, 1=results, 2=raw_results, 3=info_panel
+    fn set_focus(&mut self, pane: u8) {
+        self.focused_pane = pane;
+        self.query_input.set_focused(pane == 0);
+        self.results_viewer.set_focused(pane == 1);
+        self.raw_results_viewer.set_focused(pane == 2);
+        self.info_panel.set_focused(pane == 3);
     }
 
     /// Run the application
@@ -209,51 +225,76 @@ impl App {
         // Global shortcuts (check these first, before passing to input)
         match (key.code, key.modifiers) {
             // Quit
-            (KeyCode::Char('q'), KeyModifiers::CONTROL)
-            | (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
+            (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
                 self.action_tx.send(Action::Quit)?;
                 return Ok(());
             },
-            // Help
-            (KeyCode::Char('?'), KeyModifiers::SHIFT) => {
+            // Help — works regardless of SHIFT state (? is Shift+/ on US keyboards;
+            // some terminals send SHIFT, others send NONE). Also map Ctrl+H for safety.
+            (KeyCode::Char('?'), _) | (KeyCode::Char('h'), KeyModifiers::CONTROL) => {
                 self.action_tx.send(Action::ToggleHelp)?;
                 return Ok(());
             },
-            // Focus switching with F1-F3
-            (KeyCode::F(1), KeyModifiers::NONE) => {
-                // Focus Results Viewer (LLM answer) - unfocus input
-                self.query_input.set_focused(false);
-                self.results_viewer.set_focused(true);
-                self.raw_results_viewer.set_focused(false);
-                self.info_panel.set_focused(false);
+            // Ctrl+N: cycle focus forward through panels
+            // Input(0) → Results(1) → Raw(2) → Info(3) → Input(0)
+            // When InfoPanel is focused, Ctrl+N instead cycles its internal tabs
+            (KeyCode::Char('n'), KeyModifiers::CONTROL) => {
+                if self.focused_pane == 3 {
+                    // InfoPanel focused: cycle internal tabs
+                    self.action_tx.send(Action::NextTab)?;
+                } else {
+                    self.action_tx.send(Action::NextPane)?;
+                }
+                return Ok(());
+            },
+            // Ctrl+P: cycle focus backward
+            (KeyCode::Char('p'), KeyModifiers::CONTROL) => {
+                self.action_tx.send(Action::PreviousPane)?;
+                return Ok(());
+            },
+            // Ctrl+1/2/3/4: direct focus jump
+            (KeyCode::Char('1'), KeyModifiers::CONTROL) => {
+                self.set_focus(0);
+                self.action_tx.send(Action::FocusQueryInput)?;
+                return Ok(());
+            },
+            (KeyCode::Char('2'), KeyModifiers::CONTROL) => {
+                self.set_focus(1);
                 self.action_tx.send(Action::FocusResultsViewer)?;
                 return Ok(());
             },
-            (KeyCode::F(2), KeyModifiers::NONE) => {
-                // Focus Raw Results Viewer - unfocus input
-                self.query_input.set_focused(false);
-                self.results_viewer.set_focused(false);
-                self.raw_results_viewer.set_focused(true);
-                self.info_panel.set_focused(false);
+            (KeyCode::Char('3'), KeyModifiers::CONTROL) => {
+                self.set_focus(2);
                 self.action_tx.send(Action::FocusRawResultsViewer)?;
                 return Ok(());
             },
-            (KeyCode::F(3), KeyModifiers::NONE) => {
-                // Focus Info Panel - unfocus input
-                self.query_input.set_focused(false);
-                self.results_viewer.set_focused(false);
-                self.raw_results_viewer.set_focused(false);
-                self.info_panel.set_focused(true);
+            (KeyCode::Char('4'), KeyModifiers::CONTROL) => {
+                self.set_focus(3);
                 self.action_tx.send(Action::FocusInfoPanel)?;
                 return Ok(());
             },
+            // Esc: return focus to input
             (KeyCode::Esc, KeyModifiers::NONE) => {
-                // Escape: return focus to input
-                self.query_input.set_focused(true);
-                self.results_viewer.set_focused(false);
-                self.raw_results_viewer.set_focused(false);
-                self.info_panel.set_focused(false);
+                self.set_focus(0);
                 self.action_tx.send(Action::FocusQueryInput)?;
+                return Ok(());
+            },
+            // Arrow keys for scrolling when a viewer panel is focused (not input)
+            (KeyCode::Down, KeyModifiers::NONE) if self.focused_pane != 0 => {
+                self.action_tx.send(Action::ScrollDown)?;
+                return Ok(());
+            },
+            (KeyCode::Up, KeyModifiers::NONE) if self.focused_pane != 0 => {
+                self.action_tx.send(Action::ScrollUp)?;
+                return Ok(());
+            },
+            // Alt+Up/Down for scrolling anywhere (even in input)
+            (KeyCode::Down, KeyModifiers::ALT) => {
+                self.action_tx.send(Action::ScrollDown)?;
+                return Ok(());
+            },
+            (KeyCode::Up, KeyModifiers::ALT) => {
+                self.action_tx.send(Action::ScrollUp)?;
                 return Ok(());
             },
             _ => {},
@@ -274,11 +315,12 @@ impl App {
             (KeyCode::Char('k'), KeyModifiers::NONE) => {
                 self.action_tx.send(Action::ScrollUp)?;
             },
-            // Scrolling with Ctrl+D / Ctrl+U (page up/down)
-            (KeyCode::Char('d'), KeyModifiers::CONTROL) => {
+            // Scrolling with PageDown / PageUp
+            (KeyCode::PageDown, KeyModifiers::NONE)
+            | (KeyCode::Char('d'), KeyModifiers::CONTROL) => {
                 self.action_tx.send(Action::ScrollPageDown)?;
             },
-            (KeyCode::Char('u'), KeyModifiers::CONTROL) => {
+            (KeyCode::PageUp, KeyModifiers::NONE) | (KeyCode::Char('u'), KeyModifiers::CONTROL) => {
                 self.action_tx.send(Action::ScrollPageUp)?;
             },
             // Scrolling with Home/End
@@ -315,11 +357,35 @@ impl App {
                 self.handle_load_config(path).await?;
             },
             Action::ExecuteQuery(query) => {
-                self.handle_execute_query(query).await?;
+                // Route by current mode
+                match self.query_mode {
+                    QueryMode::Ask => self.handle_execute_query(query).await?,
+                    QueryMode::Explain => self.handle_execute_explained_query(query).await?,
+                    QueryMode::Reason => self.handle_execute_reason_query(query).await?,
+                }
+            },
+            Action::ExecuteExplainedQuery(query) => {
+                self.handle_execute_explained_query(query).await?;
+            },
+            Action::ExecuteReasonQuery(query) => {
+                self.handle_execute_reason_query(query).await?;
+            },
+            Action::SetQueryMode(mode) => {
+                self.query_mode = mode;
+                // status_bar already updated via handle_action above
+            },
+            Action::NextPane => {
+                let next = (self.focused_pane + 1) % 4;
+                self.set_focus(next);
+            },
+            Action::PreviousPane => {
+                let prev = (self.focused_pane + 3) % 4;
+                self.set_focus(prev);
             },
             Action::ExecuteSlashCommand(cmd) => {
                 self.handle_slash_command(cmd).await?;
             },
+            // QueryExplainedSuccess is handled by components (results_viewer, info_panel)
             _ => {},
         }
 
@@ -363,6 +429,7 @@ impl App {
             },
         }
 
+        self.set_focus(0);
         Ok(())
     }
 
@@ -443,6 +510,180 @@ impl App {
         Ok(())
     }
 
+    /// Handle executing a query in Explain mode (returns confidence + sources)
+    async fn handle_execute_explained_query(&mut self, query: String) -> Result<()> {
+        if !self.graphrag.is_initialized().await {
+            self.action_tx.send(Action::SetStatus(
+                StatusType::Error,
+                "GraphRAG not initialized. Load a config first with /config".to_string(),
+            ))?;
+            return Ok(());
+        }
+
+        self.results_viewer.set_content(vec![
+            "## Generating Answer (EXPLAIN mode)…".to_string(),
+            String::new(),
+            format!("**Query:** {}", query),
+            String::new(),
+            "- Searching knowledge graph…".to_string(),
+            "- Computing confidence and source references…".to_string(),
+        ]);
+
+        self.action_tx
+            .send(Action::StartProgress(format!("EXPLAIN query: {}", query)))?;
+
+        let start = Instant::now();
+
+        match self.graphrag.query_explained(&query).await {
+            Ok(result) => {
+                let duration = start.elapsed();
+
+                let entry = QueryEntry {
+                    query: query.clone(),
+                    timestamp: Utc::now(),
+                    duration_ms: duration.as_millis(),
+                    results_count: result.sources.len(),
+                    results_preview: vec![result.answer[..result.answer.len().min(200)].to_string()],
+                };
+                self.query_history.add_entry(entry.clone());
+                self.info_panel
+                    .add_query(entry.query, entry.duration_ms, entry.results_count);
+
+                // Populate raw results with source list
+                let mut raw_display = vec![
+                    format!(
+                        "Sources ({}) | Confidence: {:.0}%",
+                        result.sources.len(),
+                        result.confidence * 100.0
+                    ),
+                    "━".repeat(50),
+                    String::new(),
+                ];
+                for (i, src) in result.sources.iter().enumerate() {
+                    raw_display.push(format!(
+                        "{}. [score: {:.2}] {}",
+                        i + 1,
+                        src.relevance_score,
+                        src.id
+                    ));
+                    let excerpt = &src.excerpt[..src.excerpt.len().min(120)];
+                    raw_display.push(format!("   {}", excerpt));
+                    raw_display.push(String::new());
+                }
+                self.raw_results_viewer.set_content(raw_display);
+
+                // Build payload for components
+                let payload = QueryExplainedPayload {
+                    answer: result.answer.clone(),
+                    confidence: result.confidence,
+                    sources: result
+                        .sources
+                        .iter()
+                        .map(|s| SourceRef {
+                            id: s.id.clone(),
+                            excerpt: s.excerpt.clone(),
+                            relevance_score: s.relevance_score,
+                        })
+                        .collect(),
+                };
+
+                self.action_tx.send(Action::StopProgress)?;
+                self.action_tx
+                    .send(Action::QueryExplainedSuccess(Box::new(payload)))?;
+                self.action_tx.send(Action::SetStatus(
+                    StatusType::Success,
+                    format!(
+                        "EXPLAIN query done in {}ms | confidence: {:.0}%",
+                        duration.as_millis(),
+                        result.confidence * 100.0
+                    ),
+                ))?;
+            },
+            Err(e) => {
+                self.action_tx.send(Action::StopProgress)?;
+                self.action_tx
+                    .send(Action::QueryError(format!("Query failed: {}", e)))?;
+                self.action_tx.send(Action::SetStatus(
+                    StatusType::Error,
+                    format!("Query error: {}", e),
+                ))?;
+            },
+        }
+
+        self.set_focus(0);
+        Ok(())
+    }
+
+    /// Handle executing a query in Reason mode (query decomposition)
+    async fn handle_execute_reason_query(&mut self, query: String) -> Result<()> {
+        if !self.graphrag.is_initialized().await {
+            self.action_tx.send(Action::SetStatus(
+                StatusType::Error,
+                "GraphRAG not initialized. Load a config first with /config".to_string(),
+            ))?;
+            return Ok(());
+        }
+
+        self.results_viewer.set_content(vec![
+            "## Generating Answer (REASON mode)…".to_string(),
+            String::new(),
+            format!("**Query:** {}", query),
+            String::new(),
+            "- Decomposing query into sub-questions…".to_string(),
+            "- Gathering context for each sub-question…".to_string(),
+            "- Synthesizing comprehensive answer…".to_string(),
+        ]);
+
+        self.action_tx
+            .send(Action::StartProgress(format!("REASON query: {}", query)))?;
+
+        let start = Instant::now();
+
+        match self.graphrag.query_with_reasoning(&query).await {
+            Ok(answer) => {
+                let duration = start.elapsed();
+
+                let entry = QueryEntry {
+                    query: query.clone(),
+                    timestamp: Utc::now(),
+                    duration_ms: duration.as_millis(),
+                    results_count: 0,
+                    results_preview: vec![answer[..answer.len().min(200)].to_string()],
+                };
+                self.query_history.add_entry(entry.clone());
+                self.info_panel
+                    .add_query(entry.query, entry.duration_ms, entry.results_count);
+
+                self.raw_results_viewer.set_content(vec![
+                    "REASON mode — query decomposition active".to_string(),
+                    "━".repeat(50),
+                    String::new(),
+                    "Sub-queries were generated and answered individually.".to_string(),
+                    "The result above synthesizes all sub-answers.".to_string(),
+                ]);
+
+                self.action_tx.send(Action::StopProgress)?;
+                self.action_tx.send(Action::QuerySuccess(answer))?;
+                self.action_tx.send(Action::SetStatus(
+                    StatusType::Success,
+                    format!("REASON query done in {}ms", duration.as_millis()),
+                ))?;
+            },
+            Err(e) => {
+                self.action_tx.send(Action::StopProgress)?;
+                self.action_tx
+                    .send(Action::QueryError(format!("Query failed: {}", e)))?;
+                self.action_tx.send(Action::SetStatus(
+                    StatusType::Error,
+                    format!("Query error: {}", e),
+                ))?;
+            },
+        }
+
+        self.set_focus(0);
+        Ok(())
+    }
+
     /// Handle slash command
     async fn handle_slash_command(&mut self, cmd_str: String) -> Result<()> {
         match SlashCommand::parse(&cmd_str) {
@@ -479,6 +720,35 @@ impl App {
                 SlashCommand::WorkspaceDelete(name) => {
                     self.handle_delete_workspace(name).await?;
                 },
+                SlashCommand::Reason(query) => {
+                    self.handle_execute_reason_query(query).await?;
+                },
+                SlashCommand::Mode(mode_str) => {
+                    let mode = match mode_str.as_str() {
+                        "ask" => QueryMode::Ask,
+                        "explain" => QueryMode::Explain,
+                        "reason" => QueryMode::Reason,
+                        other => {
+                            self.action_tx.send(Action::SetStatus(
+                                StatusType::Error,
+                                format!("Unknown mode '{}'. Use: ask | explain | reason", other),
+                            ))?;
+                            return Ok(());
+                        },
+                    };
+                    self.query_mode = mode;
+                    self.action_tx.send(Action::SetQueryMode(mode))?;
+                    self.action_tx.send(Action::SetStatus(
+                        StatusType::Success,
+                        format!("Query mode set to: {}", mode.label()),
+                    ))?;
+                },
+                SlashCommand::ConfigShow => {
+                    self.handle_config_show().await?;
+                },
+                SlashCommand::Export(path) => {
+                    self.handle_export(path).await?;
+                },
                 SlashCommand::Help => {
                     let help_text = SlashCommand::help_text();
                     self.results_viewer
@@ -492,6 +762,9 @@ impl App {
                 ))?;
             },
         }
+
+        // Always return focus to input after any slash command completes
+        self.set_focus(0);
 
         Ok(())
     }
@@ -910,6 +1183,90 @@ impl App {
             },
         }
 
+        Ok(())
+    }
+
+    /// Handle /config show — display current config file in results viewer
+    async fn handle_config_show(&mut self) -> Result<()> {
+        if let Some(ref path) = self.config_path.clone() {
+            match tokio::fs::read_to_string(path).await {
+                Ok(content) => {
+                    let mut lines = vec![
+                        format!("# Config: {}", path.display()),
+                        String::new(),
+                        "```".to_string(),
+                    ];
+                    lines.extend(content.lines().map(|l| l.to_string()));
+                    lines.push("```".to_string());
+                    self.results_viewer.set_content(lines);
+                    self.action_tx.send(Action::SetStatus(
+                        StatusType::Info,
+                        format!("Showing config: {}", path.display()),
+                    ))?;
+                },
+                Err(e) => {
+                    self.action_tx.send(Action::SetStatus(
+                        StatusType::Error,
+                        format!("Cannot read config file: {}", e),
+                    ))?;
+                },
+            }
+        } else {
+            self.action_tx.send(Action::SetStatus(
+                StatusType::Warning,
+                "No config loaded. Use /config <file> first.".to_string(),
+            ))?;
+        }
+        Ok(())
+    }
+
+    /// Handle /export <file> — write query history to a Markdown file
+    async fn handle_export(&mut self, path: PathBuf) -> Result<()> {
+        let entries = self.query_history.last_n(1000);
+        if entries.is_empty() {
+            self.action_tx.send(Action::SetStatus(
+                StatusType::Warning,
+                "No query history to export.".to_string(),
+            ))?;
+            return Ok(());
+        }
+
+        let mut md = String::from("# GraphRAG Query History\n\n");
+        for (i, entry) in entries.iter().enumerate() {
+            md.push_str(&format!("## Query {}\n\n", i + 1));
+            md.push_str(&format!("**Q:** {}\n\n", entry.query));
+            if !entry.results_preview.is_empty() {
+                md.push_str(&format!("**A:** {}\n\n", entry.results_preview[0]));
+            }
+            md.push_str(&format!(
+                "*{}ms · {} sources*\n\n---\n\n",
+                entry.duration_ms, entry.results_count
+            ));
+        }
+
+        let expanded = FileOperations::expand_tilde(&path);
+        match tokio::fs::write(&expanded, md.as_bytes()).await {
+            Ok(()) => {
+                let msg = format!(
+                    "Exported {} queries to {}",
+                    entries.len(),
+                    expanded.display()
+                );
+                self.results_viewer.set_content(vec![
+                    "## Export Complete".to_string(),
+                    String::new(),
+                    msg.clone(),
+                ]);
+                self.action_tx
+                    .send(Action::SetStatus(StatusType::Success, msg))?;
+            },
+            Err(e) => {
+                self.action_tx.send(Action::SetStatus(
+                    StatusType::Error,
+                    format!("Export failed: {}", e),
+                ))?;
+            },
+        }
         Ok(())
     }
 

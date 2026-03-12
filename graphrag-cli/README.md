@@ -1,218 +1,294 @@
-# graphrag-cli 🖥️
-        
+# graphrag-cli
+
 A modern Terminal User Interface (TUI) for GraphRAG operations, built with [Ratatui](https://ratatui.rs/).
 
-## ✨ Features
+## Features
 
-- 🎨 **Beautiful TUI** - Modern terminal interface with rich components
-- ⚡ **Fast & Responsive** - Immediate mode rendering with Ratatui
-- 🎹 **Vim-like Keybindings** - Intuitive keyboard shortcuts
-- 🎨 **Theme Support** - Dark and light themes
-- 📊 **Multi-pane Layout** - Query input, results viewer, entity explorer, and status bar
-- 🔍 **Interactive Query Execution** - Execute GraphRAG queries directly from terminal
-- 🌲 **Entity Explorer** - Browse and navigate graph entities from real knowledge graph
-- 📜 **Scrollable Results** - Vim-style scrolling through query results
-- ⌨️ **Help System** - Built-in help overlay (press `?`)
-- 📈 **Status Bar** - Real-time progress indicators and error display
-- 🔗 **Direct Integration** - Uses graphrag-core library directly (no server needed)
-- 📝 **TOML Configuration** - Load and manage configs from TOML files
-- 📚 **Document Processing** - Process documents through complete 7-stage pipeline with TRUE LLM-based gleaning extraction
-- ⏱️ **Real LLM Processing** - Genuine multi-round entity extraction (15-30 seconds per chunk, not instant pattern matching)
+- **Multi-pane TUI** — Results viewer, Raw results, tabbed Info panel (Stats / Sources / History)
+- **Markdown rendering** — LLM answers rendered with bold, italic, headers, bullet points, code blocks
+- **Three query modes** — ASK (fast), EXPLAIN (confidence + sources), REASON (query decomposition)
+- **Zero-LLM support** — Algorithmic pipeline with hash embeddings, no model required
+- **Vim-style navigation** — j/k scrolling, Ctrl+1/2/3/4 focus switching
+- **Slash command system** — `/config`, `/load`, `/mode`, `/reason`, `/export`, `/workspace`, and more
+- **Query history** — Tracked per session, exportable to Markdown
+- **Workspace persistence** — Save/load knowledge graphs to disk
+- **Direct integration** — Uses `graphrag-core` as a library (no HTTP server needed)
 
-## 🚀 Installation
+---
+
+## Installation
 
 ```bash
 cd graphrag-rs
-cargo build --package graphrag_cli --release
+
+# Debug build (fast compile)
+cargo build -p graphrag-cli
+
+# Release build (optimized)
+cargo build -p graphrag-cli --release
 ```
 
-Or run directly:
+---
+
+## Quick Start — Zero LLM (Symposium example)
+
+Build a knowledge graph from Plato's Symposium with **no LLM required** — pure algorithmic extraction using regex patterns, TF-IDF, BM25, and PageRank.
+
+### Option A — Interactive TUI
 
 ```bash
-cargo run --package graphrag_cli
+cd /home/dio/graphrag-rs
+
+cargo run -p graphrag-cli -- tui
 ```
 
-## 📖 Usage
+Then inside the TUI:
 
-### Quick Start Example
+```
+/config tests/e2e/configs/algo_hash_medium__symposium.json5
+/load docs-example/Symposium.txt
+Who is Socrates and what is his role in the Symposium?
+```
+
+Graph builds in ~3-5 seconds. No Ollama needed.
+
+### Option B — TUI with config pre-loaded
 
 ```bash
-# 1. Create a config file (or use an example from config/templates/)
-cat > my_config.toml << EOF
-[general]
-output_dir = "./output"
-log_level = "info"
-
-[pipeline]
-workflows = ["extract_text", "extract_entities", "build_graph"]
-
-[pipeline.text_extraction]
-chunk_size = 500
-chunk_overlap = 100
-
-[ollama]
-enabled = true
-host = "http://localhost"
-port = 11434
-chat_model = "llama3.1:8b"
-embedding_model = "nomic-embed-text"
-EOF
-
-# 2. Load and process your document (NOTE: Real LLM processing takes time!)
-# Small docs (5-10 pages): 5-15 minutes
-# Medium docs (50-100 pages): 30-60 minutes
-# Large docs (500-1000 pages): 2-4 hours
-./target/release/graphrag_cli load your_document.txt --config my_config.toml
-
-# 3. Start the interactive TUI to query
-./target/release/graphrag_cli --config my_config.toml tui
-
-# Or query directly from command line
-./target/release/graphrag_cli --config my_config.toml query "What are the main themes?"
+cargo run -p graphrag-cli -- tui \
+  --config tests/e2e/configs/algo_hash_medium__symposium.json5
 ```
 
-### Interactive TUI Mode (Default)
+Then just:
+```
+/load docs-example/Symposium.txt
+What is Eros according to Aristophanes?
+```
+
+### Option C — Benchmark (non-interactive, JSON output)
 
 ```bash
-# Start the TUI
-./target/release/graphrag_cli
-
-# Or with custom server URL
-./target/release/graphrag_cli --server http://localhost:8080
+cargo run -p graphrag-cli -- bench \
+  --config tests/e2e/configs/algo_hash_medium__symposium.json5 \
+  --book docs-example/Symposium.txt \
+  --questions "Who is Socrates?|What is love according to Aristophanes?|What is the Ladder of Beauty?"
 ```
 
-### Command Line Mode
+Outputs structured JSON with timings, entity counts, answers, confidence scores, and source references.
+
+### Available configs
+
+| Config | Graph building | Embeddings | LLM synthesis | Speed |
+|--------|---------------|------------|---------------|-------|
+| `algo_hash_small__symposium.json5` | NLP/regex | Hash (256d) | ❌ none | ~1-2s |
+| `algo_hash_medium__symposium.json5` | NLP/regex | Hash (384d) | ❌ none | ~3-5s |
+| `algo_nlp_mistral__symposium.json5` | **NLP/regex** | nomic-embed-text | ✅ mistral-nemo | ~5-15s* |
+| `kv_no_gleaning_mistral__symposium.json5` | LLM single-pass | nomic-embed-text | ✅ mistral-nemo | ~30-60s |
+
+\* build ~5s, sintesi ~5-10s per domanda (con KV cache dopo la prima)
+
+**`algo_nlp_mistral__symposium.json5`** è il config raccomandato per chi vuole:
+- grafo costruito velocemente con metodi NLP classici (nessun LLM a build time)
+- ricerca semantica reale con `nomic-embed-text`
+- risposte sintetizzate da Mistral a query time con KV cache abilitata
+
+---
+
+## Quick Start — With Ollama (full semantic pipeline)
+
+Requires Ollama running with `nomic-embed-text` and an LLM (e.g. `mistral-nemo:latest`).
 
 ```bash
-# Initialize GraphRAG with a configuration file
-./target/release/graphrag_cli init config.toml
-
-# Load and process a document
-./target/release/graphrag_cli load document.txt --config config.toml
-
-# Execute a single query
-./target/release/graphrag_cli query "find all entities related to AI"
-
-# List entities
-./target/release/graphrag_cli entities
-
-# Show graph statistics
-./target/release/graphrag_cli stats
+cargo run -p graphrag-cli -- tui \
+  --config tests/e2e/configs/kv_no_gleaning_mistral__symposium.json5
 ```
 
-## ⌨️ Keyboard Shortcuts
-
-### Global Shortcuts
-- `q` or `Ctrl+C` - Quit application
-- `?` - Toggle help overlay
-- `Tab` - Switch to next pane
-- `Shift+Tab` - Switch to previous pane
-
-### Query Input (when active)
-- `Enter` - Execute query
-- `Ctrl+D` - Clear input
-- Normal text editing keys
-
-### Results Viewer (when active)
-- `j` or `↓` - Scroll down one line
-- `k` or `↑` - Scroll up one line
-- `Ctrl+D` or `Page Down` - Scroll down one page
-- `Ctrl+U` or `Page Up` - Scroll up one page
-- `Home` - Jump to top
-- `End` - Jump to bottom
-
-### Entity Explorer (when active)
-- `j` or `↓` - Next entity
-- `k` or `↑` - Previous entity
-- `Enter` or `Space` - Expand/collapse entity
-
-## 🎨 Architecture
-
+Inside TUI:
 ```
-graphrag-cli/
-├── src/
-│   ├── main.rs              # Entry point & CLI argument parsing
-│   ├── app.rs               # Application state & event loop
-│   ├── ui/
-│   │   ├── mod.rs
-│   │   ├── theme.rs         # Color themes
-│   │   └── components/
-│   │       ├── query_input.rs      # Query input widget
-│   │       ├── results_viewer.rs   # Results display widget
-│   │       └── entity_explorer.rs  # Entity tree widget
-│   ├── handlers/
-│   │   └── events.rs        # Event handling
-│   └── integrations/
-│       └── graphrag.rs      # GraphRAG API client
-└── Cargo.toml
+/load docs-example/Symposium.txt
+/mode explain
+How does Diotima describe the ascent to absolute beauty?
 ```
 
-## 🛠️ Technology Stack
+The EXPLAIN mode shows confidence score and source references in the Sources tab (Ctrl+4 → Ctrl+N).
 
-- **TUI Framework**: [Ratatui](https://ratatui.rs/) - Modern Rust TUI library
-- **Terminal Backend**: [Crossterm](https://github.com/crossterm-rs/crossterm) - Cross-platform terminal manipulation
-- **Widgets**:
-  - [tui-textarea](https://github.com/rhysd/tui-textarea) - Multi-line text editor
-  - [tui-tree-widget](https://github.com/EdJoPaTo/tui-rs-tree-widget) - Tree view widget
-  - [tui-popup](https://github.com/joshka/tui-popup) - Popup dialogs
-- **CLI**: [clap](https://github.com/clap-rs/clap) - Command-line argument parser
-- **Error Handling**: [color-eyre](https://github.com/eyre-rs/eyre) - Beautiful error reports
-- **Logging**: [tracing](https://github.com/tokio-rs/tracing) - Structured logging
+---
 
-## 🎯 Inspiration
+## CLI Commands
 
-This TUI is inspired by modern terminal tools:
-- [Gollama](https://github.com/sammcj/gollama) - TUI for Ollama model management
-- [GitUI](https://github.com/extrawurst/gitui) - Fast terminal UI for Git
-- [ATAC](https://github.com/Julien-cpsn/ATAC) - API testing TUI
-- [Claude Code](https://claude.ai/code) - Modern developer experience
+```
+graphrag-cli [OPTIONS] [COMMAND]
 
-## 🚧 Development Status
+Options:
+  -c, --config <FILE>      Configuration file to pre-load
+  -w, --workspace <NAME>   Workspace name
+  -d, --debug              Enable debug logging
+      --format <text|json> Output format (default: text)
 
-### ✅ Implemented
-- [x] Project structure with proper modularization
-- [x] CLI argument parsing with subcommands (`init`, `load`, `query`, `entities`, `stats`)
-- [x] Main application loop with event handling
-- [x] Four-pane UI layout (Query Input, Results, Entity Explorer, Status Bar)
-- [x] All core UI components with rendering logic
-- [x] Keyboard shortcuts and navigation
-- [x] Theme support (dark/light)
-- [x] Help overlay system with status bar documentation
-- [x] Vim-style scrolling in results viewer
-- [x] GraphRAG Core integration (direct library integration)
-- [x] Real entity data in explorer from knowledge graph
-- [x] Document loading and processing through 7-stage pipeline
-- [x] TOML configuration loading and validation
-- [x] Real-time progress indicators in status bar
-- [x] Error display with color-coded status icons
-- [x] Query execution with graphrag-core
+Commands:
+  tui        Start interactive TUI (default)
+  setup      Interactive wizard to create a config file
+  validate   Validate a configuration file
+  bench      Run full E2E benchmark (Init → Load → Query)
+  workspace  Manage workspaces (list, create, info, delete)
+```
 
-### 🔄 In Progress
-- [ ] GraphRAG API integration (HTTP server mode - future)
-- [ ] Async query execution with cancellation support
+### bench example
 
-### 📝 Planned Features
-- [ ] Query history and session management
-- [ ] Save/load queries
-- [ ] Export results to various formats
-- [ ] Live reload configuration
-- [ ] Logging panel (toggle-able)
-- [ ] Performance monitoring dashboard
-- [ ] Custom theme configuration
-- [ ] Graph visualization (ASCII art)
-- [ ] Search and filter in results
-- [ ] Syntax highlighting in query input
+```bash
+cargo run -p graphrag-cli -- bench \
+  -c my_config.json5 \
+  -b my_document.txt \
+  -q "Question 1?|Question 2?|Question 3?"
+```
 
-## 🤝 Contributing
+Output JSON includes: `init_ms`, `build_ms`, `total_query_ms`, `entities`, `relationships`, `chunks`, per-query `answer`, `confidence`, `sources`.
 
-Contributions are welcome! This is part of the larger [graphrag-rs](https://github.com/automataIA/graphrag-rs) project.
+---
 
-## 📄 License
+## TUI Layout
 
-Same license as the parent graphrag-rs project.
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Query Input (Ctrl+1)  (type queries or /commands here)     │
+├────────────────────────────────────┬────────────────────────┤
+│  Results Viewer (Ctrl+2)           │  Info Panel (Ctrl+4)   │
+│  Markdown-rendered LLM answer      │  ┌─Stats─┬─Sources─┬  │
+│  with confidence header in EXPLAIN │  │       │History  │  │
+│  mode: [EXPLAIN | 85% ████████░░]  │  └───────┴─────────┘  │
+├────────────────────────────────────┤  Ctrl+N cycles tabs    │
+│  Raw Results (Ctrl+3)              │  (when Info focused)   │
+│  Sources list / search results     │                        │
+│  before LLM processing             │                        │
+└────────────────────────────────────┴────────────────────────┘
+│  Status Bar  [mode badge]  ℹ status message                 │
+└─────────────────────────────────────────────────────────────┘
+```
 
-## 🙏 Acknowledgments
+---
 
-- [Ratatui](https://ratatui.rs/) team for the amazing TUI framework
-- [Gollama](https://github.com/sammcj/gollama) for architectural inspiration
-- The Rust TUI community for excellent examples and widgets
+## Keyboard Shortcuts
+
+### Global (IDE-Safe)
+
+| Key | Action |
+|-----|--------|
+| `?` / `Ctrl+H` | Toggle help overlay |
+| `Ctrl+C` | Quit |
+| `Ctrl+N` | Cycle focus forward (Input → Results → Raw → Info) |
+| `Ctrl+P` | Cycle focus backward |
+| `Ctrl+1` | Focus Query Input |
+| `Ctrl+2` | Focus Results Viewer |
+| `Ctrl+3` | Focus Raw Results |
+| `Ctrl+4` | Focus Info Panel |
+| `Ctrl+N` (Info Panel focused) | Cycle tabs: Stats → Sources → History |
+| `Esc` | Return focus to input |
+
+### Input Box
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Submit query or `/command` |
+| `Ctrl+D` | Clear input |
+
+### Scrolling (when viewer focused)
+
+| Key | Action |
+|-----|--------|
+| `j` / `↓` | Scroll down one line |
+| `k` / `↑` | Scroll up one line |
+| `Alt+↓` / `Alt+↑` | Scroll down/up (works even from input) |
+| `PageDown` / `Ctrl+D` | Scroll down one page |
+| `PageUp` / `Ctrl+U` | Scroll up one page |
+| `Home` / `End` | Jump to top / bottom |
+
+---
+
+## Slash Commands
+
+| Command | Description |
+|---------|-------------|
+| `/config <file>` | Load a config file (JSON5, JSON, TOML) |
+| `/config show` | Display the currently loaded config |
+| `/load <file>` | Load and process a document |
+| `/load <file> --rebuild` | Force full rebuild before loading |
+| `/clear` | Clear graph (keep documents) |
+| `/rebuild` | Re-extract from loaded documents |
+| `/stats` | Show entity/relationship/chunk counts |
+| `/entities [filter]` | List entities, optionally filtered |
+| `/mode ask\|explain\|reason` | Switch query mode (sticky) |
+| `/reason <query>` | One-shot reasoning query (decomposition) |
+| `/export <file.md>` | Export query history to Markdown |
+| `/workspace list` | List saved workspaces |
+| `/workspace save <name>` | Save current graph to disk |
+| `/workspace <name>` | Load a saved workspace |
+| `/workspace delete <name>` | Delete a workspace |
+| `/help` | Show full command help |
+
+---
+
+## Query Modes
+
+Switch with `/mode <mode>` or the badge in the status bar shows the active mode.
+
+| Mode | Command | What it does |
+|------|---------|--------------|
+| `ASK` (default) | `/mode ask` | Plain answer, fastest |
+| `EXPLAIN` | `/mode explain` | Answer + confidence score + source references; Sources tab auto-opens |
+| `REASON` | `/mode reason` | Query decomposition — splits complex questions into sub-queries |
+
+One-shot override (doesn't change sticky mode):
+```
+/reason Compare the main arguments of each speaker about love
+```
+
+---
+
+## Architecture
+
+```
+graphrag-cli/src/
+├── main.rs                    # CLI entry point (clap)
+├── app.rs                     # Main event loop, action routing
+├── action.rs                  # Action enum, QueryMode, QueryExplainedPayload
+├── commands/mod.rs            # Slash command parser
+├── config.rs                  # Config file loading (JSON5/JSON/TOML)
+├── theme.rs                   # Dark/light color themes
+├── tui.rs                     # Terminal setup/teardown
+├── query_history.rs           # Per-session query history
+├── workspace.rs               # Workspace metadata management
+├── mode.rs                    # Input mode detection
+├── handlers/
+│   ├── graphrag.rs            # Thread-safe GraphRAG wrapper (Arc<Mutex<>>)
+│   ├── bench.rs               # Benchmark runner (JSON output)
+│   └── file_ops.rs            # File utilities
+└── ui/
+    ├── markdown.rs            # Markdown → ratatui Line<'static> parser
+    ├── spinner.rs             # Braille spinner animation
+    └── components/
+        ├── query_input.rs     # Text input widget
+        ├── results_viewer.rs  # Markdown-rendered answer + scrollbar
+        ├── raw_results_viewer.rs  # Raw search results
+        ├── info_panel.rs      # 3-tab panel (Stats/Sources/History)
+        ├── status_bar.rs      # Status + query mode badge
+        └── help_overlay.rs    # Modal help popup
+```
+
+---
+
+## Technology Stack
+
+- **[Ratatui](https://ratatui.rs/) 0.29** — TUI framework (immediate mode rendering)
+- **[Crossterm](https://github.com/crossterm-rs/crossterm) 0.28** — Cross-platform terminal events
+- **[tui-textarea](https://github.com/rhysd/tui-textarea) 0.7** — Multi-line input widget
+- **[Tokio](https://tokio.rs/) 1.32** — Async runtime
+- **[Clap](https://github.com/clap-rs/clap) 4.5** — CLI argument parsing
+- **[Dialoguer](https://github.com/console-rs/dialoguer) 0.11** — Interactive setup wizard
+- **[color-eyre](https://github.com/eyre-rs/eyre) 0.6** — Error reporting
+- **[graphrag-core](../graphrag-core/)** — Knowledge graph engine (direct library call)
+
+---
+
+## License
+
+Same license as the parent `graphrag-rs` project.

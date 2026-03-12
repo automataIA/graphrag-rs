@@ -13,8 +13,10 @@ use std::path::PathBuf;
 /// Slash command enum
 #[derive(Debug, Clone, PartialEq)]
 pub enum SlashCommand {
-    /// Load a configuration file
+    /// Load a configuration file; or show current config ("show" subcommand)
     Config(PathBuf),
+    /// Display current loaded configuration
+    ConfigShow,
     /// Load a document (with optional rebuild flag)
     Load(PathBuf, bool), // (path, rebuild)
     /// Clear the knowledge graph
@@ -25,6 +27,12 @@ pub enum SlashCommand {
     Stats,
     /// List entities (with optional filter)
     Entities(Option<String>),
+    /// Execute a one-shot reason-mode query (ask_with_reasoning)
+    Reason(String),
+    /// Switch the default query mode (ask | explain | reason)
+    Mode(String),
+    /// Export query history to a Markdown file
+    Export(PathBuf),
     /// Switch workspace (load)
     Workspace(String),
     /// List available workspaces
@@ -62,7 +70,11 @@ impl SlashCommand {
                 let path_str = trimmed[1..].trim_start_matches("config").trim();
 
                 if path_str.is_empty() {
-                    return Err(eyre!("Missing argument: /config <file>"));
+                    return Err(eyre!("Missing argument: /config <file> or /config show"));
+                }
+
+                if path_str.eq_ignore_ascii_case("show") {
+                    return Ok(SlashCommand::ConfigShow);
                 }
 
                 // Debug log to see what's being parsed
@@ -161,6 +173,26 @@ impl SlashCommand {
                     },
                 }
             },
+            "reason" => {
+                let q = args.join(" ");
+                if q.is_empty() {
+                    return Err(eyre!("Missing query: /reason <your question>"));
+                }
+                Ok(SlashCommand::Reason(q))
+            },
+            "mode" => {
+                if args.is_empty() {
+                    return Err(eyre!("Usage: /mode ask|explain|reason"));
+                }
+                Ok(SlashCommand::Mode(args[0].to_lowercase()))
+            },
+            "export" => {
+                let rest = trimmed[1..].trim_start_matches("export").trim();
+                if rest.is_empty() {
+                    return Err(eyre!("Missing path: /export <file.md>"));
+                }
+                Ok(SlashCommand::Export(PathBuf::from(rest)))
+            },
             "help" => {
                 if !args.is_empty() {
                     return Err(eyre!("/help takes no arguments"));
@@ -184,6 +216,8 @@ Available Slash Commands:
                         Supports: JSON5, JSON, TOML
                         Example: /config docs-example/sym.json5
 
+/config show            Display the currently loaded configuration file
+
 /load <file> [--rebuild] Load and process a document into the knowledge graph
                         --rebuild: Clear existing graph before building
                         Example: /load info/Symposium.txt
@@ -202,6 +236,19 @@ Available Slash Commands:
 /entities [filter]      List entities in the knowledge graph
                         Example: /entities socrates
                         Example: /entities PERSON
+
+/reason <query>         Execute a one-shot reasoning query (query decomposition)
+                        Splits complex questions into sub-queries for better answers
+                        Example: /reason Compare the main themes of the book
+
+/mode ask|explain|reason Switch the default query mode (sticky until changed)
+                        ask:    Plain answer (fastest, no metadata)
+                        explain: Answer + confidence score + source references
+                        reason:  Query decomposition for complex multi-part questions
+                        Example: /mode explain
+
+/export <file.md>       Export query history to a Markdown file
+                        Example: /export /tmp/my_session.md
 
 /workspace <command>    Workspace management commands:
   /ws list              List all available workspaces with statistics
@@ -225,10 +272,14 @@ Keyboard Shortcuts:
 FOCUS & NAVIGATION:
 F1                      Focus Results Viewer (LLM answer)
 F2                      Focus Raw Search Results
-F3                      Focus Info Panel
+F3                      Focus Info Panel (Tab cycles tabs within)
 Esc                     Return focus to Input (enable typing)
 
-SCROLLING (when viewer is focused):
+INFO PANEL TABS (when F3 focused):
+Tab                     Cycle tabs: Stats → Sources → History
+j / k                   Scroll within Sources or History tab
+
+SCROLLING (when Results/Raw viewer is focused):
 j / k                   Scroll down / up one line
 Ctrl+D / Ctrl+U         Scroll down / up one page
 Home / End              Scroll to top / bottom
@@ -239,9 +290,9 @@ Ctrl+C / Ctrl+Q         Quit application
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-💡 Tip: Use F1/F2/F3 to switch focus between viewers
-💡 Use --rebuild flag to force a fresh graph rebuild when loading documents
-💡 Vim-style j/k scrolling works only when a viewer is focused
+Tip: Default mode is ASK. Use /mode explain for confidence scores and sources.
+Tip: After an EXPLAIN query, the Sources tab in the Info Panel auto-opens.
+Tip: Use --rebuild flag to force a fresh graph rebuild when loading documents.
 "#
         .trim()
         .to_string()

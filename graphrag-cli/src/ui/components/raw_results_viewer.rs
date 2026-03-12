@@ -160,9 +160,9 @@ impl super::Component for RawResultsViewer {
         };
 
         let title = if self.focused {
-            " Raw Search Results (j/k to scroll) "
+            " Raw Search Results [ACTIVE] (j/k or ↑↓ to scroll | Ctrl+N next panel) "
         } else {
-            " Raw Search Results "
+            " Raw Search Results (Ctrl+3 or Ctrl+N to focus) "
         };
 
         let block = Block::default()

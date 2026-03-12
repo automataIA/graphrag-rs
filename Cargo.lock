@@ -3938,6 +3938,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tui-textarea",
+ "ureq",
  "uuid",
 ]
 

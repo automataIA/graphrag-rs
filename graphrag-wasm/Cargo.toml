@@ -8,6 +8,7 @@ repository.workspace = true
 description = "WASM bindings for GraphRAG - enables browser-side knowledge graphs"
 keywords = ["graphrag", "wasm", "webassembly", "browser"]
 categories = ["wasm", "web-programming"]
+publish = false  # Not published to crates.io (internal use only)
 
 [lib]
 crate-type = ["cdylib", "rlib"]

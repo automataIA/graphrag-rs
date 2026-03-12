@@ -34,8 +34,16 @@ struct QAItem {
     index: usize,
     question: String,
     answer: String,
-    sources: Vec<String>,
+    confidence: Option<f32>,
+    sources: Vec<SourceInfo>,
     query_time_ms: u128,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SourceInfo {
+    id: String,
+    excerpt: String,
+    relevance_score: f32,
 }
 
 pub async fn run_benchmark(
@@ -77,7 +85,7 @@ pub async fn run_benchmark(
         .ok_or(eyre!("Knowledge graph not initialized"))?;
     let stats = BenchStats {
         entities: kg.entities().count(),
-        relationships: kg.get_all_relationships().len(),
+        relationships: kg.relationships().count(),
         chunks: kg.chunks().count(),
     };
 
@@ -88,22 +96,20 @@ pub async fn run_benchmark(
     for (i, q) in questions.iter().enumerate() {
         let q_start = Instant::now();
         // Use ask_explained() which returns answer + source references
-        let (answer, sources) = match graphrag.ask_explained(q).await {
+        let (answer, confidence, sources) = match graphrag.ask_explained(q).await {
             Ok(explained) => {
-                let src_strings: Vec<String> = explained
+                let source_infos: Vec<SourceInfo> = explained
                     .sources
                     .iter()
-                    .map(|s| {
-                        if s.excerpt.is_empty() {
-                            s.id.clone()
-                        } else {
-                            format!("[{}] {}", s.id, s.excerpt)
-                        }
+                    .map(|s| SourceInfo {
+                        id: s.id.clone(),
+                        excerpt: s.excerpt.clone(),
+                        relevance_score: s.relevance_score,
                     })
                     .collect();
-                (explained.answer, src_strings)
+                (explained.answer, Some(explained.confidence), source_infos)
             },
-            Err(e) => (format!("Error: {}", e), vec![]),
+            Err(e) => (format!("Error: {}", e), None, vec![]),
         };
         let q_ms = q_start.elapsed().as_millis();
 
@@ -111,6 +117,7 @@ pub async fn run_benchmark(
             index: i + 1,
             question: q.clone(),
             answer,
+            confidence,
             sources,
             query_time_ms: q_ms,
         });
