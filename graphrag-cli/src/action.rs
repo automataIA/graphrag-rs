@@ -6,6 +6,45 @@
 
 use std::path::PathBuf;
 
+/// Query execution mode
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum QueryMode {
+    /// Plain ask() - fastest, no metadata
+    #[default]
+    Ask,
+    /// ask_explained() - returns confidence + sources
+    Explain,
+    /// ask_with_reasoning() - query decomposition for complex questions
+    Reason,
+}
+
+impl QueryMode {
+    /// Short label for status bar display
+    pub fn label(&self) -> &'static str {
+        match self {
+            QueryMode::Ask => "ASK",
+            QueryMode::Explain => "EXPLAIN",
+            QueryMode::Reason => "REASON",
+        }
+    }
+}
+
+/// Source reference payload from an explained query
+#[derive(Debug, Clone, PartialEq)]
+pub struct SourceRef {
+    pub id: String,
+    pub excerpt: String,
+    pub relevance_score: f32,
+}
+
+/// Payload from a successful explained query (carried by `Action::QueryExplainedSuccess`)
+#[derive(Debug, Clone, PartialEq)]
+pub struct QueryExplainedPayload {
+    pub answer: String,
+    pub confidence: f32,
+    pub sources: Vec<SourceRef>,
+}
+
 /// Main action enum for application events
 #[derive(Debug, Clone, PartialEq)]
 #[allow(dead_code)]
@@ -43,6 +82,8 @@ pub enum Action {
     NextPane,
     /// Move focus to previous pane
     PreviousPane,
+    /// Cycle to next tab in the focused panel (Tab key)
+    NextTab,
 
     // ========= Scrolling (Vim-Style) =========
     /// Scroll up one line (k)
@@ -63,10 +104,18 @@ pub enum Action {
     LoadConfig(PathBuf),
     /// Load a document into the knowledge graph
     LoadDocument(PathBuf),
-    /// Execute a natural language query
+    /// Execute a natural language query using the current QueryMode
     ExecuteQuery(String),
+    /// Execute a query explicitly in Explain mode (confidence + sources)
+    ExecuteExplainedQuery(String),
+    /// Execute a query explicitly in Reason mode (query decomposition)
+    ExecuteReasonQuery(String),
     /// Execute a slash command
     ExecuteSlashCommand(String),
+
+    // ========= Query Mode =========
+    /// Switch the default query mode
+    SetQueryMode(QueryMode),
 
     // ========= Status Updates =========
     /// Set status message with type
@@ -83,8 +132,10 @@ pub enum Action {
     ToggleHelp,
 
     // ========= Async Operation Results =========
-    /// Query completed successfully
+    /// Query completed successfully (plain answer)
     QuerySuccess(String),
+    /// Explained query completed (answer + confidence + sources)
+    QueryExplainedSuccess(Box<QueryExplainedPayload>),
     /// Query failed with error
     QueryError(String),
     /// Document loaded successfully
@@ -95,6 +146,8 @@ pub enum Action {
     ConfigLoaded(String),
     /// Configuration load failed
     ConfigLoadError(String),
+    /// Export history completed
+    ExportSuccess(String),
 
     // ========= Workspace Operations =========
     /// Switch to a different workspace

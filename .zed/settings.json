@@ -1,0 +1,128 @@
+{
+  // =============================================================================
+  // rust-analyzer Configuration for graphrag-rs
+  // =============================================================================
+  // In Zed, rust-analyzer options are nested under lsp.rust-analyzer.initialization_options
+  // Note: ${workspaceFolder} is not supported in Zed — use relative paths like ./Cargo.toml
+
+  "lsp": {
+    "rust-analyzer": {
+      "initialization_options": {
+        "linkedProjects": ["./Cargo.toml"],
+
+        "diagnostics": {
+          "enable": true,
+          "experimental": { "enable": true },
+          "styleLints": { "enable": true },
+          // Disable diagnostics for registry crates (external dependencies)
+          "remapPrefix": {
+            "/home/dio/.cargo/registry": "/dev/null"
+          }
+        },
+
+        "check": {
+          "command": "check",
+          "allTargets": false,
+          "overrideCommand": null,
+          // Ignore registry crates that have no_std issues (GPU libraries) or platform-specific crates
+          // These are not used in WASM builds but appear in workspace dependencies via candle-core
+          "ignore": [
+            "cubecl-runtime",
+            "cubecl-core",
+            "burn",
+            "burn-wgpu",
+            "core-graphics-types",
+            "core-graphics",
+            "core-foundation-sys",
+            "metal",
+            "candle-metal-kernels",
+            "mio",
+            "core-foundation",
+            "crossterm",
+            "cudarc",
+            "libloading",
+            "objc_exception"
+          ]
+        },
+
+        "cargo": {
+          "features": [],
+          "noDefaultFeatures": false,
+          "target": null,
+          "allFeatures": false,
+          "buildScripts": {
+            "enable": false,
+            "overrideCommand": null,
+            "useRustcWrapper": false
+          },
+          // Use a separate target directory for rust-analyzer to avoid conflicts
+          "targetDir": true
+        },
+
+        "procMacro": { "enable": true },
+
+        "imports": {
+          "granularity": { "enforce": false },
+          "merge": { "glob": false }
+        }
+      }
+    }
+  },
+
+  // =============================================================================
+  // Language-specific Settings
+  // =============================================================================
+  "languages": {
+    // Rust configuration with rust-analyzer as formatter
+    "Rust": {
+      "format_on_save": "on",
+      "formatter": { "language_server": { "name": "rust-analyzer" } }
+    },
+
+    // JSON configuration
+    "JSON": {
+      "format_on_save": "on",
+      "tab_size": 2
+    },
+
+    // JSONC (JSON with Comments) configuration
+    "JSONC": {
+      "format_on_save": "on",
+      "tab_size": 2
+    },
+
+    // JSON5 configuration - formatting disabled to preserve unquoted keys
+    "JSON5": {
+      "format_on_save": "off",
+      "tab_size": 2
+    }
+  },
+
+  // =============================================================================
+  // File Type Associations
+  // =============================================================================
+  // Associates file extensions with language modes (equivalent to files.associations)
+  "file_types": {
+    "JSON5": ["*.json5", "*.graphrag.json5"],
+    "JSON": ["*.graphrag.json"]
+  }
+
+  // =============================================================================
+  // Limitations & Notes
+  // =============================================================================
+  //
+  // 1. json.schemas — NOT SUPPORTED in Zed project settings
+  //    The GraphRAG JSON schema configuration from VSCode cannot be replicated here.
+  //    If you need schema validation for .graphrag.json5 files, configure it in
+  //    Zed's global settings (Ctrl+Comma or Cmd+,).
+  //
+  // 2. editor.codeActionsOnSave.source.organizeImports — NO DIRECT EQUIVALENT
+  //    Zed does not have an equivalent to "source.organizeImports: never".
+  //    Zed doesn't force automatic import organization, so this should not be an issue.
+  //
+  // 3. ${workspaceFolder} — NOT SUPPORTED
+  //    All paths must be relative (./Cargo.toml) or absolute.
+  //
+  // To apply these settings: save this file and Zed will automatically restart
+  // rust-analyzer for this project.
+}

@@ -208,25 +208,15 @@ println!("{}", explained.format_display());
 2. [Entity] john_smith (relevance: 88%)
 ```
 
-## Error Messages with Suggestions
+## Error Handling
 
-Errors include actionable suggestions:
+Errors implement standard `std::error::Error` and carry descriptive messages:
 
 ```rust
 match graphrag.ask("question").await {
     Ok(answer) => println!("{}", answer),
     Err(e) => {
-        // Get structured suggestion
-        let suggestion = e.suggestion();
         println!("Error: {}", e);
-        println!("Suggestion: {}", suggestion.action);
-
-        if let Some(code) = suggestion.code_example {
-            println!("Example:\n{}", code);
-        }
-
-        // Or use formatted output
-        println!("{}", e.display_with_suggestion());
     }
 }
 ```
@@ -270,7 +260,6 @@ async fn main() -> Result<()> {
 
     // Add documents
     graphrag.add_document_from_text("Document content here")?;
-    graphrag.add_document_from_file("path/to/document.txt")?;
 
     // Build knowledge graph
     graphrag.build_graph().await?;

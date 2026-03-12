@@ -6,7 +6,6 @@ use ratatui::{layout::Rect, Frame};
 
 pub mod help_overlay;
 pub mod info_panel;
-pub mod progress;
 pub mod query_input;
 pub mod raw_results_viewer;
 pub mod results_viewer;

@@ -1,68 +1,61 @@
-//! Status bar component with color-coded indicators
+//! Status bar component with color-coded indicators and query mode badge
 
 use crate::{
-    action::{Action, StatusType},
+    action::{Action, QueryMode, StatusType},
     theme::Theme,
     ui::Spinner,
 };
 use ratatui::{
     layout::{Alignment, Rect},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
 
-/// Status bar with indicator
+/// Status bar with indicator and query mode badge
 pub struct StatusBar {
-    /// Current status message
     message: String,
-    /// Status type (determines icon and color)
     status_type: StatusType,
-    /// Is progress indicator active?
     progress_active: bool,
-    /// Progress message
     progress_message: String,
-    /// Animated spinner
     spinner: Spinner,
-    /// Theme
+    /// Current query mode (displayed as right-aligned badge)
+    query_mode: QueryMode,
     theme: Theme,
 }
 
 impl StatusBar {
     pub fn new() -> Self {
         Self {
-            message: "Ready".to_string(),
+            message: "Ready — use /config to load a configuration".to_string(),
             status_type: StatusType::Info,
             progress_active: false,
             progress_message: String::new(),
             spinner: Spinner::new(),
+            query_mode: QueryMode::default(),
             theme: Theme::default(),
         }
     }
 
-    /// Set status message
     pub fn set_status(&mut self, status_type: StatusType, message: String) {
         self.status_type = status_type;
         self.message = message;
         self.progress_active = false;
     }
 
-    /// Clear status (reset to default)
     pub fn clear(&mut self) {
         self.message = "Ready".to_string();
         self.status_type = StatusType::Info;
         self.progress_active = false;
     }
 
-    /// Start progress indicator
     pub fn start_progress(&mut self, message: String) {
         self.progress_active = true;
         self.progress_message = message;
         self.status_type = StatusType::Progress;
     }
 
-    /// Stop progress indicator
     pub fn stop_progress(&mut self) {
         self.progress_active = false;
         self.progress_message.clear();
@@ -88,6 +81,10 @@ impl super::Component for StatusBar {
                 self.stop_progress();
                 None
             },
+            Action::SetQueryMode(mode) => {
+                self.query_mode = *mode;
+                None
+            },
             _ => None,
         }
     }
@@ -98,7 +95,6 @@ impl super::Component for StatusBar {
             .border_style(self.theme.border());
 
         let display_message = if self.progress_active {
-            // Update spinner animation and show with progress message
             let spinner_frame = self.spinner.tick();
             format!(
                 "{} {} {}",
@@ -110,7 +106,7 @@ impl super::Component for StatusBar {
             format!("{} {}", self.status_type.icon(), self.message)
         };
 
-        let style = Style::default().fg(self.status_type.color()).add_modifier(
+        let msg_style = Style::default().fg(self.status_type.color()).add_modifier(
             if matches!(self.status_type, StatusType::Error | StatusType::Warning) {
                 Modifier::BOLD
             } else {
@@ -118,12 +114,31 @@ impl super::Component for StatusBar {
             },
         );
 
-        let help_hint = Span::styled(
-            " | Press ? for help | Esc to focus input | Ctrl+C to quit",
+        // Query mode badge color
+        let (mode_color, mode_label) = match self.query_mode {
+            QueryMode::Ask => (Color::DarkGray, " [ASK] "),
+            QueryMode::Explain => (Color::Cyan, " [EXPLAIN] "),
+            QueryMode::Reason => (Color::Magenta, " [REASON] "),
+        };
+
+        let mode_badge = Span::styled(
+            mode_label.to_owned(),
+            Style::default()
+                .fg(Color::Black)
+                .bg(mode_color)
+                .add_modifier(Modifier::BOLD),
+        );
+
+        let hint = Span::styled(
+            " | Ctrl+N next | ↑↓ scroll | ? help | Esc input | Ctrl+C quit".to_owned(),
             self.theme.dimmed(),
         );
 
-        let line = Line::from(vec![Span::styled(display_message, style), help_hint]);
+        let line = Line::from(vec![
+            Span::styled(display_message, msg_style),
+            hint,
+            mode_badge,
+        ]);
 
         let paragraph = Paragraph::new(line).block(block).alignment(Alignment::Left);
 

@@ -108,9 +108,9 @@ impl super::Component for QueryInput {
         };
 
         let title = if self.focused {
-            "💬 Input (Enter to submit | Ctrl+D to clear)"
+            "💬 Input (Enter to submit | Ctrl+D to clear | Ctrl+N to focus panels)"
         } else {
-            "💬 Input (Inactive)"
+            "💬 Input (Ctrl+N/Ctrl+P to cycle panels | Esc to return here)"
         };
 
         let block = Block::default()
