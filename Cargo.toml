@@ -5,12 +5,13 @@ members = [
     "graphrag-server",
     "graphrag-cli",
     "graphrag_py",
+    "graphrag",
 ]
 exclude = ["examples/web-app"]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version = "1.75"
 authors = ["GraphRAG-RS Contributors"]
