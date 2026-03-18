@@ -1,0 +1,39 @@
+[package]
+name = "graphrag"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+description = "GraphRAG - Knowledge Graph RAG: meta-crate that bundles graphrag-core and graphrag-cli"
+keywords = ["graphrag", "knowledge-graph", "rag", "llm", "ai"]
+categories = ["command-line-utilities", "algorithms", "science", "text-processing"]
+
+[lib]
+name = "graphrag"
+path = "src/lib.rs"
+
+[[bin]]
+name = "graphrag"
+path = "src/main.rs"
+
+[dependencies]
+graphrag-core = { version = "0.1.0", path = "../graphrag-core", features = [
+    "async",
+    "pagerank",
+    "lightrag",
+    "leiden",
+    "caching",
+    "parallel-processing",
+    "ollama",
+    "rograg",
+    "cross-encoder",
+    "incremental",
+    "json5-support",
+    "vector-hnsw",
+] }
+graphrag-cli = { version = "0.1.0", path = "../graphrag-cli" }
+tokio = { version = "1.0", features = ["full"] }
+color-eyre = "0.6"

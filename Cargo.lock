@@ -3914,6 +3914,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "graphrag"
+version = "0.1.0"
+dependencies = [
+ "color-eyre",
+ "graphrag-cli",
+ "graphrag-core",
+ "tokio",
+]
+
+[[package]]
 name = "graphrag-cli"
 version = "0.1.0"
 dependencies = [

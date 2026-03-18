@@ -9,6 +9,10 @@ description = "Modern Terminal User Interface (TUI) for GraphRAG operations"
 keywords = ["graphrag", "tui", "cli", "ratatui", "knowledge-graph"]
 categories = ["command-line-utilities", "text-processing"]
 
+[lib]
+name = "graphrag_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "graphrag-cli"
 path = "src/main.rs"
