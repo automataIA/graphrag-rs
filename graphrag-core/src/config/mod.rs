@@ -1606,6 +1606,14 @@ impl Default for ObjectiveWeightsConfig {
 }
 
 impl Config {
+    /// Whether *any* chat-LLM backend is enabled. Use this everywhere a
+    /// gate previously asked `self.ollama.enabled`, so the OpenAI-compat
+    /// backend (vLLM / llama.cpp / OVMS / real OpenAI) gets treated as
+    /// equivalent. The actual client dispatch lives in `ChatClient::from_config`.
+    pub fn chat_enabled(&self) -> bool {
+        self.ollama.enabled || self.openai.enabled
+    }
+
     /// Load configuration with hierarchical merging (requires `hierarchical-config` feature)
     ///
     /// Configuration sources are merged in order of priority (lowest to highest):

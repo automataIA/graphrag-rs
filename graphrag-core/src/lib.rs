@@ -556,7 +556,7 @@ impl GraphRAG {
             self.config.ollama.enabled
         );
 
-        if self.config.entities.use_gleaning && self.config.ollama.enabled {
+        if self.config.entities.use_gleaning && self.config.chat_enabled() {
             // LLM-based extraction with gleaning
             #[cfg(feature = "async")]
             {
@@ -840,8 +840,8 @@ impl GraphRAG {
                     );
                 }
             }
-        } else if self.config.ollama.enabled {
-            // LLM single-pass extraction (Ollama enabled, gleaning disabled)
+        } else if self.config.chat_enabled() {
+            // LLM single-pass extraction (chat backend enabled, gleaning disabled)
             //
             // Uses LLMEntityExtractor directly for one extraction round per chunk.
             // num_ctx is calculated dynamically from the built prompt + 20% margin,
@@ -1261,7 +1261,7 @@ impl GraphRAG {
             }
         }
 
-        if self.config.ollama.enabled {
+        if self.config.chat_enabled() {
             // Initial synthesis
             let mut current_answer = self
                 .generate_semantic_answer_from_results(query, &unique_results)
@@ -1334,8 +1334,8 @@ impl GraphRAG {
         // Get full search results with metadata
         let search_results = self.query_internal_with_results(query).await?;
 
-        // If Ollama is enabled, generate semantic answer using LLM
-        if self.config.ollama.enabled {
+        // If a chat backend is enabled, generate semantic answer using LLM
+        if self.config.chat_enabled() {
             return self
                 .generate_semantic_answer_from_results(query, &search_results)
                 .await;
@@ -1404,7 +1404,7 @@ impl GraphRAG {
         let search_results = self.query_internal_with_results(query).await?;
 
         // Generate the answer
-        let answer = if self.config.ollama.enabled {
+        let answer = if self.config.chat_enabled() {
             self.generate_semantic_answer_from_results(query, &search_results)
                 .await?
         } else {

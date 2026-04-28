@@ -519,6 +519,26 @@ async fn add_document(
             Ok(_) => {
                 tracing::info!("Added document to Qdrant: {} ({})", title, id);
 
+                // Also feed the doc into the live GraphRAG instance so its
+                // chunker/graph see the content. Without this, /api/graph/build
+                // runs over zero chunks (qdrant stores docs for vector search;
+                // GraphRAG keeps its own knowledge_graph/chunks for LLM-based
+                // entity extraction). Failure is logged but does not poison
+                // the qdrant write — qdrant is the source of truth.
+                {
+                    let mut g = state.graphrag.write().await;
+                    if let Some(ref mut graphrag) = *g {
+                        if let Err(e) = graphrag.add_document_from_text(&content) {
+                            tracing::warn!(
+                                error = %e,
+                                "GraphRAG ingest failed; /api/graph/build will skip this doc"
+                            );
+                        } else {
+                            *state.graph_built.write().await = false;
+                        }
+                    }
+                }
+
                 return Ok(Json(DocumentOperationResponse {
                     success: true,
                     document_id: Some(id),
