@@ -28,20 +28,38 @@ impl ConfigManager {
         }
     }
 
-    /// Set configuration from JSON
+    /// Set configuration from JSON.
+    ///
+    /// Accepts a *partial* JSON body: the input is deep-merged on top of
+    /// either the currently-active config (if any) or `Config::default()`.
+    /// Missing fields therefore retain their previous/default values, so
+    /// callers can POST just the slice they want to change (e.g. only the
+    /// `openai` block) without having to mirror the full Config schema.
     pub async fn set_from_json(&self, json_str: &str) -> Result<(), String> {
-        // Parse JSON into Config
-        let config: Config =
+        let patch: serde_json::Value =
             serde_json::from_str(json_str).map_err(|e| format!("Failed to parse JSON: {}", e))?;
 
-        // Validate configuration
+        // Base = current config if set, else defaults. Both round-trip
+        // through serde_json::Value so deep_merge_in_place sees a uniform
+        // type (object vs object, array replaces, scalars replace).
+        let base_config = match self.config.read().await.as_ref() {
+            Some(cfg) => cfg.clone(),
+            None => Config::default(),
+        };
+        let mut base = serde_json::to_value(&base_config)
+            .map_err(|e| format!("Failed to serialize base config: {}", e))?;
+
+        deep_merge_in_place(&mut base, patch);
+
+        let config: Config = serde_json::from_value(base)
+            .map_err(|e| format!("Failed to parse merged JSON: {}", e))?;
+
         let errors = self.validate_config(&config).await;
         if !errors.is_empty() {
             *self.validation_errors.write().await = errors.clone();
             return Err(format!("Configuration validation failed: {:?}", errors));
         }
 
-        // Store configuration
         *self.config.write().await = Some(config);
         *self.validation_errors.write().await = Vec::new();
 
@@ -114,6 +132,21 @@ impl ConfigManager {
 impl Default for ConfigManager {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Recursively merge `patch` into `base`. Objects are merged key-by-key;
+/// arrays and scalars in `patch` replace whatever's in `base`. Used by
+/// `set_from_json` to layer a partial body over an existing/default config
+/// so the caller only needs to send the fields they want to change.
+fn deep_merge_in_place(base: &mut serde_json::Value, patch: serde_json::Value) {
+    match (base, patch) {
+        (serde_json::Value::Object(b), serde_json::Value::Object(p)) => {
+            for (k, v) in p {
+                deep_merge_in_place(b.entry(k).or_insert(serde_json::Value::Null), v);
+            }
+        },
+        (b, p) => *b = p,
     }
 }
 
