@@ -29,6 +29,8 @@ pub struct EmbeddingConfig {
     pub dimension: usize,
     /// Ollama base URL (if using Ollama)
     pub ollama_url: String,
+    /// Ollama port (separate from URL because ollama-rs takes them split)
+    pub ollama_port: u16,
     /// Ollama embedding model name
     pub ollama_model: String,
     /// Enable caching
@@ -40,7 +42,8 @@ impl Default for EmbeddingConfig {
         Self {
             backend: "ollama".to_string(),
             dimension: 384,
-            ollama_url: "http://localhost:11434".to_string(),
+            ollama_url: "http://localhost".to_string(),
+            ollama_port: 11434,
             ollama_model: "nomic-embed-text".to_string(),
             enable_cache: true,
         }
@@ -99,7 +102,7 @@ impl EmbeddingService {
         // Try to initialize Ollama if requested
         #[cfg(feature = "ollama")]
         let ollama_client = if config.backend == "ollama" {
-            let ollama = Ollama::new(config.ollama_url.clone(), 11434);
+            let ollama = Ollama::new(config.ollama_url.clone(), config.ollama_port);
 
             // Check if Ollama is available
             match ollama.list_local_models().await {

@@ -112,6 +112,10 @@ impl AppState {
             dimension: embedding_dim,
             ollama_url: std::env::var("OLLAMA_URL")
                 .unwrap_or_else(|_| "http://localhost".to_string()),
+            ollama_port: std::env::var("OLLAMA_PORT")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(11434),
             ollama_model: std::env::var("OLLAMA_EMBEDDING_MODEL")
                 .unwrap_or_else(|_| "nomic-embed-text".to_string()),
             enable_cache: true,
