@@ -1054,9 +1054,16 @@ async fn main() -> std::io::Result<()> {
             // Build OpenAPI spec endpoint
             .build("/openapi.json")
 
-            // Config endpoints (plain Actix-web routing — no #[api_operation] yet)
+            // Config endpoints — exposed at /config (plain Actix-web routing).
+            // NOTE: prefix is /config not /api/config because the apistos /api
+            // scope above is registered first and matches /api/config (which
+            // has no /config sub-route), shadowing this block. apistos's typed
+            // scope/route requires handlers to implement PathItemDefinition
+            // (i.e. carry #[api_operation]); plain web::scope can't be
+            // registered before .build() either. Renaming to /config is the
+            // simplest unblock and avoids both constraints.
             .service(
-                web::scope("/api/config")
+                web::scope("/config")
                     .route("", web::get().to(config_endpoints::get_config))
                     .route("", web::post().to(config_endpoints::set_config))
                     .route("/template", web::get().to(config_endpoints::get_config_template))
