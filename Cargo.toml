@@ -58,7 +58,7 @@ leptos_meta = { version = "0.8" }
 leptos_router = { version = "0.8" }
 
 # Vector databases
-qdrant-client = "1.11"
+qdrant-client = { version = "1.11", default-features = false, features = ["download_snapshots", "serde"] }
 redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
 
 # GPU acceleration
