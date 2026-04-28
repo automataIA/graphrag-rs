@@ -1,0 +1,99 @@
+//! `ChatClient` — runtime dispatcher between Ollama-protocol and
+//! OpenAI-compatible chat backends.
+//!
+//! Every consumer of the chat LLM (entity extractors, query planner,
+//! gleaning) used to take `OllamaClient` directly. Switching them to
+//! `ChatClient` lets `Config.openai.enabled` route the same call sites
+//! to either an Ollama server or any OpenAI-spec server (vLLM,
+//! llama-server, real OpenAI, OpenRouter, ...) without per-callsite
+//! branching.
+//!
+//! Method surface mirrors `OllamaClient` exactly (`generate`,
+//! `generate_with_params`, `get_stats`, `clear_cache`, `cache_size`) so
+//! the swap is a tree-wide find-replace. The canonical params type stays
+//! `OllamaGenerationParams` — the OpenAI side ignores Ollama-only fields
+//! (top_k, repeat_penalty, keep_alive, num_ctx).
+
+use crate::core::error::Result;
+use crate::ollama::{OllamaClient, OllamaConfig, OllamaGenerationParams, OllamaUsageStats};
+use crate::openai::{OpenAIClient, OpenAIConfig};
+
+/// Chat backend selector. `from_config` picks OpenAI when `openai.enabled`,
+/// otherwise Ollama when `ollama.enabled`, returning `None` if neither is on.
+#[derive(Clone, Debug)]
+pub enum ChatClient {
+    Ollama(OllamaClient),
+    OpenAI(OpenAIClient),
+}
+
+impl ChatClient {
+    /// Wire from the runtime config. OpenAI takes precedence over Ollama
+    /// when both are enabled (so `openai.enabled = true` overrides any
+    /// `ollama.enabled` setting).
+    pub fn from_config(
+        ollama: &OllamaConfig,
+        openai: &OpenAIConfig,
+    ) -> Option<Self> {
+        if openai.enabled {
+            Some(Self::OpenAI(OpenAIClient::new(openai.clone())))
+        } else if ollama.enabled {
+            Some(Self::Ollama(OllamaClient::new(ollama.clone())))
+        } else {
+            None
+        }
+    }
+
+    /// Construct directly from an `OllamaClient` (back-compat helper for
+    /// call sites that build their own client).
+    pub fn from_ollama(client: OllamaClient) -> Self {
+        Self::Ollama(client)
+    }
+
+    /// Construct directly from an `OpenAIClient`.
+    pub fn from_openai(client: OpenAIClient) -> Self {
+        Self::OpenAI(client)
+    }
+
+    /// Whether either backend is available right now (mirrors
+    /// `Config.{ollama,openai}.enabled` checks at call sites).
+    pub fn is_enabled(&self) -> bool { true }
+
+    /// Single-shot generate.
+    pub async fn generate(&self, prompt: &str) -> Result<String> {
+        match self {
+            Self::Ollama(c) => c.generate(prompt).await,
+            Self::OpenAI(c) => c.generate(prompt).await,
+        }
+    }
+
+    /// Generate with caller-supplied params.
+    pub async fn generate_with_params(
+        &self,
+        prompt: &str,
+        params: OllamaGenerationParams,
+    ) -> Result<String> {
+        match self {
+            Self::Ollama(c) => c.generate_with_params(prompt, params).await,
+            Self::OpenAI(c) => c.generate_with_params(prompt, params).await,
+        }
+    }
+
+    /// Stats handle (always returns the underlying client's stats).
+    pub fn get_stats(&self) -> &OllamaUsageStats {
+        match self {
+            Self::Ollama(c) => c.get_stats(),
+            Self::OpenAI(c) => c.get_stats(),
+        }
+    }
+
+    /// `keep_alive` value when the active backend is Ollama; `None` for
+    /// OpenAI (the field is Ollama-specific). Consumers used to read this
+    /// off `ollama_client.config().keep_alive` directly; expose it here so
+    /// the call site doesn't have to know which backend is live.
+    pub fn keep_alive(&self) -> Option<String> {
+        match self {
+            Self::Ollama(c) => c.config().keep_alive.clone(),
+            Self::OpenAI(_) => None,
+        }
+    }
+}

@@ -24,6 +24,7 @@
 
 use crate::{
     core::{Document, Result, TextChunk},
+    chat::ChatClient,
     ollama::{OllamaClient, OllamaConfig, OllamaGenerationParams},
 };
 use std::collections::{HashMap, HashSet};
@@ -96,21 +97,29 @@ impl Default for ContextualEnricherConfig {
 /// # }
 /// ```
 pub struct ContextualEnricher {
-    client: OllamaClient,
+    client: ChatClient,
     config: ContextualEnricherConfig,
 }
 
 impl ContextualEnricher {
-    /// Create a new contextual enricher with explicit configs
-    pub fn new(ollama_config: OllamaConfig, enricher_config: ContextualEnricherConfig) -> Self {
-        let client = OllamaClient::new(ollama_config);
+    /// Create with an explicit chat client (Ollama or OpenAI-compat).
+    pub fn from_chat_client(client: ChatClient, enricher_config: ContextualEnricherConfig) -> Self {
         Self {
             client,
             config: enricher_config,
         }
     }
 
-    /// Create with default enricher config
+    /// Create a new contextual enricher with an Ollama config (back-compat).
+    pub fn new(ollama_config: OllamaConfig, enricher_config: ContextualEnricherConfig) -> Self {
+        let client = ChatClient::from_ollama(OllamaClient::new(ollama_config));
+        Self {
+            client,
+            config: enricher_config,
+        }
+    }
+
+    /// Create with default enricher config (back-compat with `OllamaConfig`).
     pub fn with_defaults(ollama_config: OllamaConfig) -> Self {
         Self::new(ollama_config, ContextualEnricherConfig::default())
     }

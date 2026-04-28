@@ -8,13 +8,14 @@ use crate::{
     core::{ChunkId, Entity, EntityId, EntityMention, Relationship, TextChunk},
     entity::prompts::{EntityData, ExtractionOutput, PromptBuilder, RelationshipData},
     ollama::OllamaClient,
+    chat::ChatClient,
     GraphRAGError, Result,
 };
 use serde_json;
 
 /// LLM-based entity extractor that uses actual language model calls
 pub struct LLMEntityExtractor {
-    ollama_client: OllamaClient,
+    ollama_client: ChatClient,
     prompt_builder: PromptBuilder,
     temperature: f32,
     max_tokens: usize,
@@ -30,7 +31,7 @@ impl LLMEntityExtractor {
     /// # Arguments
     /// * `ollama_client` - Ollama client for LLM inference
     /// * `entity_types` - List of entity types to extract (e.g., ["PERSON", "LOCATION", "ORGANIZATION"])
-    pub fn new(ollama_client: OllamaClient, entity_types: Vec<String>) -> Self {
+    pub fn new(ollama_client: ChatClient, entity_types: Vec<String>) -> Self {
         Self {
             ollama_client,
             prompt_builder: PromptBuilder::new(entity_types),
@@ -522,7 +523,7 @@ Here's the extraction:
     #[test]
     fn test_parse_valid_json() {
         let ollama_config = OllamaConfig::default();
-        let ollama_client = OllamaClient::new(ollama_config);
+        let ollama_client = crate::chat::ChatClient::from_ollama(OllamaClient::new(ollama_config));
         let extractor = LLMEntityExtractor::new(
             ollama_client,
             vec!["PERSON".to_string(), "LOCATION".to_string()],
@@ -551,7 +552,7 @@ Here's the extraction:
     #[test]
     fn test_convert_to_entities() {
         let ollama_config = OllamaConfig::default();
-        let ollama_client = OllamaClient::new(ollama_config);
+        let ollama_client = crate::chat::ChatClient::from_ollama(OllamaClient::new(ollama_config));
         let extractor = LLMEntityExtractor::new(ollama_client, vec!["PERSON".to_string()]);
 
         let chunk = create_test_chunk();
@@ -574,7 +575,7 @@ Here's the extraction:
     #[test]
     fn test_find_mentions() {
         let ollama_config = OllamaConfig::default();
-        let ollama_client = OllamaClient::new(ollama_config);
+        let ollama_client = crate::chat::ChatClient::from_ollama(OllamaClient::new(ollama_config));
         let extractor = LLMEntityExtractor::new(ollama_client, vec!["PERSON".to_string()]);
 
         let chunk = create_test_chunk();
@@ -587,7 +588,7 @@ Here's the extraction:
     #[test]
     fn test_normalize_name() {
         let ollama_config = OllamaConfig::default();
-        let ollama_client = OllamaClient::new(ollama_config);
+        let ollama_client = crate::chat::ChatClient::from_ollama(OllamaClient::new(ollama_config));
         let extractor = LLMEntityExtractor::new(ollama_client, vec!["PERSON".to_string()]);
 
         assert_eq!(extractor.normalize_name("Tom Sawyer"), "tom_sawyer");

@@ -15,6 +15,7 @@
 use crate::{
     core::{Entity, EntityId, GraphRAGError, Relationship, Result, TextChunk},
     ollama::OllamaClient,
+    chat::ChatClient,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -85,7 +86,7 @@ impl AtomicFact {
 /// Uses LLM to decompose text into self-contained factual statements.
 pub struct AtomicFactExtractor {
     /// Ollama client for LLM-based extraction
-    ollama_client: OllamaClient,
+    ollama_client: ChatClient,
     /// Maximum tokens per fact (default: 400)
     max_fact_tokens: usize,
 }
@@ -96,7 +97,7 @@ impl AtomicFactExtractor {
     /// # Arguments
     ///
     /// * `ollama_client` - Ollama client for LLM calls
-    pub fn new(ollama_client: OllamaClient) -> Self {
+    pub fn new(ollama_client: ChatClient) -> Self {
         Self {
             ollama_client,
             max_fact_tokens: 400,

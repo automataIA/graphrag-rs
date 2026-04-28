@@ -80,6 +80,8 @@ pub mod embeddings;
 pub mod nlp;
 /// Ollama LLM integration
 pub mod ollama;
+pub mod openai;
+pub mod chat;
 /// Persistence layer for knowledge graphs (workspace management always available)
 pub mod persistence;
 /// Query processing and execution
@@ -351,8 +353,9 @@ impl GraphRAG {
 
         self.retrieval_system = Some(retrieval::RetrievalSystem::new(&self.config)?);
 
-        if self.config.ollama.enabled {
-            let client = ollama::OllamaClient::new(self.config.ollama.clone());
+        if let Some(client) =
+            chat::ChatClient::from_config(&self.config.ollama, &self.config.openai)
+        {
             self.query_planner = Some(query::planner::QueryPlanner::new(client));
         }
 
@@ -558,7 +561,7 @@ impl GraphRAG {
             #[cfg(feature = "async")]
             {
                 use crate::entity::GleaningEntityExtractor;
-                use crate::ollama::OllamaClient;
+                use crate::chat::ChatClient;
 
                 #[cfg(feature = "tracing")]
                 tracing::info!(
@@ -566,8 +569,17 @@ impl GraphRAG {
                     self.config.entities.max_gleaning_rounds
                 );
 
-                // Create Ollama client
-                let client = OllamaClient::new(self.config.ollama.clone());
+                // Pick chat backend (ollama or openai). Skip extraction if neither is enabled.
+                let client = match ChatClient::from_config(&self.config.ollama, &self.config.openai) {
+                    Some(c) => c,
+                    None => {
+                        #[cfg(feature = "tracing")]
+                        tracing::warn!(
+                            "Skipping LLM gleaning: neither config.ollama.enabled nor config.openai.enabled"
+                        );
+                        return Ok(());
+                    },
+                };
 
                 // Create gleaning config from our config
                 let gleaning_config = crate::entity::GleaningConfig {
@@ -837,7 +849,7 @@ impl GraphRAG {
             #[cfg(feature = "async")]
             {
                 use crate::entity::llm_extractor::LLMEntityExtractor;
-                use crate::ollama::OllamaClient;
+                use crate::chat::ChatClient;
 
                 #[cfg(feature = "tracing")]
                 tracing::info!(
@@ -845,7 +857,16 @@ impl GraphRAG {
                     self.config.ollama.keep_alive,
                 );
 
-                let client = OllamaClient::new(self.config.ollama.clone());
+                let client = match ChatClient::from_config(&self.config.ollama, &self.config.openai) {
+                    Some(c) => c,
+                    None => {
+                        #[cfg(feature = "tracing")]
+                        tracing::warn!(
+                            "Skipping LLM extraction: neither config.ollama.enabled nor config.openai.enabled"
+                        );
+                        return Ok(());
+                    },
+                };
                 let entity_types = if self.config.entities.entity_types.is_empty() {
                     vec![
                         "PERSON".to_string(),
@@ -1466,7 +1487,7 @@ impl GraphRAG {
         query: &str,
         search_results: &[retrieval::SearchResult],
     ) -> Result<String> {
-        use crate::ollama::OllamaClient;
+        use crate::chat::ChatClient;
 
         let graph = self
             .knowledge_graph
@@ -1544,8 +1565,11 @@ impl GraphRAG {
             return Ok("No relevant information found in the knowledge graph.".to_string());
         }
 
-        // Create Ollama client
-        let client = OllamaClient::new(self.config.ollama.clone());
+        // Pick chat backend (ollama or openai). Bail early if neither is enabled.
+        let client = ChatClient::from_config(&self.config.ollama, &self.config.openai)
+            .ok_or_else(|| GraphRAGError::Generation {
+                message: "no chat backend enabled (config.ollama.enabled / config.openai.enabled both false)".to_string(),
+            })?;
 
         // Build prompt for semantic answer generation with RAG best practices (2025)
         let prompt = format!(

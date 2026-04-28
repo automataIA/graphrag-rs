@@ -1,10 +1,11 @@
 use crate::core::Result;
+use crate::chat::ChatClient;
 use crate::ollama::OllamaClient;
 use serde::{Deserialize, Serialize};
 
 /// Planner for breaking down complex queries
 pub struct QueryPlanner {
-    client: OllamaClient,
+    client: ChatClient,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -14,7 +15,7 @@ struct DecompositionResponse {
 
 impl QueryPlanner {
     /// Create a new query planner
-    pub fn new(client: OllamaClient) -> Self {
+    pub fn new(client: ChatClient) -> Self {
         Self { client }
     }
 

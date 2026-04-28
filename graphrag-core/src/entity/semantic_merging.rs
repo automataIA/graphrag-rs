@@ -1,5 +1,6 @@
 use crate::{
     core::{Entity, Result},
+    chat::ChatClient,
     ollama::OllamaClient,
 };
 use serde::{Deserialize, Serialize};
@@ -23,7 +24,7 @@ pub struct EntityMergeDecision {
 /// Entity merger using semantic similarity and optional LLM
 #[derive(Clone)]
 pub struct SemanticEntityMerger {
-    llm_client: Option<OllamaClient>,
+    llm_client: Option<ChatClient>,
     similarity_threshold: f64,
     max_description_tokens: usize,
     use_llm_merging: bool,
@@ -41,7 +42,7 @@ impl SemanticEntityMerger {
     }
 
     /// Add an LLM client for intelligent merging
-    pub fn with_llm_client(mut self, client: OllamaClient) -> Self {
+    pub fn with_llm_client(mut self, client: ChatClient) -> Self {
         self.llm_client = Some(client);
         self.use_llm_merging = true;
         self
@@ -112,7 +113,7 @@ impl SemanticEntityMerger {
 
     async fn try_llm_merge_decision(
         &self,
-        _llm_client: &OllamaClient,
+        _llm_client: &ChatClient,
         prompt: &str,
     ) -> Result<EntityMergeDecision> {
         // For now, simulate an LLM response with a simple heuristic
