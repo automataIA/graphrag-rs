@@ -23,14 +23,24 @@ use ollama_rs::{generation::embeddings::request::GenerateEmbeddingsRequest, Olla
 /// Embedding service configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmbeddingConfig {
-    /// Embedding backend: "ollama" or "hash"
+    /// Embedding backend: "ollama", "openai", or "hash"
     pub backend: String,
-    /// Embedding dimension (384 for MiniLM, 768 for BERT)
+    /// Embedding dimension (384 for MiniLM, 768 for BERT, 1024 for mxbai)
     pub dimension: usize,
     /// Ollama base URL (if using Ollama)
     pub ollama_url: String,
     /// Ollama embedding model name
     pub ollama_model: String,
+    /// OpenAI-compatible base URL (e.g. "http://localhost:8000/v1" for
+    /// vLLM, "http://localhost:9000/v3" for OpenVINO Model Server,
+    /// "http://localhost:17171/v1" for llama-server, or
+    /// "https://api.openai.com/v1" for the real thing).
+    pub openai_url: String,
+    /// OpenAI-compat model name (sent in the JSON body's `model` field).
+    pub openai_model: String,
+    /// API key. Empty string is fine for self-hosted servers (vLLM, OVMS,
+    /// llama-server) that don't authenticate.
+    pub openai_api_key: String,
     /// Enable caching
     pub enable_cache: bool,
 }
@@ -42,9 +52,21 @@ impl Default for EmbeddingConfig {
             dimension: 384,
             ollama_url: "http://localhost:11434".to_string(),
             ollama_model: "nomic-embed-text".to_string(),
+            openai_url: "http://localhost:8000/v1".to_string(),
+            openai_model: "BAAI/bge-m3".to_string(),
+            openai_api_key: String::new(),
             enable_cache: true,
         }
     }
+}
+
+/// OpenAI-compatible embedding HTTP client. Holds the configured URL,
+/// model name, and API key; used by `generate_with_openai`.
+struct OpenAIClient {
+    http: reqwest::Client,
+    base_url: String,
+    model: String,
+    api_key: String,
 }
 
 /// Embedding service with automatic fallback
@@ -52,6 +74,7 @@ pub struct EmbeddingService {
     config: EmbeddingConfig,
     #[cfg(feature = "ollama")]
     ollama_client: Option<Arc<Ollama>>,
+    openai_client: Option<Arc<OpenAIClient>>,
     fallback_generator: Arc<RwLock<EmbeddingGenerator>>,
     stats: Arc<RwLock<EmbeddingStats>>,
 }
@@ -73,12 +96,22 @@ pub enum EmbeddingError {
     #[allow(dead_code)]
     OllamaError(String),
 
+    #[error("OpenAI-compat error: {0}")]
+    #[allow(dead_code)]
+    OpenAIError(String),
+
     #[error("Generation failed: {0}")]
     GenerationFailed(String),
 
     #[error("Invalid dimension: expected {expected}, got {actual}")]
     #[allow(dead_code)]
     DimensionMismatch { expected: usize, actual: usize },
+}
+
+impl From<reqwest::Error> for EmbeddingError {
+    fn from(e: reqwest::Error) -> Self {
+        EmbeddingError::OpenAIError(e.to_string())
+    }
 }
 
 #[cfg(feature = "ollama")]
@@ -138,6 +171,54 @@ impl EmbeddingService {
             warn!("⚠ Ollama support not compiled in. Using fallback embeddings. Rebuild with --features ollama");
         }
 
+        // OpenAI-compat backend (vLLM, OVMS, llama-server, etc.). Always
+        // available — gated by config.backend == "openai" rather than a
+        // cargo feature, since reqwest is a non-optional dep.
+        let openai_client = if config.backend == "openai" {
+            let http = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(60))
+                .build()
+                .map_err(|e| EmbeddingError::OpenAIError(format!("client build failed: {e}")))?;
+
+            // Probe the /models endpoint to confirm the server is up. We
+            // don't fail-hard if the model isn't listed — some servers
+            // (vLLM single-model mode, OVMS Mediapipe graphs) report
+            // synthetic names that don't match config.openai_model.
+            let probe_url = format!("{}/models", config.openai_url.trim_end_matches('/'));
+            let mut req = http.get(&probe_url);
+            if !config.openai_api_key.is_empty() {
+                req = req.bearer_auth(&config.openai_api_key);
+            }
+            match req.send().await {
+                Ok(resp) if resp.status().is_success() => {
+                    info!("✓ OpenAI-compat server reachable at {}", config.openai_url);
+                    Some(Arc::new(OpenAIClient {
+                        http,
+                        base_url: config.openai_url.clone(),
+                        model: config.openai_model.clone(),
+                        api_key: config.openai_api_key.clone(),
+                    }))
+                },
+                Ok(resp) => {
+                    warn!(
+                        "⚠ OpenAI-compat /models returned {}. Using fallback embeddings. URL: {}",
+                        resp.status(),
+                        config.openai_url
+                    );
+                    None
+                },
+                Err(e) => {
+                    warn!(
+                        "⚠ OpenAI-compat probe failed: {}. Using fallback embeddings. URL: {}",
+                        e, config.openai_url
+                    );
+                    None
+                },
+            }
+        } else {
+            None
+        };
+
         // Always create fallback generator
         let fallback_generator = Arc::new(RwLock::new(EmbeddingGenerator::new(config.dimension)));
 
@@ -145,18 +226,37 @@ impl EmbeddingService {
             config,
             #[cfg(feature = "ollama")]
             ollama_client,
+            openai_client,
             fallback_generator,
             stats: Arc::new(RwLock::new(EmbeddingStats::default())),
         })
     }
 
-    /// Generate embeddings for a batch of texts
+    /// Generate embeddings for a batch of texts. Tries the configured
+    /// backend (ollama or openai), falls through to the hash generator if
+    /// the backend errors.
     pub async fn generate(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>, EmbeddingError> {
         let mut stats = self.stats.write().await;
         stats.total_requests += texts.len();
         drop(stats); // Release lock
 
-        // Try Ollama first if available
+        // OpenAI-compat backend (vLLM, OVMS, llama-server, ...).
+        if let Some(client) = &self.openai_client {
+            match self.generate_with_openai(client, texts).await {
+                Ok(embeddings) => {
+                    let mut stats = self.stats.write().await;
+                    stats.ollama_success += texts.len();
+                    return Ok(embeddings);
+                },
+                Err(e) => {
+                    warn!("OpenAI-compat embedding failed: {}. Using fallback.", e);
+                    let mut stats = self.stats.write().await;
+                    stats.ollama_failures += texts.len();
+                },
+            }
+        }
+
+        // Try Ollama next.
         #[cfg(feature = "ollama")]
         if let Some(ollama) = &self.ollama_client {
             match self.generate_with_ollama(ollama, texts).await {
@@ -179,6 +279,64 @@ impl EmbeddingService {
         drop(stats);
 
         self.generate_with_fallback(texts).await
+    }
+
+    /// Generate embeddings using an OpenAI-compatible server (vLLM, OVMS,
+    /// llama-server, OpenAI itself, …). Sends one POST per text — most
+    /// servers also accept a batch (input as an array) but using
+    /// per-text requests keeps the dimension-validation path simple.
+    async fn generate_with_openai(
+        &self,
+        client: &OpenAIClient,
+        texts: &[&str],
+    ) -> Result<Vec<Vec<f32>>, EmbeddingError> {
+        let url = format!("{}/embeddings", client.base_url.trim_end_matches('/'));
+        let mut results = Vec::with_capacity(texts.len());
+
+        for text in texts {
+            let body = serde_json::json!({
+                "model": client.model,
+                "input": text,
+            });
+            let mut req = client.http.post(&url).json(&body);
+            if !client.api_key.is_empty() {
+                req = req.bearer_auth(&client.api_key);
+            }
+
+            let resp = req.send().await?;
+            if !resp.status().is_success() {
+                let status = resp.status();
+                let body = resp.text().await.unwrap_or_default();
+                return Err(EmbeddingError::OpenAIError(format!(
+                    "HTTP {status} from {url}: {body}"
+                )));
+            }
+
+            let parsed: serde_json::Value = resp.json().await?;
+            let embedding: Vec<f32> = parsed
+                .get("data")
+                .and_then(|d| d.get(0))
+                .and_then(|d0| d0.get("embedding"))
+                .and_then(|e| e.as_array())
+                .ok_or_else(|| {
+                    EmbeddingError::GenerationFailed(format!(
+                        "OpenAI response missing data[0].embedding: {parsed}"
+                    ))
+                })?
+                .iter()
+                .map(|v| v.as_f64().unwrap_or(0.0) as f32)
+                .collect();
+
+            if embedding.len() != self.config.dimension {
+                return Err(EmbeddingError::DimensionMismatch {
+                    expected: self.config.dimension,
+                    actual: embedding.len(),
+                });
+            }
+            results.push(embedding);
+        }
+
+        Ok(results)
     }
 
     /// Generate single embedding
@@ -262,6 +420,9 @@ impl EmbeddingService {
 
     /// Get backend name
     pub fn backend_name(&self) -> &str {
+        if self.openai_client.is_some() {
+            return "openai";
+        }
         #[cfg(feature = "ollama")]
         {
             if self.ollama_client.is_some() {

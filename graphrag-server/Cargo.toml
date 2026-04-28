@@ -28,6 +28,10 @@ graphrag-core = { path = "../graphrag-core", features = ["caching", "lightrag", 
 # Optional: Ollama embeddings (requires main graphrag crate)
 ollama-rs = { version = "0.2", optional = true }
 
+# OpenAI-compat embedding backend (vLLM, OVMS, llama.cpp server, etc.).
+# Always compiled — branch is gated by EmbeddingConfig.backend == "openai".
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
 # Web framework - Actix-web + Apistos for OpenAPI documentation
 actix-web = { workspace = true }
 actix-cors = { workspace = true }

@@ -114,6 +114,17 @@ impl AppState {
                 .unwrap_or_else(|_| "http://localhost".to_string()),
             ollama_model: std::env::var("OLLAMA_EMBEDDING_MODEL")
                 .unwrap_or_else(|_| "nomic-embed-text".to_string()),
+            // OPENAI_URL: full base URL with version path included
+            // (e.g. http://localhost:8000/v1, http://localhost:9000/v3,
+            // http://localhost:17171/v1). The /embeddings suffix is
+            // appended by the embedding service.
+            openai_url: std::env::var("OPENAI_URL")
+                .unwrap_or_else(|_| "http://localhost:8000/v1".to_string()),
+            openai_model: std::env::var("OPENAI_EMBEDDING_MODEL")
+                .unwrap_or_else(|_| "BAAI/bge-m3".to_string()),
+            // Empty string disables the Authorization header (fine for
+            // self-hosted servers that don't authenticate).
+            openai_api_key: std::env::var("OPENAI_API_KEY").unwrap_or_default(),
             enable_cache: true,
         };
 
