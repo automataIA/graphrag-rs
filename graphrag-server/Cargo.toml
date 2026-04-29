@@ -21,6 +21,11 @@ qdrant = ["qdrant-client"]
 lancedb = ["dep:lancedb", "arrow-array", "arrow-schema"]
 auth = ["jsonwebtoken", "bcrypt"]
 ollama = ["ollama-rs"]
+# OpenAI-compatible chat + embedding backends. Pulls in graphrag-core's
+# matching feature; the embedding side here is reqwest-based and
+# unconditional (reqwest is non-optional in this crate), so the gate is
+# purely a code-path toggle, not a dependency one.
+openai = ["graphrag-core/openai"]
 
 [dependencies]
 graphrag-core = { path = "../graphrag-core", features = ["caching", "lightrag", "pagerank", "memory-storage"] }

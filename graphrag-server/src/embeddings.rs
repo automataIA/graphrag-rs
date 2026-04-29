@@ -62,6 +62,7 @@ impl Default for EmbeddingConfig {
 
 /// OpenAI-compatible embedding HTTP client. Holds the configured URL,
 /// model name, and API key; used by `generate_with_openai`.
+#[cfg(feature = "openai")]
 struct OpenAIClient {
     http: reqwest::Client,
     base_url: String,
@@ -74,6 +75,7 @@ pub struct EmbeddingService {
     config: EmbeddingConfig,
     #[cfg(feature = "ollama")]
     ollama_client: Option<Arc<Ollama>>,
+    #[cfg(feature = "openai")]
     openai_client: Option<Arc<OpenAIClient>>,
     fallback_generator: Arc<RwLock<EmbeddingGenerator>>,
     stats: Arc<RwLock<EmbeddingStats>>,
@@ -171,9 +173,11 @@ impl EmbeddingService {
             warn!("⚠ Ollama support not compiled in. Using fallback embeddings. Rebuild with --features ollama");
         }
 
-        // OpenAI-compat backend (vLLM, OVMS, llama-server, etc.). Always
-        // available — gated by config.backend == "openai" rather than a
-        // cargo feature, since reqwest is a non-optional dep.
+        // OpenAI-compat backend (vLLM, OVMS, llama-server, etc.). Gated
+        // behind feature = "openai" — when off, the user's
+        // `EMBEDDING_BACKEND=openai` falls through to hash with a clear
+        // log line, mirroring the ollama-feature-off behavior.
+        #[cfg(feature = "openai")]
         let openai_client = if config.backend == "openai" {
             let http = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(60))
@@ -219,6 +223,11 @@ impl EmbeddingService {
             None
         };
 
+        #[cfg(not(feature = "openai"))]
+        if config.backend == "openai" {
+            warn!("⚠ OpenAI-compat embeddings not compiled in. Using fallback. Rebuild with --features openai");
+        }
+
         // Always create fallback generator
         let fallback_generator = Arc::new(RwLock::new(EmbeddingGenerator::new(config.dimension)));
 
@@ -226,6 +235,7 @@ impl EmbeddingService {
             config,
             #[cfg(feature = "ollama")]
             ollama_client,
+            #[cfg(feature = "openai")]
             openai_client,
             fallback_generator,
             stats: Arc::new(RwLock::new(EmbeddingStats::default())),
@@ -241,6 +251,7 @@ impl EmbeddingService {
         drop(stats); // Release lock
 
         // OpenAI-compat backend (vLLM, OVMS, llama-server, ...).
+        #[cfg(feature = "openai")]
         if let Some(client) = &self.openai_client {
             match self.generate_with_openai(client, texts).await {
                 Ok(embeddings) => {
@@ -285,6 +296,7 @@ impl EmbeddingService {
     /// llama-server, OpenAI itself, …). Sends one POST per text — most
     /// servers also accept a batch (input as an array) but using
     /// per-text requests keeps the dimension-validation path simple.
+    #[cfg(feature = "openai")]
     async fn generate_with_openai(
         &self,
         client: &OpenAIClient,
@@ -420,8 +432,11 @@ impl EmbeddingService {
 
     /// Get backend name
     pub fn backend_name(&self) -> &str {
-        if self.openai_client.is_some() {
-            return "openai";
+        #[cfg(feature = "openai")]
+        {
+            if self.openai_client.is_some() {
+                return "openai";
+            }
         }
         #[cfg(feature = "ollama")]
         {

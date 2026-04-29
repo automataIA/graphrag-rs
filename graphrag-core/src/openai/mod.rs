@@ -6,10 +6,19 @@
 //! `ChatClient` enum dispatcher in `crate::chat` to route all chat-LLM
 //! traffic — entity extraction, query planning, gleaning — between an
 //! Ollama-protocol server and an OpenAI-compat one based on `Config`.
+//!
+//! Feature gating: `OpenAIConfig` is unconditional so user configs
+//! round-trip through serde whether or not the `openai` feature is on.
+//! `OpenAIClient` and the HTTP path are gated behind `feature = "openai"`
+//! (which itself depends on `ureq` + `async`). Without the feature,
+//! `chat::ChatClient::from_config` silently treats `openai.enabled = true`
+//! as "no openai available" and falls back to Ollama / None.
 
-use crate::core::error::{GraphRAGError, Result};
-use crate::ollama::{OllamaGenerationParams, OllamaUsageStats};
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "openai")]
+use crate::core::error::{GraphRAGError, Result};
+#[cfg(feature = "openai")]
+use crate::ollama::{OllamaGenerationParams, OllamaUsageStats};
 
 /// OpenAI-compatible chat-backend configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,6 +105,7 @@ impl Default for OpenAIConfig {
 /// Uses synchronous `ureq` (matching `OllamaClient`'s choice) wrapped in
 /// `tokio::task::spawn_blocking` for async callers. Keeps stats and a
 /// (currently bypassed) cache hook for parity with `OllamaClient`.
+#[cfg(feature = "openai")]
 #[derive(Clone)]
 pub struct OpenAIClient {
     config: OpenAIConfig,
@@ -104,6 +114,7 @@ pub struct OpenAIClient {
     stats: OllamaUsageStats,
 }
 
+#[cfg(feature = "openai")]
 impl std::fmt::Debug for OpenAIClient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OpenAIClient")
@@ -113,6 +124,7 @@ impl std::fmt::Debug for OpenAIClient {
     }
 }
 
+#[cfg(feature = "openai")]
 impl OpenAIClient {
     /// Build a new client. Network is not touched until the first
     /// `generate*` call.
@@ -151,22 +163,15 @@ impl OpenAIClient {
         self.generate_with_params(prompt, params).await
     }
 
-    /// Chat completion with caller-supplied params. The
-    /// `OllamaGenerationParams` shape is kept as the canonical params
-    /// type so consumers don't have to branch on backend; only the
-    /// fields that map to OpenAI (max_tokens, temperature, top_p, stop)
-    /// are honored. `top_k` / `repeat_penalty` / `keep_alive` /
-    /// `num_ctx` / `context` are Ollama-specific and silently ignored.
-    pub async fn generate_with_params(
+    /// Build the JSON body for a single /chat/completions request.
+    /// Extracted from `generate_with_params` so unit tests can assert on
+    /// the exact shape that goes over the wire (including extra_body
+    /// merge precedence) without standing up an HTTP server.
+    pub(crate) fn build_request_body(
         &self,
         prompt: &str,
-        params: OllamaGenerationParams,
-    ) -> Result<String> {
-        let url = format!(
-            "{}/chat/completions",
-            self.config.base_url.trim_end_matches('/')
-        );
-
+        params: &OllamaGenerationParams,
+    ) -> serde_json::Value {
         // Build request JSON. Single-turn chat (one user message) — same
         // shape consumers send to OllamaClient.generate{,_with_params}.
         let mut body = serde_json::json!({
@@ -185,7 +190,7 @@ impl OpenAIClient {
         if let Some(p) = params.top_p {
             body["top_p"] = serde_json::json!(p);
         }
-        if let Some(stops) = params.stop {
+        if let Some(ref stops) = params.stop {
             if !stops.is_empty() {
                 body["stop"] = serde_json::json!(stops);
             }
@@ -202,6 +207,30 @@ impl OpenAIClient {
                 obj.entry(k.clone()).or_insert_with(|| v.clone());
             }
         }
+        let _ = prompt; // keep name in scope for the comment above
+        body
+    }
+
+    /// Chat completion with caller-supplied params. The
+    /// `OllamaGenerationParams` shape is kept as the canonical params
+    /// type so consumers don't have to branch on backend; only the
+    /// fields that map to OpenAI (max_tokens, temperature, top_p, stop)
+    /// are honored. `top_k` / `repeat_penalty` / `keep_alive` /
+    /// `num_ctx` / `context` are Ollama-specific and silently ignored.
+    pub async fn generate_with_params(
+        &self,
+        prompt: &str,
+        params: OllamaGenerationParams,
+    ) -> Result<String> {
+        let url = format!(
+            "{}/chat/completions",
+            self.config.base_url.trim_end_matches('/')
+        );
+
+        // Body construction extracted into build_request_body so unit
+        // tests can assert on the wire shape (incl. extra_body merge
+        // precedence) without standing up an HTTP server.
+        let body = self.build_request_body(prompt, &params);
 
         let api_key = self.config.api_key.clone();
         let timeout = std::time::Duration::from_secs(self.config.timeout_seconds);
@@ -287,4 +316,177 @@ impl OpenAIClient {
 
     /// Stub for parity.
     pub fn cache_size(&self) -> usize { 0 }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Tests — exercise the public surface that's hardest to ship by hand:
+// serde round-trip on the config (incl. Option<max_tokens> and the JSON
+// blob in extra_body), and the request-body merge precedence rule
+// (set fields on OpenAIConfig beat extra_body collisions).
+// ─────────────────────────────────────────────────────────────────────────
+#[cfg(all(test, feature = "openai"))]
+mod tests {
+    use super::*;
+
+    fn cfg() -> OpenAIConfig {
+        OpenAIConfig {
+            enabled: true,
+            base_url: "http://127.0.0.1:8000/v1".to_string(),
+            chat_model: "test-model".to_string(),
+            api_key: String::new(),
+            timeout_seconds: 60,
+            max_retries: 3,
+            max_tokens: Some(2000),
+            temperature: Some(0.2),
+            enable_caching: true,
+            extra_body: None,
+        }
+    }
+
+    fn empty_params() -> OllamaGenerationParams {
+        OllamaGenerationParams {
+            num_predict: None,
+            temperature: None,
+            top_p: None,
+            top_k: None,
+            stop: None,
+            repeat_penalty: None,
+            num_ctx: None,
+            keep_alive: None,
+            context: None,
+        }
+    }
+
+    #[test]
+    fn config_round_trips_through_serde_with_extra_body_object() {
+        // Realistic case: chat_template_kwargs.enable_thinking=false for
+        // Qwen3 on llama.cpp's --jinja path. The whole shape must come
+        // back identical or we'd silently drop server-specific knobs.
+        let mut c = cfg();
+        c.extra_body = Some(serde_json::json!({
+            "chat_template_kwargs": { "enable_thinking": false }
+        }));
+        let json = serde_json::to_string(&c).expect("serialize");
+        let back: OpenAIConfig = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back.chat_model, c.chat_model);
+        assert_eq!(back.extra_body, c.extra_body);
+        assert_eq!(back.max_tokens, c.max_tokens);
+    }
+
+    #[test]
+    fn config_round_trips_with_max_tokens_none() {
+        // Local-LLM "no cap" mode: max_tokens = None must serialize to a
+        // missing field (skip_serializing_if), not `null`, so the
+        // OpenAI-spec server falls back to its own default.
+        let mut c = cfg();
+        c.max_tokens = None;
+        let json = serde_json::to_string(&c).expect("serialize");
+        assert!(
+            !json.contains("max_tokens"),
+            "max_tokens should be skipped when None, got: {json}"
+        );
+        let back: OpenAIConfig = serde_json::from_str(&json).expect("deserialize");
+        assert!(back.max_tokens.is_none());
+    }
+
+    #[test]
+    fn config_extra_body_omitted_when_none() {
+        let c = cfg();
+        let json = serde_json::to_string(&c).expect("serialize");
+        assert!(!json.contains("extra_body"), "extra_body should be skipped when None: {json}");
+    }
+
+    /// f32 → JSON Number → f64 round-trip is lossy (0.2 ≠ 0.20000000298…),
+    /// so float fields are compared with a tolerance. Tightened to 1e-5
+    /// — coarse enough to absorb the f32 widening, tight enough to catch
+    /// any genuine drift.
+    fn approx_eq(v: &serde_json::Value, expected: f64) {
+        let got = v.as_f64().unwrap_or_else(|| panic!("not a number: {v:?}"));
+        assert!(
+            (got - expected).abs() < 1e-5,
+            "expected ~{expected}, got {got} (diff {})",
+            (got - expected).abs()
+        );
+    }
+
+    #[test]
+    fn build_request_body_minimal_shape() {
+        let client = OpenAIClient::new(cfg());
+        let body = client.build_request_body("hello", &empty_params());
+        assert_eq!(body["model"], "test-model");
+        assert_eq!(body["stream"], false);
+        assert_eq!(body["messages"][0]["role"], "user");
+        assert_eq!(body["messages"][0]["content"], "hello");
+        // params override missing → fall back to config; config has these set
+        approx_eq(&body["temperature"], 0.2);
+        assert_eq!(body["max_tokens"], 2000);
+    }
+
+    #[test]
+    fn build_request_body_uses_params_over_config() {
+        let client = OpenAIClient::new(cfg());
+        let mut p = empty_params();
+        p.temperature = Some(0.9);
+        p.num_predict = Some(50);
+        let body = client.build_request_body("x", &p);
+        approx_eq(&body["temperature"], 0.9);
+        assert_eq!(body["max_tokens"], 50);
+    }
+
+    #[test]
+    fn build_request_body_omits_max_tokens_when_uncapped() {
+        // None on both config and params → no max_tokens in the body, so
+        // llama.cpp / vLLM / OpenAI use their server-side default.
+        let mut c = cfg();
+        c.max_tokens = None;
+        let client = OpenAIClient::new(c);
+        let body = client.build_request_body("x", &empty_params());
+        assert!(body.get("max_tokens").is_none(), "uncapped should omit max_tokens, got: {body}");
+    }
+
+    #[test]
+    fn extra_body_merges_unique_keys() {
+        let mut c = cfg();
+        c.extra_body = Some(serde_json::json!({
+            "chat_template_kwargs": { "enable_thinking": false },
+            "response_format":      { "type": "json_object" },
+        }));
+        let client = OpenAIClient::new(c);
+        let body = client.build_request_body("x", &empty_params());
+        assert_eq!(body["chat_template_kwargs"]["enable_thinking"], false);
+        assert_eq!(body["response_format"]["type"], "json_object");
+    }
+
+    #[test]
+    fn extra_body_loses_to_set_fields_on_collision() {
+        // Precedence rule: anything we set via config or params (model,
+        // max_tokens, temperature, stop, top_p) wins over extra_body
+        // attempting the same key. Stops the user shooting themselves in
+        // the foot by accidentally overwriting a typed field with a
+        // raw JSON blob.
+        let mut c = cfg();
+        c.chat_model = "real-model".to_string();
+        c.extra_body = Some(serde_json::json!({
+            "model":       "should-not-win",
+            "max_tokens":  9999,
+            "temperature": 5.0,
+        }));
+        let client = OpenAIClient::new(c);
+        let body = client.build_request_body("x", &empty_params());
+        assert_eq!(body["model"], "real-model");
+        assert_eq!(body["max_tokens"], 2000);
+        approx_eq(&body["temperature"], 0.2);
+    }
+
+    #[test]
+    fn extra_body_ignored_when_not_an_object() {
+        // Defensive: a misconfigured extra_body (e.g. a bare string) must
+        // not break the request — it's silently dropped, body proceeds.
+        let mut c = cfg();
+        c.extra_body = Some(serde_json::json!("not-an-object"));
+        let client = OpenAIClient::new(c);
+        let body = client.build_request_body("x", &empty_params());
+        assert_eq!(body["model"], "test-model");
+        assert!(body.get("not-an-object").is_none());
+    }
 }

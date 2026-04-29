@@ -28,9 +28,11 @@ default = [
 #   cargo add graphrag-core --features research   # Advanced research features
 
 ## Starter Bundle - Minimal setup for getting started quickly
-## Includes: async runtime, Ollama LLM, memory storage, basic retrieval
+## Includes: async runtime, Ollama + OpenAI-compat LLM backends, memory
+## storage, basic retrieval. `openai` covers vLLM / llama-server / OVMS /
+## real OpenAI — pick one at runtime via `openai.enabled` / `ollama.enabled`.
 ## Hello World: `GraphRAG::quick_start("text").await`
-starter = ["async", "ollama", "memory-storage", "basic-retrieval", "ureq"]
+starter = ["async", "ollama", "openai", "memory-storage", "basic-retrieval", "ureq"]
 
 ## Full Bundle - Production-ready with all common features
 ## Includes: starter + PageRank, LightRAG, caching, parallel processing, Leiden
@@ -173,6 +175,13 @@ corpus-processing = [
 
 # LLM integrations
 ollama = ["ollama-rs", "async"] # Ollama LLM support (requires async)
+
+# OpenAI-compatible chat backend (vLLM, llama-server, OVMS, OpenRouter,
+# OpenAI itself, ...). Mirrors `ollama` — opt-in, requires async + ureq
+# for the HTTP client. OpenAIConfig itself stays unconditional so
+# user configs round-trip through serde regardless of this flag; only
+# the OpenAIClient and the ChatClient::OpenAI dispatch arm are gated.
+openai = ["ureq", "async"]
 
 # GLiNER-Relex: joint NER + RE via ONNX Runtime (~1.5 GB VRAM, no LLM required)
 gliner = ["dep:gline-rs", "dep:orp", "parking_lot", "dep:composable"]
