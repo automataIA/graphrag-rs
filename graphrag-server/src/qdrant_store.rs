@@ -21,8 +21,9 @@
 
 use qdrant_client::{
     qdrant::{
-        CreateCollectionBuilder, DeletePointsBuilder, Distance, Filter, PointStruct, PointsIdsList,
-        SearchPointsBuilder, UpsertPointsBuilder, Value as QdrantValue, VectorParamsBuilder,
+        Condition, CreateCollectionBuilder, DeletePointsBuilder, Distance, Filter, PointStruct,
+        PointsIdsList, ScrollPointsBuilder, SearchPointsBuilder, UpsertPointsBuilder,
+        Value as QdrantValue, VectorParamsBuilder,
     },
     Qdrant,
 };
@@ -74,8 +75,44 @@ pub struct DocumentMetadata {
     pub entities: Vec<Entity>,
     pub relationships: Vec<Relationship>,
     pub timestamp: String,
+    /// SHA-256 of the document content (lowercase hex). Used for
+    /// dedup at ingest: if a point with the same hash already exists,
+    /// `add_document` returns its id instead of inserting a duplicate.
+    /// Optional so payloads written by older builds parse cleanly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_hash: Option<String>,
+    /// Caller-supplied id. The Qdrant point id itself is a UUID
+    /// (Qdrant requires UUID/u64 ids); we store the human-supplied
+    /// id separately in the payload so callers can delete by it.
+    /// Optional for back-compat with payloads written before this
+    /// field existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_id: Option<String>,
     #[serde(flatten)]
     pub custom: HashMap<String, serde_json::Value>,
+}
+
+/// Lightweight summary returned by `list_documents` — title, ids,
+/// and a content excerpt are enough for an agent to decide whether
+/// to read the full doc, without paying the bandwidth of every
+/// Qdrant payload field on a fleet-wide list.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentSummary {
+    pub id: String,
+    pub user_id: Option<String>,
+    pub title: String,
+    pub timestamp: String,
+    pub excerpt: String,
+}
+
+/// Render a `RetrievedPoint`'s id into a String. Qdrant ids are either
+/// UUID strings or u64 numbers; both render to a String here so callers
+/// don't have to branch.
+fn point_id_to_string(point: qdrant_client::qdrant::RetrievedPoint) -> Option<String> {
+    match point.id?.point_id_options? {
+        qdrant_client::qdrant::point_id::PointIdOptions::Uuid(s) => Some(s),
+        qdrant_client::qdrant::point_id::PointIdOptions::Num(n) => Some(n.to_string()),
+    }
 }
 
 /// Search result from Qdrant
@@ -286,6 +323,125 @@ impl QdrantStore {
         Ok(())
     }
 
+    /// Look up a Qdrant point id by the caller-supplied user_id. Returns
+    /// the first match (user_id is treated as unique-per-document). Used
+    /// by `delete_document` so callers can refer to documents by the id
+    /// they handed us at ingest, not the internal UUID.
+    pub async fn find_id_by_user_id(
+        &self,
+        user_id: &str,
+    ) -> Result<Option<String>, QdrantError> {
+        let filter = Filter::must([Condition::matches("user_id", user_id.to_string())]);
+        let resp = self
+            .client
+            .scroll(
+                ScrollPointsBuilder::new(&self.collection_name)
+                    .filter(filter)
+                    .with_payload(false)
+                    .with_vectors(false)
+                    .limit(1u32),
+            )
+            .await
+            .map_err(|e| QdrantError::OperationError(e.to_string()))?;
+        Ok(resp.result.into_iter().next().and_then(point_id_to_string))
+    }
+
+    /// Look up an existing point by content hash. Returns the Qdrant
+    /// point id (and stored DocumentMetadata) if a match exists. Drives
+    /// dedup at ingest: same content → same point, no duplicate.
+    pub async fn find_by_content_hash(
+        &self,
+        hash: &str,
+    ) -> Result<Option<(String, DocumentMetadata)>, QdrantError> {
+        let filter = Filter::must([Condition::matches("content_hash", hash.to_string())]);
+        let resp = self
+            .client
+            .scroll(
+                ScrollPointsBuilder::new(&self.collection_name)
+                    .filter(filter)
+                    .with_payload(true)
+                    .with_vectors(false)
+                    .limit(1u32),
+            )
+            .await
+            .map_err(|e| QdrantError::OperationError(e.to_string()))?;
+        let Some(point) = resp.result.into_iter().next() else {
+            return Ok(None);
+        };
+        let id = match point_id_to_string(point.clone()) {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+        let payload_value = serde_json::to_value(&point.payload)
+            .map_err(|e| QdrantError::OperationError(e.to_string()))?;
+        let metadata: DocumentMetadata = serde_json::from_value(payload_value)
+            .map_err(|e| QdrantError::OperationError(e.to_string()))?;
+        Ok(Some((id, metadata)))
+    }
+
+    /// List documents stored in Qdrant. Pages through the collection
+    /// using scroll; capped at `limit` to keep responses bounded.
+    /// Returns lightweight summaries (id, title, timestamp, excerpt) —
+    /// callers needing full text should query individual points.
+    pub async fn list_documents(
+        &self,
+        limit: u32,
+    ) -> Result<Vec<DocumentSummary>, QdrantError> {
+        let mut summaries = Vec::new();
+        let mut offset: Option<qdrant_client::qdrant::PointId> = None;
+        let page_size = limit.min(256).max(1);
+
+        while summaries.len() < limit as usize {
+            let mut builder = ScrollPointsBuilder::new(&self.collection_name)
+                .with_payload(true)
+                .with_vectors(false)
+                .limit(page_size);
+            if let Some(off) = offset.take() {
+                builder = builder.offset(off);
+            }
+            let resp = self
+                .client
+                .scroll(builder)
+                .await
+                .map_err(|e| QdrantError::OperationError(e.to_string()))?;
+
+            if resp.result.is_empty() {
+                break;
+            }
+            for point in resp.result {
+                let id = match point_id_to_string(point.clone()) {
+                    Some(s) => s,
+                    None => continue,
+                };
+                let payload_value = match serde_json::to_value(&point.payload) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+                let md: DocumentMetadata = match serde_json::from_value(payload_value) {
+                    Ok(m) => m,
+                    Err(_) => continue,
+                };
+                let excerpt = md.text.chars().take(160).collect::<String>();
+                summaries.push(DocumentSummary {
+                    id,
+                    user_id: md.user_id,
+                    title: md.title,
+                    timestamp: md.timestamp,
+                    excerpt,
+                });
+                if summaries.len() >= limit as usize {
+                    break;
+                }
+            }
+            offset = resp.next_page_offset;
+            if offset.is_none() {
+                break;
+            }
+        }
+
+        Ok(summaries)
+    }
+
     /// Clear all documents from collection
     #[allow(dead_code)]
     pub async fn clear(&self) -> Result<(), QdrantError> {
@@ -366,6 +522,8 @@ mod tests {
             entities: vec![],
             relationships: vec![],
             timestamp: chrono::Utc::now().to_rfc3339(),
+            content_hash: None,
+            user_id: None,
             custom: HashMap::new(),
         };
 

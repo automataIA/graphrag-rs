@@ -94,6 +94,10 @@ struct AppState {
     // Fallback in-memory storage (used when Qdrant unavailable or simple mode)
     documents: Arc<RwLock<Vec<Document>>>,
     graph_built: Arc<RwLock<bool>>,
+    /// RFC 3339 timestamp of the last successful /api/graph/build (None
+    /// before the first build). Surfaced via /api/graph/stats so agents
+    /// can decide whether the graph is fresh enough to query.
+    last_built_at: Arc<RwLock<Option<String>>>,
     query_count: Arc<RwLock<usize>>,
 }
 
@@ -174,6 +178,7 @@ impl AppState {
                         ))),
                         documents: Arc::new(RwLock::new(Vec::new())),
                         graph_built: Arc::new(RwLock::new(false)),
+                        last_built_at: Arc::new(RwLock::new(None)),
                         query_count: Arc::new(RwLock::new(0)),
                     }
                 },
@@ -193,6 +198,7 @@ impl AppState {
                         ))),
                         documents: Arc::new(RwLock::new(Vec::new())),
                         graph_built: Arc::new(RwLock::new(false)),
+                        last_built_at: Arc::new(RwLock::new(None)),
                         query_count: Arc::new(RwLock::new(0)),
                     }
                 },
@@ -212,6 +218,7 @@ impl AppState {
                 ))),
                 documents: Arc::new(RwLock::new(Vec::new())),
                 graph_built: Arc::new(RwLock::new(false)),
+                last_built_at: Arc::new(RwLock::new(None)),
                 query_count: Arc::new(RwLock::new(0)),
             }
         }
@@ -475,12 +482,41 @@ async fn add_document(
     // Sanitize inputs
     let title = sanitize_string(&body.title);
     let content = sanitize_string(&body.content);
+    let user_id = body.id.clone();
 
     let id = uuid::Uuid::new_v4().to_string();
     let timestamp = chrono::Utc::now().to_rfc3339();
+    // SHA-256 of the sanitized content; drives ingest-time dedup so the
+    // same source ingested twice doesn't end up as two Qdrant points
+    // (which is what was producing the duplicate query results).
+    let content_hash = {
+        use sha2::{Digest, Sha256};
+        let mut h = Sha256::new();
+        h.update(content.as_bytes());
+        format!("{:x}", h.finalize())
+    };
 
     #[cfg(feature = "qdrant")]
     if let Some(qdrant) = &state.qdrant {
+        // Dedup check first — if a point with the same content_hash
+        // already exists, return its id without re-embedding. Save NPU
+        // time and avoid duplicate vectors in the index.
+        if let Ok(Some((existing_id, existing_md))) =
+            qdrant.find_by_content_hash(&content_hash).await
+        {
+            tracing::info!(
+                "Skipping ingest: content_hash matches existing doc '{}' ({})",
+                existing_md.title,
+                existing_id
+            );
+            return Ok(Json(DocumentOperationResponse {
+                success: true,
+                document_id: Some(existing_id),
+                message: "Document already indexed (content_hash match)".to_string(),
+                backend: "qdrant".to_string(),
+            }));
+        }
+
         // Generate real embeddings
         let embedding = match state.embeddings.generate_single(&content).await {
             Ok(emb) => emb,
@@ -501,6 +537,8 @@ async fn add_document(
             entities: Vec::new(),
             relationships: Vec::new(),
             timestamp: timestamp.clone(),
+            content_hash: Some(content_hash.clone()),
+            user_id: user_id.clone(),
             custom: HashMap::new(),
         };
 
@@ -552,19 +590,52 @@ async fn add_document(
     description = "Retrieve a list of all documents in the knowledge graph"
 )]
 async fn list_documents(state: Data<AppState>) -> Json<ListDocumentsResponse> {
+    // Hard cap on the page size: ingesters can drive the corpus to
+    // many thousands of points. 256 is plenty for an agent inspecting
+    // what's indexed; deeper enumeration should use search.
+    const LIST_LIMIT: u32 = 256;
+
     #[cfg(feature = "qdrant")]
     if let Some(qdrant) = &state.qdrant {
-        match qdrant.stats().await {
-            Ok((count, _vectors)) => {
+        // Get total count separately — list_documents pages through
+        // the collection but a separate /count is one cheap call.
+        let total = match qdrant.stats().await {
+            Ok((c, _)) => c,
+            Err(e) => {
+                tracing::warn!("Qdrant stats failed: {}", e);
+                0
+            },
+        };
+        match qdrant.list_documents(LIST_LIMIT).await {
+            Ok(rows) => {
+                let documents: Vec<DocumentSummary> = rows
+                    .into_iter()
+                    .map(|r| DocumentSummary {
+                        id: r.id,
+                        user_id: r.user_id,
+                        title: r.title,
+                        content_length: None,
+                        excerpt: Some(r.excerpt),
+                        added_at: r.timestamp,
+                    })
+                    .collect();
+                let truncated = (documents.len() as u32) >= LIST_LIMIT && total > documents.len();
                 return Json(ListDocumentsResponse {
-                    documents: Vec::new(),
-                    total: count,
+                    documents,
+                    total,
                     backend: "qdrant".to_string(),
-                    note: Some("Full document listing from Qdrant not implemented yet".to_string()),
+                    note: if truncated {
+                        Some(format!(
+                            "Showing first {} of {} documents — use search to drill in",
+                            LIST_LIMIT, total
+                        ))
+                    } else {
+                        None
+                    },
                 });
             },
             Err(e) => {
-                tracing::error!("Failed to get Qdrant stats: {}", e);
+                tracing::error!("Qdrant list_documents failed: {}", e);
             },
         }
     }
@@ -576,8 +647,10 @@ async fn list_documents(state: Data<AppState>) -> Json<ListDocumentsResponse> {
         .iter()
         .map(|doc| DocumentSummary {
             id: doc.id.clone(),
+            user_id: None,
             title: doc.title.clone(),
-            content_length: doc.content.len(),
+            content_length: Some(doc.content.len()),
+            excerpt: None,
             added_at: doc.added_at.clone(),
         })
         .collect();
@@ -602,17 +675,32 @@ async fn delete_document(
     state: Data<AppState>,
     id: WebPath<String>,
 ) -> Result<Json<DocumentOperationResponse>, ApiError> {
-    let doc_id = id.into_inner();
+    let supplied = id.into_inner();
 
     #[cfg(feature = "qdrant")]
     if let Some(qdrant) = &state.qdrant {
-        match qdrant.delete_document(&doc_id).await {
+        // Two-step lookup: try the supplied id as a user-supplied id
+        // first (the kind callers actually remember), fall back to
+        // treating it as the Qdrant point UUID. This is the fix for
+        // "delete by user-id returns 500" — the Qdrant point id is a
+        // UUID assigned at ingest, but callers think in terms of the
+        // id they handed us.
+        let resolved = match qdrant.find_id_by_user_id(&supplied).await {
+            Ok(Some(uuid)) => uuid,
+            _ => supplied.clone(),
+        };
+
+        match qdrant.delete_document(&resolved).await {
             Ok(_) => {
-                tracing::info!("Deleted document from Qdrant: {}", doc_id);
+                tracing::info!(
+                    "Deleted document from Qdrant: supplied={} resolved={}",
+                    supplied,
+                    resolved
+                );
                 return Ok(Json(DocumentOperationResponse {
                     success: true,
-                    document_id: Some(doc_id.clone()),
-                    message: format!("Document {} deleted from Qdrant", doc_id),
+                    document_id: Some(resolved.clone()),
+                    message: format!("Document {} deleted from Qdrant", resolved),
                     backend: "qdrant".to_string(),
                 }));
             },
@@ -628,22 +716,22 @@ async fn delete_document(
     // Fallback: in-memory storage
     let mut documents = state.documents.write().await;
     let original_len = documents.len();
-    documents.retain(|doc| doc.id != doc_id);
+    documents.retain(|doc| doc.id != supplied);
 
     if documents.len() == original_len {
         return Err(ApiError::NotFound(format!(
             "Document with id '{}' not found",
-            doc_id
+            supplied
         )));
     }
 
     *state.graph_built.write().await = false;
-    tracing::info!("Deleted document from memory: {}", doc_id);
+    tracing::info!("Deleted document from memory: {}", supplied);
 
     Ok(Json(DocumentOperationResponse {
         success: true,
-        document_id: Some(doc_id.clone()),
-        message: format!("Document {} deleted from memory", doc_id),
+        document_id: Some(supplied.clone()),
+        message: format!("Document {} deleted from memory", supplied),
         backend: "memory".to_string(),
     }))
 }
@@ -673,6 +761,7 @@ async fn build_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>, 
                         .unwrap_or((0, 0));
 
                     *state.graph_built.write().await = true;
+                    *state.last_built_at.write().await = Some(chrono::Utc::now().to_rfc3339());
 
                     tracing::info!(
                         "Built knowledge graph via pipeline in {}ms ({} entities, {} relationships)",
@@ -717,6 +806,7 @@ async fn build_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>, 
                 );
 
                 *state.graph_built.write().await = true;
+                *state.last_built_at.write().await = Some(chrono::Utc::now().to_rfc3339());
 
                 return Ok(Json(BuildGraphResponse {
                     success: true,
@@ -745,6 +835,7 @@ async fn build_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>, 
     }
 
     *state.graph_built.write().await = true;
+    *state.last_built_at.write().await = Some(chrono::Utc::now().to_rfc3339());
     let processing_time = start.elapsed().as_millis() as u64;
 
     tracing::info!(
@@ -769,6 +860,9 @@ async fn build_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>, 
     description = "Retrieve statistics about the knowledge graph, including document count, entity count, and relationship count"
 )]
 async fn graph_stats(state: Data<AppState>) -> Json<GraphStatsResponse> {
+    // Read last_built_at once; same value for every branch below.
+    let last_built_at = state.last_built_at.read().await.clone();
+
     // Try real GraphRAG pipeline stats first
     {
         let graphrag_guard = state.graphrag.read().await;
@@ -785,6 +879,7 @@ async fn graph_stats(state: Data<AppState>) -> Json<GraphStatsResponse> {
                     relationship_count,
                     vector_count: chunk_count,
                     graph_built: true,
+                    last_built_at,
                     backend: "graphrag-pipeline".to_string(),
                 });
             }
@@ -801,6 +896,7 @@ async fn graph_stats(state: Data<AppState>) -> Json<GraphStatsResponse> {
                     relationship_count: 0,
                     vector_count: vectors,
                     graph_built: count > 0,
+                    last_built_at,
                     backend: "qdrant".to_string(),
                 });
             },
@@ -820,6 +916,7 @@ async fn graph_stats(state: Data<AppState>) -> Json<GraphStatsResponse> {
         relationship_count: 0,
         vector_count: 0,
         graph_built,
+        last_built_at,
         backend: "memory".to_string(),
     })
 }
