@@ -877,9 +877,25 @@ impl GraphRAG {
                     self.config.entities.entity_types.clone()
                 };
 
+                // Read the cap from whichever backend is the active chat
+                // route — historically this only consulted ollama.* even
+                // when openai was enabled, which silently capped openai
+                // extraction at the ollama default. `None` is honored end
+                // to end and means "no cap" (model stops at EOS).
+                let extraction_max_tokens: Option<usize> = if self.config.openai.enabled {
+                    self.config.openai.max_tokens.map(|n| n as usize)
+                } else {
+                    self.config.ollama.max_tokens.map(|n| n as usize)
+                };
+                let extraction_temperature = if self.config.openai.enabled {
+                    self.config.openai.temperature.unwrap_or(0.1)
+                } else {
+                    self.config.ollama.temperature.unwrap_or(0.1)
+                };
+
                 let extractor = LLMEntityExtractor::new(client, entity_types)
-                    .with_temperature(self.config.ollama.temperature.unwrap_or(0.1))
-                    .with_max_tokens(self.config.ollama.max_tokens.unwrap_or(1500) as usize)
+                    .with_temperature(extraction_temperature)
+                    .with_max_tokens_opt(extraction_max_tokens)
                     .with_keep_alive(self.config.ollama.keep_alive.clone());
 
                 let pb = make_pb(total_chunks as u64,

@@ -18,7 +18,11 @@ pub struct LLMEntityExtractor {
     ollama_client: ChatClient,
     prompt_builder: PromptBuilder,
     temperature: f32,
-    max_tokens: usize,
+    /// Per-extraction-call generation cap. `None` means "no cap" — let the
+    /// model stop at its EOS token. Sensible for local LLMs where token
+    /// cost is just compute time; reasoning-class models (Qwen3, R1) tend
+    /// to truncate JSON when capped.
+    max_tokens: Option<usize>,
     /// keep_alive value forwarded to every Ollama request (e.g. "1h").
     /// When set, Ollama keeps the model in VRAM between requests so the KV
     /// cache for the static prompt prefix is preserved across all chunks.
@@ -36,7 +40,7 @@ impl LLMEntityExtractor {
             ollama_client,
             prompt_builder: PromptBuilder::new(entity_types),
             temperature: 0.0, // Zero temperature for deterministic JSON extraction
-            max_tokens: 1500,
+            max_tokens: Some(1500),
             keep_alive: None,
         }
     }
@@ -47,8 +51,18 @@ impl LLMEntityExtractor {
         self
     }
 
-    /// Set maximum tokens for LLM generation (default: 1500)
+    /// Set maximum tokens for LLM generation (default: 1500). Wraps in
+    /// `Some(...)` for the field. Use [`with_max_tokens_opt`] to pass
+    /// `None` (uncapped — model stops at EOS).
     pub fn with_max_tokens(mut self, max_tokens: usize) -> Self {
+        self.max_tokens = Some(max_tokens);
+        self
+    }
+
+    /// Set generation cap, including the explicit-uncapped path. `None`
+    /// skips `num_predict` / `max_tokens` in the LLM request body so the
+    /// server uses its own default (typically -1 / unlimited up to ctx).
+    pub fn with_max_tokens_opt(mut self, max_tokens: Option<usize>) -> Self {
         self.max_tokens = max_tokens;
         self
     }
@@ -207,15 +221,22 @@ impl LLMEntityExtractor {
     #[cfg(feature = "async")]
     async fn call_llm_with_retry(&self, prompt: &str) -> Result<String> {
         use crate::ollama::OllamaGenerationParams;
-        let num_ctx = Self::calculate_entity_num_ctx(prompt, self.max_tokens as u32);
+        // num_ctx only matters on the Ollama path (OpenAI-compat servers
+        // ignore it). Fall back to 2048 when uncapped so the formula
+        // still produces a sane window for Ollama.
+        let num_ctx = Self::calculate_entity_num_ctx(
+            prompt,
+            self.max_tokens.unwrap_or(2048) as u32,
+        );
         tracing::debug!(
-            "Entity extraction: prompt_len={} num_ctx={} keep_alive={:?}",
+            "Entity extraction: prompt_len={} num_ctx={} max_tokens={:?} keep_alive={:?}",
             prompt.len(),
             num_ctx,
+            self.max_tokens,
             self.keep_alive,
         );
         let params = OllamaGenerationParams {
-            num_predict: Some(self.max_tokens as u32),
+            num_predict: self.max_tokens.map(|n| n as u32),
             temperature: Some(self.temperature),
             num_ctx: Some(num_ctx),
             keep_alive: self.keep_alive.clone(),
