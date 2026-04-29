@@ -621,6 +621,33 @@ async fn list_documents(state: Data<AppState>) -> Json<ListDocumentsResponse> {
     })
 }
 
+/// GET /api/embeddings/stats
+/// Reports which embedding backend is currently serving requests
+/// (openai-compat / ollama / hash-fallback) plus per-source counters.
+/// Useful from the e2e harness to confirm a hardware path (e.g. NPU
+/// via OVMS) is actually being hit, separate from whatever the
+/// runtime Config struct happens to say after a /config POST. Plain
+/// Actix handler (no apistos #[api_operation]) — registered below
+/// .build() to avoid the PathItemDefinition trait bound.
+async fn embeddings_stats(state: Data<AppState>) -> Json<serde_json::Value> {
+    let stats = state.embeddings.get_stats().await;
+    Json(json!({
+        "backend": state.embeddings.backend_name(),
+        "dimension": state.embeddings.dimension(),
+        "stats": {
+            "total_requests": stats.total_requests,
+            // ollama_success / ollama_failures are reused as success/failure
+            // counters for whichever backend is active (openai or ollama),
+            // since both routes share the same code path. fallback_used
+            // counts hash-fallback hits triggered by upstream errors.
+            "success": stats.ollama_success,
+            "failures": stats.ollama_failures,
+            "fallback_used": stats.fallback_used,
+            "cache_hits": stats.cache_hits,
+        },
+    }))
+}
+
 /// Delete a document
 #[api_operation(
     tag = "documents",
@@ -1093,6 +1120,14 @@ async fn main() -> std::io::Result<()> {
                     .route("/template", web::get().to(config_endpoints::get_config_template))
                     .route("/default", web::get().to(config_endpoints::get_default_config))
                     .route("/validate", web::post().to(config_endpoints::validate_config))
+            )
+            // Plain Actix scope (not apistos) — same OpenAPI-bypass reason
+            // as /config above. Reports the live EmbeddingService backend
+            // and request counters so callers can verify which path
+            // (openai-compat / ollama / hash-fallback) actually served.
+            .service(
+                web::scope("/api/embeddings")
+                    .route("/stats", web::get().to(embeddings_stats))
             )
     })
     .bind("0.0.0.0:8080")?
