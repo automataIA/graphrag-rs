@@ -1903,6 +1903,18 @@ impl Config {
                 enable_caching: parsed["openai"]["enable_caching"]
                     .as_bool()
                     .unwrap_or(true),
+                // Disk-config parser uses the `json` crate; cross-parser
+                // conversion to serde_json::Value goes through a string
+                // round-trip. POST /config (config_endpoints.rs) uses
+                // serde directly and picks up extra_body via #[serde].
+                extra_body: {
+                    let v = &parsed["openai"]["extra_body"];
+                    if v.is_object() {
+                        serde_json::from_str::<serde_json::Value>(&v.dump()).ok()
+                    } else {
+                        None
+                    }
+                },
             },
             gliner: GlinerConfig {
                 enabled: parsed["gliner"]["enabled"].as_bool().unwrap_or(false),

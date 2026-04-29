@@ -57,6 +57,15 @@ pub struct OpenAIConfig {
     /// Whether to cache responses by prompt hash. Stub (no cache yet).
     #[serde(default = "default_enable_caching")]
     pub enable_caching: bool,
+
+    /// Extra top-level fields merged into every chat-completions request
+    /// body. Used to pass non-standard knobs that specific OpenAI-compat
+    /// servers accept — e.g. llama.cpp / vLLM honor
+    /// `chat_template_kwargs: {"enable_thinking": false}` to suppress
+    /// Qwen3-style reasoning without changing the server's CLI flags.
+    /// Must be a JSON object; non-object values are ignored on merge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extra_body: Option<serde_json::Value>,
 }
 
 fn default_base_url() -> String { "http://localhost:8000/v1".to_string() }
@@ -77,6 +86,7 @@ impl Default for OpenAIConfig {
             max_tokens: Some(2000),
             temperature: Some(0.7),
             enable_caching: default_enable_caching(),
+            extra_body: None,
         }
     }
 }
@@ -178,6 +188,18 @@ impl OpenAIClient {
         if let Some(stops) = params.stop {
             if !stops.is_empty() {
                 body["stop"] = serde_json::json!(stops);
+            }
+        }
+        // Merge config.extra_body keys at the top level. Lets callers pass
+        // server-specific knobs (e.g. `chat_template_kwargs` on llama.cpp
+        // to disable Qwen3 thinking) without expanding this struct for
+        // every backend quirk. Existing keys win — set fields on this
+        // struct take precedence over extra_body collisions.
+        if let (Some(serde_json::Value::Object(extras)), Some(obj)) =
+            (self.config.extra_body.as_ref(), body.as_object_mut())
+        {
+            for (k, v) in extras {
+                obj.entry(k.clone()).or_insert_with(|| v.clone());
             }
         }
 
