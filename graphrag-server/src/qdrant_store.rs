@@ -327,10 +327,7 @@ impl QdrantStore {
     /// the first match (user_id is treated as unique-per-document). Used
     /// by `delete_document` so callers can refer to documents by the id
     /// they handed us at ingest, not the internal UUID.
-    pub async fn find_id_by_user_id(
-        &self,
-        user_id: &str,
-    ) -> Result<Option<String>, QdrantError> {
+    pub async fn find_id_by_user_id(&self, user_id: &str) -> Result<Option<String>, QdrantError> {
         let filter = Filter::must([Condition::matches("user_id", user_id.to_string())]);
         let resp = self
             .client
@@ -383,10 +380,7 @@ impl QdrantStore {
     /// using scroll; capped at `limit` to keep responses bounded.
     /// Returns lightweight summaries (id, title, timestamp, excerpt) —
     /// callers needing full text should query individual points.
-    pub async fn list_documents(
-        &self,
-        limit: u32,
-    ) -> Result<Vec<DocumentSummary>, QdrantError> {
+    pub async fn list_documents(&self, limit: u32) -> Result<Vec<DocumentSummary>, QdrantError> {
         let mut summaries = Vec::new();
         let mut offset: Option<qdrant_client::qdrant::PointId> = None;
         let page_size = limit.min(256).max(1);

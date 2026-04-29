@@ -273,6 +273,7 @@ async fn root(state: Data<AppState>) -> impl Responder {
             },
             "graph": {
                 "build": "POST /api/graph/build",
+                "append": "POST /api/graph/append",
                 "stats": "GET /api/graph/stats"
             }
         }
@@ -853,6 +854,97 @@ async fn build_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>, 
     }))
 }
 
+/// Append-extract entities for chunks ingested since the last build.
+///
+/// Semantic-equivalent of Microsoft GraphRAG's `graphrag append`: run
+/// after a batch of `/api/documents` calls so newly-ingested content
+/// shows up in queries, without paying for a wholesale re-extraction
+/// of everything that was already indexed.
+///
+/// Internally calls `GraphRAG::extend_graph` — a real incremental
+/// pass that only walks the chunks ingested since the last build /
+/// extend, dedupes entities by id (mentions of an existing entity
+/// extend its `mentions` in place rather than creating a duplicate
+/// node), and merges relationships keyed by (source, target,
+/// relation_type). Cost scales with the size of the delta, not with
+/// the total corpus.
+///
+/// Fast-paths: returns `{success: true, document_count: 0,
+/// message: "no new chunks since last build"}` immediately when the
+/// chunk count hasn't grown since the previous build/append. Cheap
+/// for cron-driven callers that fire periodically regardless of
+/// whether anything new was ingested.
+#[api_operation(
+    tag = "graph",
+    summary = "Append new chunks to the knowledge graph",
+    description = "Run entity extraction on chunks ingested since the last build. Walks only the delta (no full rebuild), dedupes entities by id, merges relationships. Cheap no-op when nothing new. Use after a batch of /api/documents calls; do NOT call once per document.",
+    error_code = 500
+)]
+async fn append_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>, ApiError> {
+    let start = std::time::Instant::now();
+
+    let mut graphrag_guard = state.graphrag.write().await;
+    let Some(graphrag) = graphrag_guard.as_mut() else {
+        return Err(ApiError::BadRequest(
+            "GraphRAG not initialized. Call POST /config first.".to_string(),
+        ));
+    };
+
+    match graphrag.extend_graph().await {
+        Ok(summary) => {
+            let processing_time = start.elapsed().as_millis() as u64;
+
+            // No-op fast path: nothing was ingested since last build.
+            // Cron-callers fire this regardless of whether anything's
+            // changed; surface that as a clear message rather than a
+            // misleading "appended 0 chunks".
+            if summary.chunks_processed == 0 {
+                return Ok(Json(BuildGraphResponse {
+                    success: true,
+                    document_count: 0,
+                    processing_time_ms: processing_time,
+                    message: format!(
+                        "No new chunks since last build ({} processed). Nothing to append.",
+                        graphrag.processed_chunk_count()
+                    ),
+                    backend: "graphrag-pipeline".to_string(),
+                }));
+            }
+
+            *state.graph_built.write().await = true;
+            *state.last_built_at.write().await = Some(chrono::Utc::now().to_rfc3339());
+
+            tracing::info!(
+                "extend_graph: {} delta chunks, +{} entities, +{} rels, {} mentions merged ({}ms; graph: {} entities, {} rels)",
+                summary.chunks_processed,
+                summary.new_entities,
+                summary.new_relationships,
+                summary.mentions_merged,
+                processing_time,
+                summary.total_entities,
+                summary.total_relationships,
+            );
+
+            Ok(Json(BuildGraphResponse {
+                success: true,
+                document_count: summary.chunks_processed,
+                processing_time_ms: processing_time,
+                message: format!(
+                    "Appended {} new chunks: +{} entities, +{} relationships, {} mentions merged ({} entities, {} relationships total)",
+                    summary.chunks_processed,
+                    summary.new_entities,
+                    summary.new_relationships,
+                    summary.mentions_merged,
+                    summary.total_entities,
+                    summary.total_relationships,
+                ),
+                backend: "graphrag-pipeline".to_string(),
+            }))
+        },
+        Err(e) => Err(ApiError::InternalError(format!("Append failed: {}", e))),
+    }
+}
+
 /// Get graph statistics
 #[api_operation(
     tag = "graph",
@@ -1132,6 +1224,7 @@ async fn main() -> std::io::Result<()> {
                     .service(
                         scope("/graph")
                             .service(resource("/build").route(post().to(build_graph)))
+                            .service(resource("/append").route(post().to(append_graph)))
                             .service(resource("/stats").route(get().to(graph_stats)))
                     )
             )

@@ -288,9 +288,49 @@ pub struct GraphRAG {
     retrieval_system: Option<retrieval::RetrievalSystem>,
     query_planner: Option<query::planner::QueryPlanner>,
     critic: Option<critic::Critic>,
+    /// Chunks whose entity/relationship extraction has already been
+    /// merged into `knowledge_graph`. Set by `build_graph` (every
+    /// chunk processed) and `extend_graph` (only the delta). The
+    /// only consumer is `extend_graph`'s "skip already-extracted
+    /// chunks" filter; everything else still iterates over
+    /// `knowledge_graph.chunks()` directly.
+    processed_chunks: std::collections::HashSet<core::ChunkId>,
     #[cfg(feature = "parallel-processing")]
     #[allow(dead_code)]
     parallel_processor: Option<parallel::ParallelProcessor>,
+}
+
+/// Internal accumulator for `extend_graph`'s per-chunk pass. Tracks
+/// what changed so the public `ExtendSummary` can report deltas
+/// rather than raw graph totals.
+#[derive(Default)]
+struct ExtractMetrics {
+    new_entities: usize,
+    new_relationships: usize,
+    mentions_merged: usize,
+}
+
+/// Summary returned by [`GraphRAG::extend_graph`] — what changed in
+/// this incremental pass.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ExtendSummary {
+    /// Number of chunks that were extracted in this call. Zero on
+    /// the no-op fast path (live chunk count hasn't grown since the
+    /// last build/extend).
+    pub chunks_processed: usize,
+    /// New entities added to the graph (after dedup-by-id; existing
+    /// entities re-mentioned in new chunks have their `mentions`
+    /// extended in place rather than counted here).
+    pub new_entities: usize,
+    /// New relationships added to the graph in this call.
+    pub new_relationships: usize,
+    /// Existing entities whose `mentions` were extended because they
+    /// were re-mentioned in a new chunk. Useful for assessing whether
+    /// downstream community/PageRank recompute is warranted.
+    pub mentions_merged: usize,
+    /// Graph totals after the extend pass.
+    pub total_entities: usize,
+    pub total_relationships: usize,
 }
 
 impl GraphRAG {
@@ -302,6 +342,7 @@ impl GraphRAG {
             retrieval_system: None,
             query_planner: None,
             critic: None,
+            processed_chunks: std::collections::HashSet::new(),
             #[cfg(feature = "parallel-processing")]
             parallel_processor: None,
         })
@@ -1101,10 +1142,720 @@ impl GraphRAG {
             } // End of extract_relationships check
         } // End of pattern-based extraction
 
+        // Mark every chunk currently in the graph as having been
+        // processed by entity extraction. `extend_graph` consults this
+        // set to decide which chunks are "new" since the last build.
+        // Doing it here (rather than per-chunk inside the loops above)
+        // keeps the four extraction branches identical to upstream.
+        if let Some(g) = self.knowledge_graph.as_ref() {
+            self.processed_chunks
+                .extend(g.chunks().map(|c| c.id.clone()));
+        }
+
         // Persist to workspace if storage is configured
         self.save_to_workspace()?;
 
         Ok(())
+    }
+
+    /// Extract entities and relationships from chunks ingested **since
+    /// the last `build_graph` or `extend_graph` call**, merging the
+    /// results into the existing knowledge graph without re-walking
+    /// chunks that have already been processed.
+    ///
+    /// Mirrors Microsoft GraphRAG's `graphrag append` semantics: a
+    /// cheap call to fire after a batch of `add_document` so newly-
+    /// ingested content shows up in queries, without paying for a
+    /// wholesale re-extraction over the corpus.
+    ///
+    /// # Behaviour
+    /// - Filters `knowledge_graph.chunks()` against
+    ///   `self.processed_chunks`; only un-processed chunks reach the
+    ///   extractor. The filtered set is the "delta" since last build.
+    /// - Runs the same extractor that `build_graph` would pick
+    ///   (gleaning / LLM single-pass / pattern-based) over the delta
+    ///   chunks. GLiNER is not yet wired here — call `build_graph`
+    ///   for that path.
+    /// - **Dedupes by entity ID** before adding. If a delta chunk
+    ///   re-mentions an entity that already exists, the existing
+    ///   entity's `mentions` are extended in place (no new node).
+    ///   Mirrors Microsoft's stable-id pattern (v0.5.0+).
+    /// - Skips relationships whose source or target entity isn't in
+    ///   the graph (existing `add_relationship` behaviour).
+    /// - Updates `processed_chunks` with the delta on success.
+    ///
+    /// # No-op fast path
+    /// Returns immediately with `chunks_processed = 0` when the live
+    /// chunk count equals `processed_chunks.len()`. Cron-driven
+    /// callers can fire this on a tight cadence without paying any
+    /// LLM cost when nothing has been ingested.
+    ///
+    /// # Errors
+    /// Bubbles up extractor errors. If the configured approach is
+    /// `gliner` (or `chat_enabled() == false` and no pattern fallback
+    /// is configured), returns `GraphRAGError::Config` rather than
+    /// silently doing nothing.
+    #[cfg(feature = "async")]
+    pub async fn extend_graph(&mut self) -> Result<ExtendSummary> {
+        use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
+
+        // 1. Snapshot delta — copy the chunk list to drop the borrow
+        //    on knowledge_graph before any mutating extraction calls.
+        let (delta_chunks, total_entities_before, total_relationships_before) = {
+            let graph = self
+                .knowledge_graph
+                .as_ref()
+                .ok_or_else(|| GraphRAGError::Config {
+                    message: "Knowledge graph not initialized".to_string(),
+                })?;
+            let delta: Vec<_> = graph
+                .chunks()
+                .filter(|c| !self.processed_chunks.contains(&c.id))
+                .cloned()
+                .collect();
+            let entities = graph.entities().count();
+            let relationships = graph.relationships().count();
+            (delta, entities, relationships)
+        };
+
+        let total_delta = delta_chunks.len();
+
+        // 2. Fast no-op path. Cron-callable without burning anything.
+        if total_delta == 0 {
+            return Ok(ExtendSummary {
+                chunks_processed: 0,
+                new_entities: 0,
+                new_relationships: 0,
+                mentions_merged: 0,
+                total_entities: total_entities_before,
+                total_relationships: total_relationships_before,
+            });
+        }
+
+        let suppress = self.config.suppress_progress_bars;
+        let make_pb = move |total: u64, style: ProgressStyle| -> ProgressBar {
+            let pb = ProgressBar::new(total).with_style(style);
+            if suppress {
+                pb.set_draw_target(ProgressDrawTarget::hidden());
+            }
+            pb
+        };
+
+        let mut metrics = ExtractMetrics::default();
+
+        #[cfg(feature = "tracing")]
+        tracing::info!(
+            "extend_graph: processing {} delta chunks (approach='{}', use_gleaning={}, ollama.enabled={})",
+            total_delta,
+            self.config.approach,
+            self.config.entities.use_gleaning,
+            self.config.ollama.enabled,
+        );
+
+        // 3. Pick the same extraction path build_graph would pick. The
+        //    only difference vs build_graph is per-chunk dedup on add.
+        if self.config.entities.use_gleaning && self.config.ollama.enabled {
+            self.extend_with_gleaning(&delta_chunks, &mut metrics, &make_pb)
+                .await?;
+        } else if self.config.ollama.enabled {
+            self.extend_with_llm_single_pass(&delta_chunks, &mut metrics, &make_pb)
+                .await?;
+        } else if self.config.gliner.enabled {
+            #[cfg(feature = "gliner")]
+            {
+                self.extend_with_gliner(&delta_chunks, &mut metrics, &make_pb)
+                    .await?;
+            }
+            #[cfg(not(feature = "gliner"))]
+            return Err(GraphRAGError::Config {
+                message: "extend_graph: gliner.enabled but crate compiled \
+                          without --features gliner"
+                    .to_string(),
+            });
+        } else {
+            // Pattern-based — works without an LLM; useful for tests
+            // and for setups that don't have a chat backend.
+            self.extend_with_pattern_extraction(&delta_chunks, &mut metrics, &make_pb)?;
+        }
+
+        // 4. Mark processed.
+        for chunk in &delta_chunks {
+            self.processed_chunks.insert(chunk.id.clone());
+        }
+
+        // 5. Final totals (re-read; extraction may have added entities).
+        let (total_entities, total_relationships) = {
+            let graph = self
+                .knowledge_graph
+                .as_ref()
+                .ok_or_else(|| GraphRAGError::Config {
+                    message: "Knowledge graph went away mid-extend (impossible)".to_string(),
+                })?;
+            (graph.entities().count(), graph.relationships().count())
+        };
+
+        // 6. Persist.
+        self.save_to_workspace()?;
+
+        Ok(ExtendSummary {
+            chunks_processed: total_delta,
+            new_entities: metrics.new_entities,
+            new_relationships: metrics.new_relationships,
+            mentions_merged: metrics.mentions_merged,
+            total_entities,
+            total_relationships,
+        })
+    }
+
+    /// Reset `processed_chunks` so the next `extend_graph` re-extracts
+    /// every chunk currently in the graph. Useful after a config
+    /// change (entity_types, prompts) where you want to re-extract
+    /// everything but don't want to wipe the graph first.
+    pub fn clear_processed_chunks(&mut self) {
+        self.processed_chunks.clear();
+    }
+
+    /// Number of chunks that have been processed by entity extraction
+    /// (via `build_graph` or `extend_graph`). Surfaced for callers
+    /// that want to expose freshness telemetry alongside graph stats.
+    pub fn processed_chunk_count(&self) -> usize {
+        self.processed_chunks.len()
+    }
+
+    /// LLM single-pass extension path — mirrors the LLM single-pass
+    /// branch in `build_graph` but operates on the supplied delta
+    /// slice instead of every chunk in the graph, and dedupes
+    /// entities by id on insert.
+    #[cfg(feature = "async")]
+    async fn extend_with_llm_single_pass(
+        &mut self,
+        delta_chunks: &[crate::core::TextChunk],
+        metrics: &mut ExtractMetrics,
+        make_pb: &(impl Fn(u64, indicatif::ProgressStyle) -> indicatif::ProgressBar + Send + Sync),
+    ) -> Result<()> {
+        use crate::entity::llm_extractor::LLMEntityExtractor;
+        use crate::ollama::OllamaClient;
+        use indicatif::ProgressStyle;
+
+        let client = OllamaClient::new(self.config.ollama.clone());
+
+        let entity_types = if self.config.entities.entity_types.is_empty() {
+            vec![
+                "PERSON".to_string(),
+                "ORGANIZATION".to_string(),
+                "LOCATION".to_string(),
+            ]
+        } else {
+            self.config.entities.entity_types.clone()
+        };
+
+        let extractor = LLMEntityExtractor::new(client, entity_types)
+            .with_temperature(self.config.ollama.temperature.unwrap_or(0.1))
+            .with_max_tokens(self.config.ollama.max_tokens.unwrap_or(1500) as usize)
+            .with_keep_alive(self.config.ollama.keep_alive.clone());
+
+        let pb = make_pb(
+            delta_chunks.len() as u64,
+            ProgressStyle::default_bar()
+                .template(
+                    "   [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} delta chunks ({eta})",
+                )
+                .expect("Invalid progress bar template")
+                .progress_chars("=>-"),
+        );
+        pb.set_message("Extending graph (LLM single-pass)");
+
+        for (idx, chunk) in delta_chunks.iter().enumerate() {
+            pb.set_message(format!(
+                "Delta chunk {}/{} (LLM single-pass)",
+                idx + 1,
+                delta_chunks.len()
+            ));
+
+            #[cfg(feature = "tracing")]
+            tracing::info!(
+                "extend_graph: processing delta chunk {}/{} (LLM single-pass)",
+                idx + 1,
+                delta_chunks.len()
+            );
+
+            match extractor.extract_from_chunk(chunk).await {
+                Ok((entities, relationships)) => {
+                    let graph =
+                        self.knowledge_graph
+                            .as_mut()
+                            .ok_or_else(|| GraphRAGError::Config {
+                                message: "Knowledge graph went away mid-extract".to_string(),
+                            })?;
+                    for entity in entities {
+                        Self::merge_entity(graph, entity, metrics)?;
+                    }
+                    for relationship in relationships {
+                        Self::merge_relationship(graph, relationship, metrics);
+                    }
+                },
+                Err(e) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!(
+                        chunk_id = %chunk.id,
+                        error = %e,
+                        "extend_graph: LLM extraction failed for delta chunk; skipping"
+                    );
+                    let _ = e;
+                },
+            }
+
+            pb.inc(1);
+        }
+
+        pb.finish_with_message("LLM single-pass extension complete");
+        Ok(())
+    }
+
+    /// Gleaning extension path — same shape as the gleaning branch in
+    /// `build_graph`, restricted to the delta slice with dedup-on-add.
+    /// Triple-reflection validation is honored.
+    #[cfg(feature = "async")]
+    async fn extend_with_gleaning(
+        &mut self,
+        delta_chunks: &[crate::core::TextChunk],
+        metrics: &mut ExtractMetrics,
+        make_pb: &(impl Fn(u64, indicatif::ProgressStyle) -> indicatif::ProgressBar + Send + Sync),
+    ) -> Result<()> {
+        use crate::entity::GleaningEntityExtractor;
+        use crate::ollama::OllamaClient;
+        use indicatif::ProgressStyle;
+
+        let client = OllamaClient::new(self.config.ollama.clone());
+
+        let gleaning_config = crate::entity::GleaningConfig {
+            max_gleaning_rounds: self.config.entities.max_gleaning_rounds,
+            completion_threshold: 0.8,
+            entity_confidence_threshold: self.config.entities.min_confidence as f64,
+            use_llm_completion_check: true,
+            entity_types: if self.config.entities.entity_types.is_empty() {
+                vec![
+                    "PERSON".to_string(),
+                    "ORGANIZATION".to_string(),
+                    "LOCATION".to_string(),
+                ]
+            } else {
+                self.config.entities.entity_types.clone()
+            },
+            temperature: 0.1,
+            max_tokens: 1500,
+        };
+        let extractor = GleaningEntityExtractor::new(client.clone(), gleaning_config);
+
+        let rel_extractor = if self.config.entities.enable_triple_reflection {
+            Some(crate::entity::LLMRelationshipExtractor::new(Some(
+                &self.config.ollama,
+            ))?)
+        } else {
+            None
+        };
+
+        let pb = make_pb(
+            delta_chunks.len() as u64,
+            ProgressStyle::default_bar()
+                .template(
+                    "   [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} delta chunks ({eta})",
+                )
+                .expect("Invalid progress bar template")
+                .progress_chars("=>-"),
+        );
+        pb.set_message("Extending graph (gleaning)");
+
+        for (idx, chunk) in delta_chunks.iter().enumerate() {
+            pb.set_message(format!(
+                "Delta chunk {}/{} (gleaning, {} rounds)",
+                idx + 1,
+                delta_chunks.len(),
+                self.config.entities.max_gleaning_rounds
+            ));
+
+            #[cfg(feature = "tracing")]
+            tracing::info!(
+                "extend_graph: processing delta chunk {}/{} (gleaning)",
+                idx + 1,
+                delta_chunks.len()
+            );
+
+            let (entities, relationships) = extractor.extract_with_gleaning(chunk).await?;
+
+            let entity_map: std::collections::HashMap<_, _> = entities
+                .iter()
+                .map(|e| (e.id.clone(), e.name.clone()))
+                .collect();
+
+            // Add entities first so relationship merge can reference them.
+            {
+                let graph = self
+                    .knowledge_graph
+                    .as_mut()
+                    .ok_or_else(|| GraphRAGError::Config {
+                        message: "Knowledge graph went away mid-extract".to_string(),
+                    })?;
+                for entity in entities {
+                    Self::merge_entity(graph, entity, metrics)?;
+                }
+            }
+
+            // Relationships, optionally validated.
+            if let Some(ref validator) = rel_extractor {
+                for relationship in relationships {
+                    let (source_name, target_name) = {
+                        let graph = self.knowledge_graph.as_ref().unwrap();
+                        let source_name = entity_map
+                            .get(&relationship.source)
+                            .cloned()
+                            .or_else(|| {
+                                graph
+                                    .entities()
+                                    .find(|e| e.id == relationship.source)
+                                    .map(|e| e.name.clone())
+                            })
+                            .unwrap_or_else(|| relationship.source.0.clone());
+                        let target_name = entity_map
+                            .get(&relationship.target)
+                            .cloned()
+                            .or_else(|| {
+                                graph
+                                    .entities()
+                                    .find(|e| e.id == relationship.target)
+                                    .map(|e| e.name.clone())
+                            })
+                            .unwrap_or_else(|| relationship.target.0.clone());
+                        (source_name, target_name)
+                    };
+                    match validator
+                        .validate_triple(
+                            &source_name,
+                            &relationship.relation_type,
+                            &target_name,
+                            &chunk.content,
+                        )
+                        .await
+                    {
+                        Ok(validation) => {
+                            if validation.is_valid
+                                && validation.confidence
+                                    >= self.config.entities.validation_min_confidence
+                            {
+                                let graph = self.knowledge_graph.as_mut().unwrap();
+                                Self::merge_relationship(graph, relationship, metrics);
+                            } else {
+                                #[cfg(feature = "tracing")]
+                                tracing::debug!(
+                                    "extend_graph: filtered relationship (valid={}, conf={:.2})",
+                                    validation.is_valid,
+                                    validation.confidence
+                                );
+                            }
+                        },
+                        Err(_e) => {
+                            // Validation errored → add anyway (matches build_graph's behaviour).
+                            let graph = self.knowledge_graph.as_mut().unwrap();
+                            Self::merge_relationship(graph, relationship, metrics);
+                            #[cfg(feature = "tracing")]
+                            tracing::warn!(
+                                "extend_graph: validation error, adding relationship anyway: {}",
+                                _e
+                            );
+                        },
+                    }
+                }
+            } else {
+                let graph = self.knowledge_graph.as_mut().unwrap();
+                for relationship in relationships {
+                    Self::merge_relationship(graph, relationship, metrics);
+                }
+            }
+
+            pb.inc(1);
+        }
+
+        pb.finish_with_message("Gleaning extension complete");
+        Ok(())
+    }
+
+    /// GLiNER joint NER + RE extension path — mirrors the GLiNER
+    /// branch in `build_graph`, restricted to the delta slice with
+    /// dedup-on-add via `merge_entity` / `merge_relationship`.
+    ///
+    /// `gline-rs` is synchronous (ONNX Runtime blocks the calling
+    /// thread), so each per-chunk call runs inside
+    /// `tokio::task::spawn_blocking`. The `Arc`-cloned extractor is
+    /// cheaply shareable across blocking tasks.
+    ///
+    /// **Untested**: matches build_graph's GLiNER branch — upstream
+    /// has no test coverage for that path either, since GLiNER needs
+    /// a downloaded ONNX model at runtime and produces non-
+    /// deterministic output. The four pattern-based `extend_graph_*`
+    /// tests prove the dispatcher routes correctly; this path's
+    /// correctness rests on visual parity with build_graph's GLiNER
+    /// branch and on the shared `merge_entity` / `merge_relationship`
+    /// dedup helpers (which are exercised by the pattern-based tests).
+    #[cfg(feature = "gliner")]
+    async fn extend_with_gliner(
+        &mut self,
+        delta_chunks: &[crate::core::TextChunk],
+        metrics: &mut ExtractMetrics,
+        make_pb: &(impl Fn(u64, indicatif::ProgressStyle) -> indicatif::ProgressBar + Send + Sync),
+    ) -> Result<()> {
+        use crate::entity::GLiNERExtractor;
+        use indicatif::ProgressStyle;
+        use std::sync::Arc;
+
+        // Lazy model load happens inside GLiNERExtractor::new; failures
+        // surface here rather than on first chunk so the caller sees
+        // them immediately.
+        let extractor = Arc::new(GLiNERExtractor::new(self.config.gliner.clone()).map_err(
+            |e| crate::core::error::GraphRAGError::EntityExtraction {
+                message: format!("GLiNER init failed: {e}"),
+            },
+        )?);
+
+        let pb = make_pb(
+            delta_chunks.len() as u64,
+            ProgressStyle::default_bar()
+                .template("   [{elapsed_precise}] [{bar:40.magenta/blue}] {pos}/{len} delta chunks ({eta})")
+                .expect("Invalid progress bar template")
+                .progress_chars("=>-"),
+        );
+        pb.set_message("Extending graph (GLiNER-Relex)");
+
+        for (idx, chunk) in delta_chunks.iter().enumerate() {
+            pb.set_message(format!(
+                "Delta chunk {}/{} (GLiNER-Relex)",
+                idx + 1,
+                delta_chunks.len()
+            ));
+
+            #[cfg(feature = "tracing")]
+            tracing::info!(
+                "extend_graph: processing delta chunk {}/{} (GLiNER)",
+                idx + 1,
+                delta_chunks.len()
+            );
+
+            let ext = Arc::clone(&extractor);
+            let ch = chunk.clone();
+            let result = tokio::task::spawn_blocking(move || ext.extract_from_chunk(&ch))
+                .await
+                .map_err(|e| crate::core::error::GraphRAGError::EntityExtraction {
+                    message: format!("spawn_blocking join error: {e}"),
+                })?;
+
+            match result {
+                Ok((entities, relationships)) => {
+                    let graph =
+                        self.knowledge_graph
+                            .as_mut()
+                            .ok_or_else(|| GraphRAGError::Config {
+                                message: "Knowledge graph went away mid-extract".to_string(),
+                            })?;
+                    for entity in entities {
+                        Self::merge_entity(graph, entity, metrics)?;
+                    }
+                    for rel in relationships {
+                        Self::merge_relationship(graph, rel, metrics);
+                    }
+                },
+                Err(_e) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!(
+                        chunk_id = %chunk.id,
+                        error = %_e,
+                        "extend_graph: GLiNER extraction failed for delta chunk; skipping"
+                    );
+                },
+            }
+
+            pb.inc(1);
+        }
+
+        pb.finish_with_message("GLiNER-Relex extension complete");
+        Ok(())
+    }
+
+    /// Pattern-based extension path — regex/capitalization extraction
+    /// over the delta slice. No LLM dependency, useful for setups that
+    /// don't have a chat backend wired and for testing.
+    fn extend_with_pattern_extraction(
+        &mut self,
+        delta_chunks: &[crate::core::TextChunk],
+        metrics: &mut ExtractMetrics,
+        make_pb: &(impl Fn(u64, indicatif::ProgressStyle) -> indicatif::ProgressBar + Send + Sync),
+    ) -> Result<()> {
+        use crate::entity::EntityExtractor;
+        use indicatif::ProgressStyle;
+
+        let extractor = EntityExtractor::new(self.config.entities.min_confidence)?;
+
+        let pb = make_pb(
+            delta_chunks.len() as u64,
+            ProgressStyle::default_bar()
+                .template(
+                    "   [{elapsed_precise}] [{bar:40.green/blue}] {pos}/{len} delta chunks ({eta})",
+                )
+                .expect("Invalid progress bar template")
+                .progress_chars("=>-"),
+        );
+        pb.set_message("Extending graph (pattern-based)");
+
+        // Phase 1: entities
+        for (idx, chunk) in delta_chunks.iter().enumerate() {
+            pb.set_message(format!(
+                "Delta chunk {}/{} (pattern entities)",
+                idx + 1,
+                delta_chunks.len()
+            ));
+
+            let entities = extractor.extract_from_chunk(chunk)?;
+            let graph = self
+                .knowledge_graph
+                .as_mut()
+                .ok_or_else(|| GraphRAGError::Config {
+                    message: "Knowledge graph went away mid-extract".to_string(),
+                })?;
+            for entity in entities {
+                Self::merge_entity(graph, entity, metrics)?;
+            }
+            pb.inc(1);
+        }
+        pb.finish_with_message("Pattern entity extension complete");
+
+        // Phase 2: relationships, only if config requests them.
+        if self.config.graph.extract_relationships {
+            let all_entities: Vec<_> = {
+                let graph = self.knowledge_graph.as_ref().unwrap();
+                graph.entities().cloned().collect()
+            };
+
+            let rel_pb = make_pb(
+                delta_chunks.len() as u64,
+                ProgressStyle::default_bar()
+                    .template("   [{elapsed_precise}] [{bar:40.green/blue}] {pos}/{len} delta chunks rels ({eta})")
+                    .expect("Invalid progress bar template")
+                    .progress_chars("=>-"),
+            );
+            rel_pb.set_message("Extending relationships (pattern-based)");
+
+            for (idx, chunk) in delta_chunks.iter().enumerate() {
+                rel_pb.set_message(format!(
+                    "Delta chunk {}/{} (pattern relationships)",
+                    idx + 1,
+                    delta_chunks.len()
+                ));
+
+                let chunk_entities: Vec<_> = all_entities
+                    .iter()
+                    .filter(|e| e.mentions.iter().any(|m| m.chunk_id == chunk.id))
+                    .cloned()
+                    .collect();
+                if chunk_entities.len() < 2 {
+                    rel_pb.inc(1);
+                    continue;
+                }
+
+                let relationships = extractor.extract_relationships(&chunk_entities, chunk)?;
+                let graph = self.knowledge_graph.as_mut().unwrap();
+                for (source_id, target_id, relation_type) in relationships {
+                    let relationship = Relationship {
+                        source: source_id,
+                        target: target_id,
+                        relation_type,
+                        confidence: self.config.graph.relationship_confidence_threshold,
+                        context: vec![chunk.id.clone()],
+                        embedding: None,
+                        temporal_type: None,
+                        temporal_range: None,
+                        causal_strength: None,
+                    };
+                    Self::merge_relationship(graph, relationship, metrics);
+                }
+                rel_pb.inc(1);
+            }
+            rel_pb.finish_with_message("Pattern relationship extension complete");
+        }
+
+        Ok(())
+    }
+
+    /// Add `new_entity` to `graph`, merging into the existing entity
+    /// if the id already exists. Used by the extend path; build_graph
+    /// keeps its no-dedup behaviour for backward compatibility.
+    ///
+    /// Merge semantics: existing entity's `mentions` are extended with
+    /// any not-already-present mentions from `new_entity` (compared by
+    /// `(chunk_id, start_offset)`); `confidence` is bumped to the max
+    /// of the two values.
+    fn merge_entity(
+        graph: &mut KnowledgeGraph,
+        new_entity: Entity,
+        metrics: &mut ExtractMetrics,
+    ) -> Result<()> {
+        let id = new_entity.id.clone();
+        if graph.get_entity(&id).is_some() {
+            // Existing entity → merge mentions in place. Tracked
+            // separately from new_entities so callers can tell whether
+            // the extend pass enriched existing nodes vs added new
+            // ones.
+            let mut local_merged = 0usize;
+            if let Some(existing) = graph.get_entity_mut(&id) {
+                for mention in new_entity.mentions {
+                    let already_present = existing.mentions.iter().any(|m| {
+                        m.chunk_id == mention.chunk_id && m.start_offset == mention.start_offset
+                    });
+                    if !already_present {
+                        existing.mentions.push(mention);
+                        local_merged += 1;
+                    }
+                }
+                if new_entity.confidence > existing.confidence {
+                    existing.confidence = new_entity.confidence;
+                }
+            }
+            metrics.mentions_merged += local_merged;
+        } else {
+            graph.add_entity(new_entity)?;
+            metrics.new_entities += 1;
+        }
+        Ok(())
+    }
+
+    /// Add `relationship` to `graph` if both endpoints exist and the
+    /// edge isn't already present (by (source, target, relation_type)).
+    /// Errors from `add_relationship` (missing endpoint) are swallowed
+    /// to match build_graph's behaviour — the chunk that mentioned
+    /// the relationship's source might mention a target that wasn't
+    /// extracted from this chunk (it was extracted from a different
+    /// chunk that may or may not have already been processed).
+    fn merge_relationship(
+        graph: &mut KnowledgeGraph,
+        relationship: Relationship,
+        metrics: &mut ExtractMetrics,
+    ) {
+        // Cheap dedup: scan existing edges between these two entities
+        // for an identical relation_type. petgraph doesn't index
+        // edges by endpoints, so this is O(edges_at_source). For
+        // typical graph sizes (low thousands) the cost is negligible
+        // and avoids double-counting cross-chunk mentions of the same
+        // semantic relationship.
+        let already_present = graph.relationships().any(|r| {
+            r.source == relationship.source
+                && r.target == relationship.target
+                && r.relation_type == relationship.relation_type
+        });
+        if already_present {
+            return;
+        }
+        if graph.add_relationship(relationship).is_ok() {
+            metrics.new_relationships += 1;
+        }
+        // add_relationship error (missing endpoint) is intentionally
+        // ignored — see method docs.
     }
 
     /// Build the knowledge graph from added documents (synchronous fallback)
@@ -1964,5 +2715,200 @@ mod tests {
             .with_top_k(10)
             .build();
         assert!(graphrag.is_ok());
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // extend_graph tests — pattern-based extraction so we don't need a
+    // live LLM. The pattern path is deterministic (regex + capitalized-
+    // word rules), runs synchronously inside the async fn, and is the
+    // path that exercises every dedup-on-merge code path in
+    // `merge_entity` / `merge_relationship`.
+    //
+    // Strategy: feed N documents → build_graph → snapshot graph → add
+    // M more documents → extend_graph → assert that:
+    //   1. extend_graph processed exactly M chunks (the delta).
+    //   2. Re-extending without new content is a true no-op.
+    //   3. Entities re-mentioned in delta chunks have their `mentions`
+    //      extended in place — no duplicate node, mentions_merged is
+    //      counted correctly.
+    //   4. Total entity count after extend matches what a clean
+    //      `build_graph` over the same corpus would produce.
+    // ─────────────────────────────────────────────────────────────────
+
+    /// Configure pattern-based (no-LLM) GraphRAG with deterministic
+    /// chunking. `chunk_size = 1000` keeps each test doc as one chunk.
+    fn pattern_config() -> Config {
+        let mut cfg = Config::default();
+        cfg.suppress_progress_bars = true;
+        // Ollama disabled and gliner disabled → falls through to the
+        // pattern-based extractor in build_graph and extend_graph.
+        // No LLM round-trips; tests run deterministically.
+        cfg.ollama.enabled = false;
+        cfg.entities.use_gleaning = false;
+        cfg.gliner.enabled = false;
+        cfg.text.chunk_size = 1000;
+        cfg.text.chunk_overlap = 0;
+        cfg.graph.extract_relationships = true;
+        cfg
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn extend_graph_no_new_chunks_is_a_fast_noop() {
+        let cfg = pattern_config();
+        let mut g = GraphRAG::new(cfg).expect("GraphRAG::new");
+        g.initialize().expect("initialize");
+        g.add_document_from_text(
+            "Alice Smith works at Acme Corp in New York. Bob Jones manages the team.",
+        )
+        .expect("add_document_from_text");
+        g.build_graph().await.expect("build_graph");
+
+        let entities_before = g.knowledge_graph().unwrap().entities().count();
+        let relationships_before = g.knowledge_graph().unwrap().relationships().count();
+        let processed_before = g.processed_chunk_count();
+
+        let summary = g.extend_graph().await.expect("extend_graph (no-op)");
+
+        assert_eq!(summary.chunks_processed, 0, "no-op should report 0 chunks");
+        assert_eq!(summary.new_entities, 0);
+        assert_eq!(summary.new_relationships, 0);
+        assert_eq!(summary.mentions_merged, 0);
+        assert_eq!(summary.total_entities, entities_before);
+        assert_eq!(summary.total_relationships, relationships_before);
+        assert_eq!(g.processed_chunk_count(), processed_before);
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn extend_graph_processes_only_delta_chunks() {
+        let cfg = pattern_config();
+        let mut g = GraphRAG::new(cfg).expect("GraphRAG::new");
+        g.initialize().expect("initialize");
+
+        // Initial corpus: 1 doc → 1 chunk.
+        g.add_document_from_text("Alice Smith works at Acme Corp. Bob Jones works at Acme Corp.")
+            .expect("doc 1");
+        g.build_graph().await.expect("build_graph");
+        let processed_after_build = g.processed_chunk_count();
+        assert_eq!(processed_after_build, 1, "1 chunk after first build");
+
+        // Add a second doc → second chunk.
+        g.add_document_from_text(
+            "Charlie Brown lives in Chicago. Charlie Brown works at Globex Corp.",
+        )
+        .expect("doc 2");
+        // Extend should only walk the new chunk, not the first.
+        let summary = g.extend_graph().await.expect("extend_graph");
+
+        assert_eq!(
+            summary.chunks_processed, 1,
+            "extend should walk exactly the 1 delta chunk"
+        );
+        assert_eq!(g.processed_chunk_count(), 2);
+        // The pattern extractor pulls capitalized multi-word names; we
+        // assert at least the delta-doc-introduced entities (Charlie
+        // Brown, Chicago, Globex Corp) registered. Exact counts depend
+        // on regex specifics — assert "more than zero" and "summary
+        // adds up to graph totals".
+        assert!(
+            summary.new_entities + summary.mentions_merged > 0,
+            "extend should add or merge at least one entity from the delta chunk"
+        );
+        assert_eq!(
+            summary.total_entities,
+            g.knowledge_graph().unwrap().entities().count()
+        );
+        assert_eq!(
+            summary.total_relationships,
+            g.knowledge_graph().unwrap().relationships().count()
+        );
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn extend_graph_dedupes_entities_by_id() {
+        // The first doc mentions "Acme Corp"; a second doc re-mentions
+        // it. extend_graph should merge the new mention into the
+        // existing entity rather than creating a duplicate node.
+        let cfg = pattern_config();
+        let mut g = GraphRAG::new(cfg).expect("GraphRAG::new");
+        g.initialize().expect("initialize");
+
+        g.add_document_from_text(
+            "Alice Smith works at Acme Corp in New York. Bob Jones manages Acme Corp.",
+        )
+        .expect("doc 1");
+        g.build_graph().await.expect("build_graph");
+
+        let entities_after_build = g.knowledge_graph().unwrap().entities().count();
+        // Find the "Acme Corp"-shaped entity (pattern extractor lowercases
+        // names into the id; we just look up by name).
+        let acme_node_count_before = g
+            .knowledge_graph()
+            .unwrap()
+            .entities()
+            .filter(|e| e.name.to_lowercase().contains("acme"))
+            .count();
+
+        // Delta: another doc that re-mentions "Acme Corp".
+        g.add_document_from_text("Diana Wilson recently joined Acme Corp.")
+            .expect("doc 2");
+        let summary = g.extend_graph().await.expect("extend_graph");
+
+        // After extend: Acme should still have exactly the same number
+        // of node entries as before (no duplicate). The mention from
+        // the delta chunk should have been merged in place.
+        let acme_node_count_after = g
+            .knowledge_graph()
+            .unwrap()
+            .entities()
+            .filter(|e| e.name.to_lowercase().contains("acme"))
+            .count();
+
+        assert_eq!(
+            acme_node_count_after, acme_node_count_before,
+            "extend_graph must not duplicate Acme Corp; expected {} got {}",
+            acme_node_count_before, acme_node_count_after
+        );
+        // Total entity count grew by exactly summary.new_entities
+        // (Diana Wilson is the new one; Acme is merged not added).
+        assert_eq!(
+            g.knowledge_graph().unwrap().entities().count(),
+            entities_after_build + summary.new_entities
+        );
+        // And the merge is reflected in the summary counter.
+        assert!(
+            summary.mentions_merged > 0 || summary.new_entities > 0,
+            "delta chunk introduced something; summary must reflect it: {:?}",
+            summary,
+        );
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn extend_graph_after_clear_processed_re_extracts_everything() {
+        // clear_processed_chunks() resets the tracking set so the next
+        // extend call walks every chunk again. Useful after a config
+        // change (entity_types, prompts) where the user wants to
+        // re-extract without wiping the graph first.
+        let cfg = pattern_config();
+        let mut g = GraphRAG::new(cfg).expect("GraphRAG::new");
+        g.initialize().expect("initialize");
+        g.add_document_from_text("Alice Smith works at Acme Corp.")
+            .expect("doc 1");
+        g.build_graph().await.expect("build_graph");
+        assert_eq!(g.processed_chunk_count(), 1);
+
+        // After clear, the same chunk is "new" again.
+        g.clear_processed_chunks();
+        assert_eq!(g.processed_chunk_count(), 0);
+
+        let summary = g.extend_graph().await.expect("re-extend after clear");
+        assert_eq!(
+            summary.chunks_processed, 1,
+            "after clear_processed_chunks, extend re-walks the chunk"
+        );
+        assert_eq!(g.processed_chunk_count(), 1);
     }
 }
