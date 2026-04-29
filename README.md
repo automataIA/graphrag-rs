@@ -50,7 +50,11 @@ rustup target add wasm32-unknown-unknown
 ```
 
 ### Optional Dependencies
-- **Ollama** for local LLM embeddings: `ollama pull nomic-embed-text`
+- **Ollama** for local LLM and embeddings: `ollama pull nomic-embed-text`
+- **OpenAI-compatible server** as an alternative to Ollama for chat and/or
+  embeddings — anything that speaks `/v1/chat/completions` and
+  `/v1/embeddings` (vLLM, llama.cpp's `llama-server`, OpenVINO Model
+  Server, OpenRouter, OpenAI itself, …)
 - **Docker** for Qdrant vector database: `docker-compose up -d`
 - **Trunk** for WASM builds: `cargo install trunk wasm-bindgen-cli`
 
@@ -66,19 +70,29 @@ cd graphrag-rs
 # Start Qdrant (optional)
 cd graphrag-server && docker-compose up -d
 
-# Start Ollama for embeddings (required for real semantic search)
+# Pick ONE chat / embedding backend:
+
+# Option A — Ollama (local, GGUF via Ollama daemon)
 ollama serve &
 ollama pull nomic-embed-text
-
-# Start GraphRAG server with real embeddings
 export EMBEDDING_BACKEND=ollama
 cargo run --release --bin graphrag-server --features "qdrant,ollama"
+
+# Option B — OpenAI-compatible server (vLLM, llama-server, OVMS,
+# OpenRouter, OpenAI, …) for either chat, embeddings, or both
+export EMBEDDING_BACKEND=openai
+export OPENAI_URL="http://127.0.0.1:8000/v1"   # vLLM example
+export OPENAI_EMBEDDING_MODEL="BAAI/bge-m3"
+export OPENAI_API_KEY=""                         # empty for self-hosted
+cargo run --release --bin graphrag-server --features "qdrant,openai"
 ```
 **Best for**: Multi-tenant SaaS, mobile apps, GPU workloads, >1M documents
 
 **Features**:
 - ✅ Qdrant vector database integration (production-ready)
-- ✅ Real embeddings via Ollama with GPU acceleration
+- ✅ Embeddings via Ollama OR any OpenAI-compatible server (vLLM /
+     llama-server / OVMS / OpenRouter / real OpenAI) with full
+     hardware-acceleration paths (GPU, NPU)
 - ✅ Hash-based fallback embeddings (no dependencies)
 - ✅ REST API with semantic search
 - ✅ Docker Compose setup
@@ -447,6 +461,29 @@ host = "http://localhost"
 port = 11434
 chat_model = "llama3.1:8b"           # LLM for text generation
 embedding_model = "nomic-embed-text"  # Model for embeddings
+
+# --- Alternative: OpenAI-compatible chat backend ---
+# Set [openai].enabled = true (and [ollama].enabled = false) to route
+# entity extraction / query / gleaning through any OpenAI-compatible
+# /v1/chat/completions endpoint — vLLM, llama-server, OpenRouter,
+# OpenAI itself, …  Embeddings are configured separately under
+# [embeddings] (see "Embedding Providers Configuration" below).
+[openai]
+enabled = false                                  # flip to true to use
+base_url = "http://127.0.0.1:8000/v1"           # vLLM / llama-server / openai.com
+chat_model = "Qwen3.6-27B-Instruct"             # whatever the server reports under /models
+api_key = ""                                     # empty disables Authorization header
+timeout_seconds = 600                            # set high for slow local models
+max_tokens = 2000                                # null = uncapped (model stops at EOS)
+temperature = 0.2
+
+# Optional: server-specific knobs the OpenAI spec doesn't cover, merged
+# into every /chat/completions body. Examples:
+#   - llama.cpp / vLLM Qwen3 thinking suppression:
+#       extra_body = { chat_template_kwargs = { enable_thinking = false } }
+#   - vLLM JSON-only output:
+#       extra_body = { response_format = { type = "json_object" } }
+# extra_body = { chat_template_kwargs = { enable_thinking = false } }
 ```
 
 **Quick Setup:**
