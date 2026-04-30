@@ -969,7 +969,7 @@ async fn build_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>, 
                     // is still usable for the rest of the session.
                     #[cfg(feature = "qdrant")]
                     if let Some(qdrant) = state.qdrant.as_ref() {
-                        match graph_persistence::persist_in_memory_graph(graphrag, qdrant).await
+                        match graph_persistence::persist_in_memory_graph(graphrag, qdrant, state.embeddings.as_ref()).await
                         {
                             Ok((e, r)) => tracing::info!(
                                 "💾 Persisted graph to Qdrant: {} entities, {} relationships",
@@ -1137,7 +1137,7 @@ async fn append_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>,
             // Persist the extended graph to Qdrant. Best-effort.
             #[cfg(feature = "qdrant")]
             if let Some(qdrant) = state.qdrant.as_ref() {
-                match graph_persistence::persist_in_memory_graph(graphrag, qdrant).await {
+                match graph_persistence::persist_in_memory_graph(graphrag, qdrant, state.embeddings.as_ref()).await {
                     Ok((e, r)) => tracing::info!(
                         "💾 Persisted graph to Qdrant: {} entities, {} relationships",
                         e, r

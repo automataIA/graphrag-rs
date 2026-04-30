@@ -56,24 +56,134 @@ pub fn persisted_to_relationship(p: &PersistedRelationship) -> Option<Relationsh
 }
 
 /// Convenience: dump every entity + relationship currently in `graphrag`
-/// to Qdrant. Idempotent (the underlying `QdrantStore::persist_graph`
-/// clear-and-repopulates). Returns `(entities_persisted,
-/// relationships_persisted)` for telemetry.
+/// to Qdrant, with a description embedding per row. Idempotent (the
+/// underlying `QdrantStore::persist_graph` clear-and-repopulates).
+/// Returns `(entities_persisted, relationships_persisted)` for telemetry.
 ///
-/// Safe to call from inside a write-locked GraphRAG: only does Qdrant
-/// I/O, does not touch the in-memory state.
+/// Embedding strategy mirrors Microsoft GraphRAG's `description_embedding`
+/// convention: each entity is embedded as `"{name} ({entity_type})"`;
+/// each relationship as `"{source_name} {relation_type} {target_name}"`.
+/// Reuses `Entity.embedding` / `Relationship.embedding` if already
+/// populated by the extractor (saves a round-trip); otherwise batches
+/// through the supplied `EmbeddingService` (the same service the
+/// document path uses, so vectors live in one consistent space).
+///
+/// Safe to call from inside a write-locked GraphRAG: only does
+/// Embedding + Qdrant I/O, doesn't mutate the in-memory state.
 #[cfg(feature = "qdrant")]
 pub async fn persist_in_memory_graph(
     graphrag: &graphrag_core::GraphRAG,
     qdrant: &QdrantStore,
+    embeddings: &crate::embeddings::EmbeddingService,
 ) -> Result<(usize, usize), QdrantError> {
     let Some(kg) = graphrag.knowledge_graph() else {
         return Ok((0, 0));
     };
-    let entities: Vec<PersistedEntity> = kg.entities().map(entity_to_persisted).collect();
-    let relationships: Vec<PersistedRelationship> =
-        kg.relationships().map(relationship_to_persisted).collect();
-    qdrant.persist_graph(entities, relationships).await
+
+    let dim = embeddings.dimension() as u64;
+
+    // ---- Entities ----------------------------------------------------
+    let entities_with_text: Vec<(graphrag_core::core::Entity, String)> = kg
+        .entities()
+        .map(|e| {
+            let text = format!("{} ({})", e.name, e.entity_type);
+            (e.clone(), text)
+        })
+        .collect();
+
+    // Entities already carrying an embedding from the extractor pass
+    // skip the round-trip; collect the rest into a batch call.
+    let (texts_to_embed, indices_to_embed): (Vec<String>, Vec<usize>) = entities_with_text
+        .iter()
+        .enumerate()
+        .filter_map(|(i, (e, t))| {
+            if e.embedding.is_some() {
+                None
+            } else {
+                Some((t.clone(), i))
+            }
+        })
+        .unzip();
+
+    let mut entity_embeddings: Vec<Option<Vec<f32>>> =
+        entities_with_text.iter().map(|(e, _)| e.embedding.clone()).collect();
+
+    if !texts_to_embed.is_empty() {
+        let refs: Vec<&str> = texts_to_embed.iter().map(String::as_str).collect();
+        let computed = embeddings
+            .generate(&refs)
+            .await
+            .map_err(|e| QdrantError::OperationError(format!("entity embed failed: {}", e)))?;
+        for (i, vec) in indices_to_embed.iter().zip(computed) {
+            entity_embeddings[*i] = Some(vec);
+        }
+    }
+
+    let entity_payloads_with_vec: Vec<(PersistedEntity, Vec<f32>)> = entities_with_text
+        .iter()
+        .zip(entity_embeddings.iter())
+        .map(|((e, _), emb)| {
+            let vec = emb.clone().unwrap_or_else(|| vec![0.0_f32; dim as usize]);
+            (entity_to_persisted(e), vec)
+        })
+        .collect();
+
+    // ---- Relationships ----------------------------------------------
+    let relationships_with_text: Vec<(graphrag_core::core::Relationship, String)> = kg
+        .relationships()
+        .map(|r| {
+            let src_name = kg
+                .get_entity(&r.source)
+                .map(|e| e.name.as_str())
+                .unwrap_or("?");
+            let tgt_name = kg
+                .get_entity(&r.target)
+                .map(|e| e.name.as_str())
+                .unwrap_or("?");
+            let text = format!("{} {} {}", src_name, r.relation_type, tgt_name);
+            (r.clone(), text)
+        })
+        .collect();
+
+    let (rel_texts, rel_indices): (Vec<String>, Vec<usize>) = relationships_with_text
+        .iter()
+        .enumerate()
+        .filter_map(|(i, (r, t))| {
+            if r.embedding.is_some() {
+                None
+            } else {
+                Some((t.clone(), i))
+            }
+        })
+        .unzip();
+
+    let mut rel_embeddings: Vec<Option<Vec<f32>>> = relationships_with_text
+        .iter()
+        .map(|(r, _)| r.embedding.clone())
+        .collect();
+
+    if !rel_texts.is_empty() {
+        let refs: Vec<&str> = rel_texts.iter().map(String::as_str).collect();
+        let computed = embeddings.generate(&refs).await.map_err(|e| {
+            QdrantError::OperationError(format!("relationship embed failed: {}", e))
+        })?;
+        for (i, vec) in rel_indices.iter().zip(computed) {
+            rel_embeddings[*i] = Some(vec);
+        }
+    }
+
+    let rel_payloads_with_vec: Vec<(PersistedRelationship, Vec<f32>)> = relationships_with_text
+        .iter()
+        .zip(rel_embeddings.iter())
+        .map(|((r, _), emb)| {
+            let vec = emb.clone().unwrap_or_else(|| vec![0.0_f32; dim as usize]);
+            (relationship_to_persisted(r), vec)
+        })
+        .collect();
+
+    qdrant
+        .persist_graph(entity_payloads_with_vec, rel_payloads_with_vec, dim)
+        .await
 }
 
 /// Hydrate the in-memory KnowledgeGraph from Qdrant's persisted entities

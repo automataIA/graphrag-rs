@@ -565,24 +565,26 @@ impl QdrantStore {
     }
 
     /// Create the entity + relationship sidecar collections if they don't
-    /// already exist. Vectors are 1-dimensional placeholders today —
-    /// persistence is the only goal; entity-level vector search is a
-    /// future PR. Idempotent (existing collections are left alone).
+    /// already exist, with the supplied vector dimension. Idempotent —
+    /// existing collections are left alone (even if their dim differs).
+    /// To migrate an existing deploy from a different dim, call
+    /// `clear_graph_collections` instead, which delete-and-recreates.
     ///
-    /// Currently unused: `clear_graph_collections` recreates from scratch
-    /// on every persist, which already covers the bootstrap case. Kept
-    /// public for callers that want to pre-warm the schema without
-    /// dropping data — e.g. a future incremental upsert path.
+    /// Currently unused at the call sites: `clear_graph_collections`
+    /// recreates from scratch on every persist, which already covers
+    /// the bootstrap case. Kept public for a future incremental upsert
+    /// path that wants to pre-warm the schema without dropping data.
     #[allow(dead_code)]
-    pub async fn ensure_graph_collections(&self) -> Result<(), QdrantError> {
+    pub async fn ensure_graph_collections(&self, dimension: u64) -> Result<(), QdrantError> {
         for name in [self.entities_collection(), self.relationships_collection()] {
             match self.client.collection_info(&name).await {
                 Ok(_) => {},
                 Err(_) => {
                     self.client
                         .create_collection(
-                            CreateCollectionBuilder::new(&name)
-                                .vectors_config(VectorParamsBuilder::new(1, Distance::Cosine)),
+                            CreateCollectionBuilder::new(&name).vectors_config(
+                                VectorParamsBuilder::new(dimension, Distance::Cosine),
+                            ),
                         )
                         .await
                         .map_err(|e| QdrantError::CollectionError(e.to_string()))?;
@@ -592,18 +594,19 @@ impl QdrantStore {
         Ok(())
     }
 
-    /// Wipe the entity + relationship sidecar collections. Used by
-    /// `persist_graph` so a full rebuild leaves no stale entries behind.
-    /// Recreate-after-delete keeps the collection schema (1-D placeholder
-    /// vectors) consistent across rebuilds.
-    pub async fn clear_graph_collections(&self) -> Result<(), QdrantError> {
+    /// Wipe the entity + relationship sidecar collections and recreate
+    /// them at the supplied dimension. Used by `persist_graph` so a full
+    /// rebuild leaves no stale entries behind, and so a deploy that
+    /// previously ran with placeholder 1-D vectors gets rebuilt with
+    /// real-dimensional vectors on the next build.
+    pub async fn clear_graph_collections(&self, dimension: u64) -> Result<(), QdrantError> {
         for name in [self.entities_collection(), self.relationships_collection()] {
             // Best-effort delete; missing collections are fine.
             let _ = self.client.delete_collection(&name).await;
             self.client
                 .create_collection(
                     CreateCollectionBuilder::new(&name)
-                        .vectors_config(VectorParamsBuilder::new(1, Distance::Cosine)),
+                        .vectors_config(VectorParamsBuilder::new(dimension, Distance::Cosine)),
                 )
                 .await
                 .map_err(|e| QdrantError::CollectionError(e.to_string()))?;
@@ -611,29 +614,35 @@ impl QdrantStore {
         Ok(())
     }
 
-    /// Persist (entities, relationships) to their sidecar collections.
-    /// Strategy: clear-and-repopulate. The in-memory graph is the source
-    /// of truth at the moment of this call; anything not present is
-    /// removed from persistence. Cheap because |entities| + |relationships|
-    /// is bounded — graphs of 100K entities still upsert in seconds.
+    /// Persist (entities, relationships) to their sidecar collections,
+    /// each row carrying a real description embedding so the collections
+    /// double as a vector index over the entity / relationship graph.
+    /// Mirrors Microsoft GraphRAG's `final_entities.parquet` +
+    /// `description_embedding` column convention: enables semantic
+    /// seed-point retrieval (find entities similar to query, walk the
+    /// graph from there) — the engine behind MS's `local_search`.
     ///
-    /// `entity_payloads` and `relationship_payloads` are pre-serialized
-    /// wire envelopes (see `PersistedEntity`/`PersistedRelationship`).
-    /// Each gets a deterministic UUID5 point id derived from its
-    /// stable identity (entity id, or "source:relation:target") so
-    /// future incremental upserts can target individual rows without
-    /// re-reading the whole collection.
+    /// Strategy: clear-and-repopulate at the supplied dimension. The
+    /// in-memory graph is the source of truth at the moment of this
+    /// call; anything not present is removed from persistence.
+    ///
+    /// Each `(payload, embedding)` pair gets a deterministic UUID5
+    /// point id derived from its stable identity (entity id, or
+    /// `source|relation|target` for relationships) so a future
+    /// incremental upsert path can target individual rows without
+    /// reading the whole collection.
     pub async fn persist_graph(
         &self,
-        entity_payloads: Vec<PersistedEntity>,
-        relationship_payloads: Vec<PersistedRelationship>,
+        entity_payloads: Vec<(PersistedEntity, Vec<f32>)>,
+        relationship_payloads: Vec<(PersistedRelationship, Vec<f32>)>,
+        dimension: u64,
     ) -> Result<(usize, usize), QdrantError> {
-        self.clear_graph_collections().await?;
+        self.clear_graph_collections(dimension).await?;
 
         if !entity_payloads.is_empty() {
             let points: Vec<PointStruct> = entity_payloads
                 .iter()
-                .map(|e| {
+                .map(|(e, embedding)| {
                     let pid = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, e.id.as_bytes())
                         .to_string();
                     let payload_value = serde_json::to_value(e).unwrap_or(serde_json::json!({}));
@@ -644,8 +653,7 @@ impl QdrantStore {
                         .into_iter()
                         .map(|(k, v)| (k, QdrantValue::from(v)))
                         .collect();
-                    // 1-D placeholder vector; no semantic meaning today.
-                    PointStruct::new(pid, vec![0.0_f32], payload_map)
+                    PointStruct::new(pid, embedding.clone(), payload_map)
                 })
                 .collect();
             self.client
@@ -657,7 +665,7 @@ impl QdrantStore {
         if !relationship_payloads.is_empty() {
             let points: Vec<PointStruct> = relationship_payloads
                 .iter()
-                .map(|r| {
+                .map(|(r, embedding)| {
                     let stable = format!("{}|{}|{}", r.source, r.relation_type, r.target);
                     let pid = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, stable.as_bytes())
                         .to_string();
@@ -669,7 +677,7 @@ impl QdrantStore {
                         .into_iter()
                         .map(|(k, v)| (k, QdrantValue::from(v)))
                         .collect();
-                    PointStruct::new(pid, vec![0.0_f32], payload_map)
+                    PointStruct::new(pid, embedding.clone(), payload_map)
                 })
                 .collect();
             self.client
