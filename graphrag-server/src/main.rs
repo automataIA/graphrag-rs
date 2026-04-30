@@ -69,6 +69,9 @@ use config_handler::ConfigManager;
 
 mod config_endpoints;
 
+#[cfg(feature = "qdrant")]
+mod graph_persistence;
+
 // Import full GraphRAG pipeline
 use graphrag_core::GraphRAG;
 
@@ -945,11 +948,31 @@ async fn build_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>, 
             // Use actual pipeline to build graph
             match graphrag.build_graph().await {
                 Ok(_) => {
-                    let processing_time = start.elapsed().as_millis() as u64;
                     let (entities, relationships) = graphrag
                         .knowledge_graph()
                         .map(|kg| (kg.entities().count(), kg.relationships().count()))
                         .unwrap_or((0, 0));
+
+                    // Persist the freshly-built graph to Qdrant so it
+                    // survives a server restart. Best-effort: a Qdrant
+                    // failure logs and continues — the in-memory graph
+                    // is still usable for the rest of the session.
+                    #[cfg(feature = "qdrant")]
+                    if let Some(qdrant) = state.qdrant.as_ref() {
+                        match graph_persistence::persist_in_memory_graph(graphrag, qdrant).await
+                        {
+                            Ok((e, r)) => tracing::info!(
+                                "💾 Persisted graph to Qdrant: {} entities, {} relationships",
+                                e, r
+                            ),
+                            Err(err) => tracing::warn!(
+                                error = %err,
+                                "graph persistence failed; in-memory build is still good but won't survive restart"
+                            ),
+                        }
+                    }
+
+                    let processing_time = start.elapsed().as_millis() as u64;
 
                     *state.graph_built.write().await = true;
                     *state.last_built_at.write().await = Some(chrono::Utc::now().to_rfc3339());
@@ -1082,13 +1105,13 @@ async fn append_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>,
 
     match graphrag.extend_graph().await {
         Ok(summary) => {
-            let processing_time = start.elapsed().as_millis() as u64;
-
             // No-op fast path: nothing was ingested since last build.
             // Cron-callers fire this regardless of whether anything's
             // changed; surface that as a clear message rather than a
-            // misleading "appended 0 chunks".
+            // misleading "appended 0 chunks". Skip persistence — the
+            // graph is unchanged.
             if summary.chunks_processed == 0 {
+                let processing_time = start.elapsed().as_millis() as u64;
                 return Ok(Json(BuildGraphResponse {
                     success: true,
                     document_count: 0,
@@ -1100,6 +1123,23 @@ async fn append_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>,
                     backend: "graphrag-pipeline".to_string(),
                 }));
             }
+
+            // Persist the extended graph to Qdrant. Best-effort.
+            #[cfg(feature = "qdrant")]
+            if let Some(qdrant) = state.qdrant.as_ref() {
+                match graph_persistence::persist_in_memory_graph(graphrag, qdrant).await {
+                    Ok((e, r)) => tracing::info!(
+                        "💾 Persisted graph to Qdrant: {} entities, {} relationships",
+                        e, r
+                    ),
+                    Err(err) => tracing::warn!(
+                        error = %err,
+                        "graph persistence failed; in-memory append is still good but won't survive restart"
+                    ),
+                }
+            }
+
+            let processing_time = start.elapsed().as_millis() as u64;
 
             *state.graph_built.write().await = true;
             *state.last_built_at.write().await = Some(chrono::Utc::now().to_rfc3339());

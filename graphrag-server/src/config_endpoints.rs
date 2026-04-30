@@ -75,7 +75,20 @@ pub async fn set_config(
     // actually been processed. With it: graph_stats matches Qdrant
     // truth, build_graph covers the full corpus, append_graph only
     // re-extracts genuinely-new chunks.
-    let mut hydration_summary = json!({ "documents": 0, "chunks": 0, "skipped": 0 });
+    //
+    // We also restore the previously-extracted entity + relationship
+    // graph from the entities/relationships sidecar collections (Phase H).
+    // Without that, every restart wipes the LLM-extracted graph and
+    // forces re-extraction; with it, build_graph/extend_graph state
+    // genuinely survives restarts.
+    let mut hydration_summary = json!({
+        "documents": 0,
+        "chunks": 0,
+        "skipped": 0,
+        "entities": 0,
+        "relationships": 0,
+        "relationships_skipped_orphan": 0,
+    });
     #[cfg(feature = "qdrant")]
     if let Some(qdrant) = &state.qdrant {
         // 1_000_000 is an arbitrary "drain everything" cap — Qdrant's
@@ -129,24 +142,50 @@ pub async fn set_config(
                     skipped
                 );
 
-                // Mirror processed-chunk count into AppState so /health
-                // and /api/graph/stats reflect the true post-hydration
-                // state, not the empty pre-hydration state.
-                state.processed_chunk_count.store(
-                    graphrag.processed_chunk_count(),
-                    std::sync::atomic::Ordering::SeqCst,
-                );
-
                 hydration_summary = json!({
                     "documents": hydrated_docs,
                     "chunks": hydrated_chunks,
                     "skipped": skipped,
+                    "entities": 0,
+                    "relationships": 0,
+                    "relationships_skipped_orphan": 0,
                 });
             },
             Err(e) => {
                 tracing::warn!(
                     error = %e,
                     "hydration: list_full_documents failed; starting with empty in-memory graph"
+                );
+            },
+        }
+
+        // Phase H: restore the LLM-extracted entity + relationship graph
+        // from its sidecar collections. Runs after chunk hydration so
+        // the KnowledgeGraph already exists and entities have a parent
+        // to attach to. Best-effort: a load failure (e.g. missing
+        // sidecar collection on a fresh deploy) is normal — we just
+        // start with an empty entity graph and the next build_graph
+        // populates it.
+        match crate::graph_persistence::hydrate_in_memory_graph(&mut graphrag, qdrant).await {
+            Ok((entities_restored, rels_restored, rels_skipped)) => {
+                if entities_restored + rels_restored > 0 {
+                    tracing::info!(
+                        "🔄 Restored entity graph from Qdrant: {} entities, {} relationships ({} orphan rels skipped)",
+                        entities_restored,
+                        rels_restored,
+                        rels_skipped,
+                    );
+                }
+                if let Some(obj) = hydration_summary.as_object_mut() {
+                    obj.insert("entities".into(), json!(entities_restored));
+                    obj.insert("relationships".into(), json!(rels_restored));
+                    obj.insert("relationships_skipped_orphan".into(), json!(rels_skipped));
+                }
+            },
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "graph restore failed; starting with no entities (next build_graph will repopulate)"
                 );
             },
         }

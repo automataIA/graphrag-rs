@@ -65,6 +65,34 @@ pub struct Relationship {
     pub properties: HashMap<String, serde_json::Value>,
 }
 
+/// Wire-format envelope for persisting a single graphrag-core Entity in
+/// Qdrant. We store the whole serde-serialized Entity in `entity_json`
+/// and surface a few flat fields (id/name/type) so basic Qdrant filters
+/// stay possible without parsing JSON. Versioned to make future schema
+/// migrations explicit (currently always 1).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PersistedEntity {
+    pub schema_version: u32,
+    pub id: String,
+    pub name: String,
+    pub entity_type: String,
+    /// Full graphrag-core::Entity round-tripped through serde_json. Treated
+    /// as opaque on the persistence side; loaders deserialize into the
+    /// canonical Entity struct.
+    pub entity_json: serde_json::Value,
+}
+
+/// Wire-format envelope for persisting a single graphrag-core Relationship
+/// in Qdrant. Same pattern as PersistedEntity.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PersistedRelationship {
+    pub schema_version: u32,
+    pub source: String,
+    pub target: String,
+    pub relation_type: String,
+    pub relationship_json: serde_json::Value,
+}
+
 /// Document metadata stored in Qdrant
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentMetadata {
@@ -521,6 +549,224 @@ impl QdrantStore {
         self.create_collection(dimension).await?;
 
         Ok(())
+    }
+
+    /// Name of the Qdrant collection that backs entity persistence.
+    /// Suffixed off the main collection so a deployment with multiple
+    /// graphrag-server instances against the same Qdrant cleanly isolates
+    /// per-collection graphs (e.g. `graphrag` + `graphrag-entities`).
+    pub fn entities_collection(&self) -> String {
+        format!("{}-entities", self.collection_name)
+    }
+
+    /// Name of the Qdrant collection that backs relationship persistence.
+    pub fn relationships_collection(&self) -> String {
+        format!("{}-relationships", self.collection_name)
+    }
+
+    /// Create the entity + relationship sidecar collections if they don't
+    /// already exist. Vectors are 1-dimensional placeholders today —
+    /// persistence is the only goal; entity-level vector search is a
+    /// future PR. Idempotent (existing collections are left alone).
+    ///
+    /// Currently unused: `clear_graph_collections` recreates from scratch
+    /// on every persist, which already covers the bootstrap case. Kept
+    /// public for callers that want to pre-warm the schema without
+    /// dropping data — e.g. a future incremental upsert path.
+    #[allow(dead_code)]
+    pub async fn ensure_graph_collections(&self) -> Result<(), QdrantError> {
+        for name in [self.entities_collection(), self.relationships_collection()] {
+            match self.client.collection_info(&name).await {
+                Ok(_) => {},
+                Err(_) => {
+                    self.client
+                        .create_collection(
+                            CreateCollectionBuilder::new(&name)
+                                .vectors_config(VectorParamsBuilder::new(1, Distance::Cosine)),
+                        )
+                        .await
+                        .map_err(|e| QdrantError::CollectionError(e.to_string()))?;
+                },
+            }
+        }
+        Ok(())
+    }
+
+    /// Wipe the entity + relationship sidecar collections. Used by
+    /// `persist_graph` so a full rebuild leaves no stale entries behind.
+    /// Recreate-after-delete keeps the collection schema (1-D placeholder
+    /// vectors) consistent across rebuilds.
+    pub async fn clear_graph_collections(&self) -> Result<(), QdrantError> {
+        for name in [self.entities_collection(), self.relationships_collection()] {
+            // Best-effort delete; missing collections are fine.
+            let _ = self.client.delete_collection(&name).await;
+            self.client
+                .create_collection(
+                    CreateCollectionBuilder::new(&name)
+                        .vectors_config(VectorParamsBuilder::new(1, Distance::Cosine)),
+                )
+                .await
+                .map_err(|e| QdrantError::CollectionError(e.to_string()))?;
+        }
+        Ok(())
+    }
+
+    /// Persist (entities, relationships) to their sidecar collections.
+    /// Strategy: clear-and-repopulate. The in-memory graph is the source
+    /// of truth at the moment of this call; anything not present is
+    /// removed from persistence. Cheap because |entities| + |relationships|
+    /// is bounded — graphs of 100K entities still upsert in seconds.
+    ///
+    /// `entity_payloads` and `relationship_payloads` are pre-serialized
+    /// wire envelopes (see `PersistedEntity`/`PersistedRelationship`).
+    /// Each gets a deterministic UUID5 point id derived from its
+    /// stable identity (entity id, or "source:relation:target") so
+    /// future incremental upserts can target individual rows without
+    /// re-reading the whole collection.
+    pub async fn persist_graph(
+        &self,
+        entity_payloads: Vec<PersistedEntity>,
+        relationship_payloads: Vec<PersistedRelationship>,
+    ) -> Result<(usize, usize), QdrantError> {
+        self.clear_graph_collections().await?;
+
+        if !entity_payloads.is_empty() {
+            let points: Vec<PointStruct> = entity_payloads
+                .iter()
+                .map(|e| {
+                    let pid = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, e.id.as_bytes())
+                        .to_string();
+                    let payload_value = serde_json::to_value(e).unwrap_or(serde_json::json!({}));
+                    let payload_map: HashMap<String, QdrantValue> = payload_value
+                        .as_object()
+                        .cloned()
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|(k, v)| (k, QdrantValue::from(v)))
+                        .collect();
+                    // 1-D placeholder vector; no semantic meaning today.
+                    PointStruct::new(pid, vec![0.0_f32], payload_map)
+                })
+                .collect();
+            self.client
+                .upsert_points(UpsertPointsBuilder::new(self.entities_collection(), points))
+                .await
+                .map_err(|e| QdrantError::OperationError(e.to_string()))?;
+        }
+
+        if !relationship_payloads.is_empty() {
+            let points: Vec<PointStruct> = relationship_payloads
+                .iter()
+                .map(|r| {
+                    let stable = format!("{}|{}|{}", r.source, r.relation_type, r.target);
+                    let pid = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, stable.as_bytes())
+                        .to_string();
+                    let payload_value = serde_json::to_value(r).unwrap_or(serde_json::json!({}));
+                    let payload_map: HashMap<String, QdrantValue> = payload_value
+                        .as_object()
+                        .cloned()
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|(k, v)| (k, QdrantValue::from(v)))
+                        .collect();
+                    PointStruct::new(pid, vec![0.0_f32], payload_map)
+                })
+                .collect();
+            self.client
+                .upsert_points(UpsertPointsBuilder::new(
+                    self.relationships_collection(),
+                    points,
+                ))
+                .await
+                .map_err(|e| QdrantError::OperationError(e.to_string()))?;
+        }
+
+        Ok((entity_payloads.len(), relationship_payloads.len()))
+    }
+
+    /// Load all persisted entities by scrolling the entities sidecar
+    /// collection. Returns the wire-format envelopes; callers
+    /// (graphrag-server::config_endpoints::set_config) deserialize
+    /// `entity_json` into graphrag-core::Entity. Tolerates a missing
+    /// collection (returns empty vec) so first-run hydration doesn't
+    /// require pre-creating the sidecar.
+    pub async fn load_persisted_entities(&self) -> Result<Vec<PersistedEntity>, QdrantError> {
+        let coll = self.entities_collection();
+        if self.client.collection_info(&coll).await.is_err() {
+            return Ok(Vec::new());
+        }
+        let mut out = Vec::new();
+        let mut offset: Option<qdrant_client::qdrant::PointId> = None;
+        loop {
+            let mut builder = ScrollPointsBuilder::new(&coll)
+                .with_payload(true)
+                .with_vectors(false)
+                .limit(256u32);
+            if let Some(off) = offset.take() {
+                builder = builder.offset(off);
+            }
+            let resp = self
+                .client
+                .scroll(builder)
+                .await
+                .map_err(|e| QdrantError::OperationError(e.to_string()))?;
+            if resp.result.is_empty() {
+                break;
+            }
+            for point in resp.result {
+                if let Ok(v) = serde_json::to_value(&point.payload) {
+                    if let Ok(p) = serde_json::from_value::<PersistedEntity>(v) {
+                        out.push(p);
+                    }
+                }
+            }
+            offset = resp.next_page_offset;
+            if offset.is_none() {
+                break;
+            }
+        }
+        Ok(out)
+    }
+
+    /// Load all persisted relationships. Mirror of `load_persisted_entities`.
+    pub async fn load_persisted_relationships(
+        &self,
+    ) -> Result<Vec<PersistedRelationship>, QdrantError> {
+        let coll = self.relationships_collection();
+        if self.client.collection_info(&coll).await.is_err() {
+            return Ok(Vec::new());
+        }
+        let mut out = Vec::new();
+        let mut offset: Option<qdrant_client::qdrant::PointId> = None;
+        loop {
+            let mut builder = ScrollPointsBuilder::new(&coll)
+                .with_payload(true)
+                .with_vectors(false)
+                .limit(256u32);
+            if let Some(off) = offset.take() {
+                builder = builder.offset(off);
+            }
+            let resp = self
+                .client
+                .scroll(builder)
+                .await
+                .map_err(|e| QdrantError::OperationError(e.to_string()))?;
+            if resp.result.is_empty() {
+                break;
+            }
+            for point in resp.result {
+                if let Ok(v) = serde_json::to_value(&point.payload) {
+                    if let Ok(p) = serde_json::from_value::<PersistedRelationship>(v) {
+                        out.push(p);
+                    }
+                }
+            }
+            offset = resp.next_page_offset;
+            if offset.is_none() {
+                break;
+            }
+        }
+        Ok(out)
     }
 
     /// Get collection statistics
