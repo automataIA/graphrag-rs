@@ -2178,6 +2178,234 @@ impl GraphRAG {
         Ok(explained)
     }
 
+    /// Microsoft GraphRAG `local_search`-style query: answer the
+    /// question by seeding retrieval from a caller-supplied set of
+    /// entity ids (typically obtained by vector-searching an
+    /// entity-description embedding store), expanding to their
+    /// 1-hop neighbors via the relationship graph, gathering the
+    /// chunks that mention any of those entities, and feeding the
+    /// assembled context to the chat backend.
+    ///
+    /// Mirrors the seed-traverse-summarize shape of MS GraphRAG's
+    /// `local_search` — but the seeding step is the caller's
+    /// responsibility (graphrag-core does not own the entity
+    /// vector store; graphrag-server's Qdrant sidecar is one such
+    /// store).
+    ///
+    /// `max_neighbors_per_seed` caps fanout so a high-degree entity
+    /// doesn't explode the context. Typical value: 3-5.
+    ///
+    /// Returns an `ExplainedAnswer` with seeds + neighbors as
+    /// key entities, mentioning chunks + relationship triples as
+    /// sources, and a confidence heuristic over the count of
+    /// grounded chunks vs. seed count.
+    #[cfg(feature = "async")]
+    pub async fn ask_with_seed_entities(
+        &self,
+        query: &str,
+        seed_entity_ids: &[EntityId],
+        max_neighbors_per_seed: usize,
+    ) -> Result<retrieval::ExplainedAnswer> {
+        use crate::ollama::OllamaClient;
+        use std::collections::{HashMap, HashSet};
+
+        let kg = self.knowledge_graph.as_ref().ok_or_else(|| {
+            GraphRAGError::Config { message: "Knowledge graph not initialized".to_string() }
+        })?;
+
+        // 1. Seed expansion: collect seed entities + 1-hop neighbors,
+        //    plus the relationship triples that bridge them.
+        let mut entity_set: HashMap<EntityId, Entity> = HashMap::new();
+        let mut chunk_ids: HashSet<ChunkId> = HashSet::new();
+        let mut bridge_rels: Vec<(String, String, String)> = Vec::new();
+
+        for seed_id in seed_entity_ids {
+            if let Some(seed) = kg.get_entity(seed_id) {
+                let seed_name = seed.name.clone();
+                entity_set.insert(seed_id.clone(), seed.clone());
+                for m in &seed.mentions {
+                    chunk_ids.insert(m.chunk_id.clone());
+                }
+
+                let neighbors = kg.get_neighbors(seed_id);
+                for (neighbor, rel) in neighbors.into_iter().take(max_neighbors_per_seed) {
+                    bridge_rels.push((
+                        seed_name.clone(),
+                        rel.relation_type.clone(),
+                        neighbor.name.clone(),
+                    ));
+                    if !entity_set.contains_key(&neighbor.id) {
+                        entity_set.insert(neighbor.id.clone(), neighbor.clone());
+                        for m in &neighbor.mentions {
+                            chunk_ids.insert(m.chunk_id.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Build the MS-style context block.
+        let entities_block = if entity_set.is_empty() {
+            "(no seed entities resolved in graph)".to_string()
+        } else {
+            entity_set
+                .values()
+                .map(|e| {
+                    format!(
+                        "- {} (type={}, mentioned_in={} chunks, confidence={:.2})",
+                        e.name, e.entity_type, e.mentions.len(), e.confidence
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+
+        let relationships_block = if bridge_rels.is_empty() {
+            "(no relationships gathered)".to_string()
+        } else {
+            bridge_rels
+                .iter()
+                .map(|(s, r, t)| format!("- {} --[{}]--> {}", s, r, t))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+
+        let chunks_block = chunk_ids
+            .iter()
+            .filter_map(|cid| kg.chunks().find(|c| c.id == *cid))
+            .map(|c| format!("- {}", c.content))
+            .collect::<Vec<_>>()
+            .join("\n\n");
+
+        let context = format!(
+            "ENTITIES:\n{}\n\nRELATIONSHIPS:\n{}\n\nSOURCE TEXT:\n{}",
+            entities_block, relationships_block, chunks_block,
+        );
+
+        // 3. LLM call. Same prompt skeleton + thinking-tag hygiene as
+        //    `generate_semantic_answer_from_results`. Ollama-only
+        //    primitives match the rest of this branch (PR C);
+        //    the `ChatClient`-via-PR-B variant lands when this
+        //    method graduates to the openai-compat fork.
+        let client = OllamaClient::new(self.config.ollama.clone());
+
+        let prompt = format!(
+            "You are a knowledgeable assistant answering questions grounded in a knowledge graph.\n\n\
+             IMPORTANT INSTRUCTIONS:\n\
+             - Answer ONLY using the provided entities, relationships, and source text below\n\
+             - Synthesize across all three sections; relationships in particular often supply the connective tissue\n\
+             - Provide direct, conversational, natural responses\n\
+             - Do NOT show your reasoning process or use <think> tags\n\
+             - If the context lacks sufficient information, clearly state: \"I don't have enough information to answer this question.\"\n\
+             - Aim for a complete answer (3-6 sentences)\n\n\
+             CONTEXT:\n\
+             {}\n\n\
+             QUESTION: {}\n\n\
+             ANSWER (direct response only, no reasoning):",
+            context, query
+        );
+
+        let max_answer_tokens: u32 = 800;
+        let prompt_tokens = (prompt.len() / 4) as u32;
+        let total = prompt_tokens + max_answer_tokens;
+        let with_margin = (total as f32 * 1.20) as u32;
+        let num_ctx = (((with_margin + 1023) / 1024) * 1024)
+            .max(4096)
+            .min(131_072);
+
+        let params = crate::ollama::OllamaGenerationParams {
+            num_predict: Some(max_answer_tokens),
+            temperature: self.config.ollama.temperature,
+            num_ctx: Some(num_ctx),
+            keep_alive: self.config.ollama.keep_alive.clone(),
+            ..Default::default()
+        };
+
+        let raw_answer = client.generate_with_params(&prompt, params).await.map_err(|e| {
+            GraphRAGError::Generation { message: format!("LLM generation failed: {}", e) }
+        })?;
+        let answer = Self::remove_thinking_tags(&raw_answer).trim().to_string();
+
+        // 4. Pack ExplainedAnswer.
+        let confidence = if seed_entity_ids.is_empty() {
+            0.0
+        } else {
+            let chunk_ratio = (chunk_ids.len() as f32) / (seed_entity_ids.len() as f32 * 3.0);
+            (chunk_ratio.min(1.0) * 0.7 + 0.3).min(1.0)
+        };
+
+        let mut sources: Vec<retrieval::SourceReference> = Vec::new();
+        for cid in chunk_ids.iter().take(10) {
+            if let Some(chunk) = kg.chunks().find(|c| c.id == *cid) {
+                sources.push(retrieval::SourceReference {
+                    id: cid.0.clone(),
+                    source_type: retrieval::SourceType::TextChunk,
+                    excerpt: chunk.content.chars().take(160).collect(),
+                    relevance_score: confidence,
+                });
+            }
+        }
+        for (s, r, t) in bridge_rels.iter().take(8) {
+            sources.push(retrieval::SourceReference {
+                id: format!("{} --[{}]--> {}", s, r, t),
+                source_type: retrieval::SourceType::Relationship,
+                excerpt: format!("{} {} {}", s, r, t),
+                relevance_score: 0.5,
+            });
+        }
+
+        let key_entities: Vec<String> = entity_set.values().map(|e| e.name.clone()).collect();
+
+        let reasoning_steps = vec![
+            retrieval::ReasoningStep {
+                step_number: 1,
+                description: format!(
+                    "Seeded local_search with {} entity ids supplied by caller (vector-search top-K)",
+                    seed_entity_ids.len()
+                ),
+                entities_used: seed_entity_ids.iter().map(|e| e.0.clone()).collect(),
+                evidence_snippet: None,
+                confidence: 1.0,
+            },
+            retrieval::ReasoningStep {
+                step_number: 2,
+                description: format!(
+                    "Expanded to 1-hop neighbors (max {} per seed); gathered {} entities total, {} relationship bridges",
+                    max_neighbors_per_seed, entity_set.len(), bridge_rels.len()
+                ),
+                entities_used: entity_set.keys().map(|e| e.0.clone()).collect(),
+                evidence_snippet: None,
+                confidence: 0.9,
+            },
+            retrieval::ReasoningStep {
+                step_number: 3,
+                description: format!(
+                    "Collected {} mentioning chunks across all gathered entities",
+                    chunk_ids.len()
+                ),
+                entities_used: vec![],
+                evidence_snippet: None,
+                confidence: 0.85,
+            },
+            retrieval::ReasoningStep {
+                step_number: 4,
+                description: "Sent assembled entities + relationships + source text to chat backend".to_string(),
+                entities_used: vec![],
+                evidence_snippet: None,
+                confidence,
+            },
+        ];
+
+        Ok(retrieval::ExplainedAnswer {
+            answer,
+            confidence,
+            sources,
+            reasoning_steps,
+            key_entities,
+            query_analysis: None,
+        })
+    }
+
     /// Internal query method (public for CLI access to raw results)
     pub async fn query_internal(&mut self, query: &str) -> Result<Vec<String>> {
         let retrieval = self

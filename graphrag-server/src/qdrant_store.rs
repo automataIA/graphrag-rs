@@ -599,19 +599,85 @@ impl QdrantStore {
     /// rebuild leaves no stale entries behind, and so a deploy that
     /// previously ran with placeholder 1-D vectors gets rebuilt with
     /// real-dimensional vectors on the next build.
+    ///
+    /// Robust against Qdrant's eventual-consistency on collection
+    /// deletion: a `delete_collection` can return Ok before the
+    /// namespace is actually freed, so a follow-up `create_collection`
+    /// can fail with "already exists." This impl retries the delete +
+    /// create once with a short sleep when create errors — observed
+    /// in the wild leaving the entities collection wiped but never
+    /// repopulated, which is silent data loss against the in-memory
+    /// graph.
     pub async fn clear_graph_collections(&self, dimension: u64) -> Result<(), QdrantError> {
         for name in [self.entities_collection(), self.relationships_collection()] {
-            // Best-effort delete; missing collections are fine.
-            let _ = self.client.delete_collection(&name).await;
-            self.client
-                .create_collection(
-                    CreateCollectionBuilder::new(&name)
-                        .vectors_config(VectorParamsBuilder::new(dimension, Distance::Cosine)),
-                )
-                .await
-                .map_err(|e| QdrantError::CollectionError(e.to_string()))?;
+            self.recreate_collection(&name, dimension).await?;
         }
         Ok(())
+    }
+
+    async fn recreate_collection(&self, name: &str, dimension: u64) -> Result<(), QdrantError> {
+        let _ = self.client.delete_collection(name).await;
+        let first_attempt = self
+            .client
+            .create_collection(
+                CreateCollectionBuilder::new(name)
+                    .vectors_config(VectorParamsBuilder::new(dimension, Distance::Cosine)),
+            )
+            .await;
+        if first_attempt.is_ok() {
+            return Ok(());
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        let _ = self.client.delete_collection(name).await;
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        self.client
+            .create_collection(
+                CreateCollectionBuilder::new(name)
+                    .vectors_config(VectorParamsBuilder::new(dimension, Distance::Cosine)),
+            )
+            .await
+            .map_err(|e| QdrantError::CollectionError(format!("recreate {name}: {e}")))?;
+        Ok(())
+    }
+
+    /// Vector-search the entity sidecar collection. Returns
+    /// `(entity_id, score)` pairs where `entity_id` is the stable
+    /// graphrag-core `EntityId` string (read out of the persisted
+    /// payload, NOT the Qdrant point UUID). `limit` is the top-K.
+    /// Returns an empty Vec if the collection doesn't exist.
+    ///
+    /// Primitive behind MS GraphRAG-style local_search.
+    pub async fn search_entities(
+        &self,
+        query_embedding: Vec<f32>,
+        limit: usize,
+    ) -> Result<Vec<(String, f32)>, QdrantError> {
+        let coll = self.entities_collection();
+        if self.client.collection_info(&coll).await.is_err() {
+            return Ok(Vec::new());
+        }
+        let resp = self
+            .client
+            .search_points(
+                SearchPointsBuilder::new(&coll, query_embedding, limit as u64).with_payload(true),
+            )
+            .await
+            .map_err(|e| QdrantError::OperationError(e.to_string()))?;
+
+        let mut out = Vec::new();
+        for point in resp.result {
+            let score = point.score;
+            let payload_value = match serde_json::to_value(&point.payload) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let entity_id = match payload_value.get("id").and_then(|v| v.as_str()) {
+                Some(s) => s.to_string(),
+                None => continue,
+            };
+            out.push((entity_id, score));
+        }
+        Ok(out)
     }
 
     /// Persist (entities, relationships) to their sidecar collections,

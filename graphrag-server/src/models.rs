@@ -25,6 +25,12 @@ use std::fmt;
 /// - `reason`: query decomposition for multi-hop questions; sub-queries are
 ///   answered and composed into a final answer. Calls
 ///   `GraphRAG::ask_with_reasoning`. Slower than `ask`.
+/// - `local`: Microsoft GraphRAG-style `local_search`. Embeds the query,
+///   vector-searches the entity sidecar (top-K seed entities), expands
+///   to 1-hop neighbors, gathers their mentioning chunks, and feeds
+///   the assembled context to the chat backend via
+///   `GraphRAG::ask_with_seed_entities`. Most graph-aware mode —
+///   actually uses the entity vector index Phase H+ persists.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMode {
@@ -32,6 +38,7 @@ pub enum QueryMode {
     Ask,
     Explain,
     Reason,
+    Local,
 }
 
 impl Default for QueryMode {
@@ -47,6 +54,7 @@ impl QueryMode {
             QueryMode::Ask => "ask",
             QueryMode::Explain => "explain",
             QueryMode::Reason => "reason",
+            QueryMode::Local => "local",
         }
     }
 }

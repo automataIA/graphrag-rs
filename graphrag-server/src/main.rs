@@ -274,7 +274,8 @@ async fn root(state: Data<AppState>) -> impl Responder {
                     "search": "vector similarity over Qdrant (default; fast; no LLM)",
                     "ask": "graph-aware retrieval + LLM-composed answer",
                     "explain": "ask + confidence + source attribution + reasoning trace",
-                    "reason": "query decomposition for multi-hop questions"
+                    "reason": "query decomposition for multi-hop questions",
+                    "local": "MS GraphRAG-style local_search: embed query → vector-search entity sidecar → expand to 1-hop neighbors → LLM answer with assembled context"
                 }
             },
             "documents": {
@@ -644,6 +645,101 @@ async fn graph_aware_query(
                 sources: None,
                 processing_time_ms: processing_time,
                 backend: "graphrag".to_string(),
+            }))
+        },
+        QueryMode::Local => {
+            // Microsoft GraphRAG `local_search` shape:
+            //   1. Embed the user query through the EmbeddingService.
+            //   2. Vector-search the entity sidecar collection for
+            //      top-K seed entities.
+            //   3. Hand those entity ids to graphrag-core, which
+            //      expands to 1-hop neighbors, gathers mentioning
+            //      chunks, and feeds the assembly to the chat backend.
+            let mut seed_ids: Vec<graphrag_core::core::EntityId> = Vec::new();
+
+            #[cfg(feature = "qdrant")]
+            if let Some(qdrant) = state.qdrant.as_ref() {
+                match state.embeddings.generate_single(&body.query).await {
+                    Ok(query_embedding) => {
+                        match qdrant
+                            .search_entities(query_embedding, body.top_k.max(5))
+                            .await
+                        {
+                            Ok(hits) => {
+                                seed_ids = hits
+                                    .into_iter()
+                                    .map(|(id, _)| graphrag_core::core::EntityId::new(id))
+                                    .collect();
+                            },
+                            Err(e) => {
+                                tracing::warn!(
+                                    error = %e,
+                                    "search_entities failed; mode=local will run with no seeds"
+                                );
+                            },
+                        }
+                    },
+                    Err(e) => {
+                        tracing::warn!(
+                            error = %e,
+                            "query embedding failed; mode=local will run with no seeds"
+                        );
+                    },
+                }
+            }
+
+            let max_neighbors_per_seed = 5usize;
+            let explained = graphrag
+                .ask_with_seed_entities(&body.query, &seed_ids, max_neighbors_per_seed)
+                .await
+                .map_err(|e| {
+                    tracing::error!(error = %e, "ask_with_seed_entities() failed");
+                    ApiError::InternalError(format!(
+                        "ask_with_seed_entities() failed: {}",
+                        e
+                    ))
+                })?;
+
+            let sources: Vec<SourceReferenceDto> = explained
+                .sources
+                .iter()
+                .map(|s| SourceReferenceDto {
+                    id: s.id.clone(),
+                    kind: match s.source_type {
+                        graphrag_core::retrieval::SourceType::TextChunk => SourceKind::TextChunk,
+                        graphrag_core::retrieval::SourceType::Entity => SourceKind::Entity,
+                        graphrag_core::retrieval::SourceType::Relationship => {
+                            SourceKind::Relationship
+                        },
+                        graphrag_core::retrieval::SourceType::Summary => SourceKind::Summary,
+                    },
+                    excerpt: s.excerpt.clone(),
+                    relevance: s.relevance_score,
+                })
+                .collect();
+            let reasoning_steps: Vec<ReasoningStepDto> = explained
+                .reasoning_steps
+                .iter()
+                .map(|s| ReasoningStepDto {
+                    step: s.step_number,
+                    description: s.description.clone(),
+                    entities_used: s.entities_used.clone(),
+                    evidence: s.evidence_snippet.clone(),
+                    confidence: s.confidence,
+                })
+                .collect();
+            let processing_time = start.elapsed().as_millis() as u64;
+            Ok(Json(QueryResponse {
+                query: body.query.clone(),
+                mode: mode.as_str().to_string(),
+                results: vector_results,
+                answer: Some(explained.answer.clone()),
+                confidence: Some(explained.confidence),
+                key_entities: Some(explained.key_entities.clone()),
+                reasoning_steps: Some(reasoning_steps),
+                sources: Some(sources),
+                processing_time_ms: processing_time,
+                backend: "graphrag-local-search".to_string(),
             }))
         },
         QueryMode::Search => unreachable!("search dispatched outside graph_aware_query"),
