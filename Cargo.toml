@@ -126,7 +126,7 @@ chrono = { version = "0.4.38", default-features = false, features = [
     "clock",
     "std",
 ] } # Compatible with arrow
-uuid = { version = "1.0", features = ["v4", "serde"] }
+uuid = { version = "1.0", features = ["v4", "v5", "serde"] }
 
 # Vector databases (optional, for persistent storage)
 # NOTE: lancedb 0.26.2 should be compatible with arrow 56
