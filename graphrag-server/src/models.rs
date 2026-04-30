@@ -86,6 +86,13 @@ pub struct QueryResponse {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ApiComponent)]
 #[serde(rename_all = "camelCase")]
 pub struct AddDocumentRequest {
+    /// Optional caller-supplied id. Stored alongside the Qdrant point
+    /// so callers can later delete by this same id (instead of having
+    /// to remember the UUID the server assigned). When omitted, the
+    /// server still returns a UUID.
+    #[serde(default)]
+    pub id: Option<String>,
+
     /// Document title
     #[schemars(example = "example_title")]
     pub title: String,
@@ -142,14 +149,27 @@ pub struct ListDocumentsResponse {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ApiComponent)]
 #[serde(rename_all = "camelCase")]
 pub struct DocumentSummary {
-    /// Document identifier
+    /// Document identifier (Qdrant point UUID).
     pub id: String,
+
+    /// Caller-supplied id, if any (the id passed to POST /api/documents).
+    /// Useful for callers that want to re-issue delete/update by their
+    /// own id without remembering the server-assigned UUID.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_id: Option<String>,
 
     /// Document title
     pub title: String,
 
-    /// Content length in characters
-    pub content_length: usize,
+    /// Content length in characters (memory backend only — Qdrant
+    /// returns an excerpt instead, see `excerpt`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_length: Option<usize>,
+
+    /// First ~160 chars of content. Populated when listing from Qdrant;
+    /// the memory backend leaves it None and uses content_length instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub excerpt: Option<String>,
 
     /// Timestamp when added
     pub added_at: String,
@@ -177,6 +197,13 @@ pub struct GraphStatsResponse {
 
     /// Whether graph has been built
     pub graph_built: bool,
+
+    /// RFC 3339 timestamp of the last successful /api/graph/build, or
+    /// null if the server hasn't built the graph since startup. Lets
+    /// agents/cron decide whether the graph is fresh enough relative
+    /// to recent ingests.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_built_at: Option<String>,
 
     /// Backend used
     pub backend: String,
