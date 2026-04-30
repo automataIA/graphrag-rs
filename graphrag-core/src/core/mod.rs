@@ -383,29 +383,97 @@ impl KnowledgeGraph {
         Ok(())
     }
 
-    /// Add an entity to the knowledge graph
+    /// Add an entity to the knowledge graph.
+    ///
+    /// Dedupes by `entity.id`: if an entity with the same id already
+    /// exists, mentions from `entity` are merged into the existing
+    /// node in place (skipping (chunk_id, start_offset) duplicates),
+    /// and the existing node's confidence is bumped to
+    /// `max(existing, new)`. Returns the existing NodeIndex in that
+    /// case rather than creating a fresh node.
+    ///
+    /// Why dedupe inside the canonical add: prior to this, calling
+    /// `add_entity` twice with the same id created a fresh petgraph
+    /// node each time — `entity_index` only kept the latest one, so
+    /// older nodes (and their accumulated mentions) became
+    /// unreachable orphans. `build_graph`'s extractor branches drove
+    /// straight into this — the same entity surfacing across N
+    /// chunks produced N petgraph nodes with N-1 of them orphaned.
+    /// Persistence layers keying on entity id (e.g.
+    /// graphrag-server's UUID5-over-id Qdrant points) silently
+    /// dedupe on the way out, hiding the in-memory bloat. Putting
+    /// the dedup at the canonical add path makes `build_graph` and
+    /// `extend_graph` see identical post-conditions and removes
+    /// the special-case `merge_entity` helper that was previously
+    /// the only correct dedup path.
     pub fn add_entity(&mut self, entity: Entity) -> Result<NodeIndex> {
+        if let Some(&existing_idx) = self.entity_index.get(&entity.id) {
+            if let Some(existing) = self.graph.node_weight_mut(existing_idx) {
+                for mention in entity.mentions {
+                    let already_present = existing.mentions.iter().any(|m| {
+                        m.chunk_id == mention.chunk_id
+                            && m.start_offset == mention.start_offset
+                    });
+                    if !already_present {
+                        existing.mentions.push(mention);
+                    }
+                }
+                if entity.confidence > existing.confidence {
+                    existing.confidence = entity.confidence;
+                }
+                // Take the (potentially richer) embedding if we have
+                // one and the existing node didn't.
+                if existing.embedding.is_none() && entity.embedding.is_some() {
+                    existing.embedding = entity.embedding;
+                }
+            }
+            return Ok(existing_idx);
+        }
+
         let entity_id = entity.id.clone();
         let node_index = self.graph.add_node(entity);
         self.entity_index.insert(entity_id, node_index);
         Ok(node_index)
     }
 
-    /// Add a relationship between entities
+    /// Add a relationship between entities.
+    ///
+    /// Dedupes by `(source, target, relation_type)`: if an edge with
+    /// matching endpoints AND identical relation_type already exists,
+    /// returns `Ok(())` without adding a duplicate. Other variants
+    /// of the same edge (different relation_type) are still allowed —
+    /// the graph models multi-edges between the same pair.
     pub fn add_relationship(&mut self, relationship: Relationship) -> Result<()> {
-        let source_idx = self.entity_index.get(&relationship.source).ok_or_else(|| {
+        let source_idx = *self.entity_index.get(&relationship.source).ok_or_else(|| {
             crate::GraphRAGError::GraphConstruction {
                 message: format!("Source entity {} not found", relationship.source),
             }
         })?;
 
-        let target_idx = self.entity_index.get(&relationship.target).ok_or_else(|| {
+        let target_idx = *self.entity_index.get(&relationship.target).ok_or_else(|| {
             crate::GraphRAGError::GraphConstruction {
                 message: format!("Target entity {} not found", relationship.target),
             }
         })?;
 
-        self.graph.add_edge(*source_idx, *target_idx, relationship);
+        // Cheap dedup: scan outgoing edges of source for an identical
+        // (target, relation_type) pair. petgraph doesn't index edges
+        // by endpoints; for typical graph sizes (low thousands) this
+        // is fine, and avoids double-counting cross-chunk mentions
+        // of the same semantic relationship.
+        use petgraph::visit::EdgeRef;
+        let already_present = self
+            .graph
+            .edges(source_idx)
+            .any(|edge| {
+                edge.target() == target_idx
+                    && edge.weight().relation_type == relationship.relation_type
+            });
+        if already_present {
+            return Ok(());
+        }
+
+        self.graph.add_edge(source_idx, target_idx, relationship);
         Ok(())
     }
 
@@ -1458,5 +1526,138 @@ mod temporal_tests {
         assert!(!json.contains("temporal_type"));
         assert!(!json.contains("temporal_range"));
         assert!(!json.contains("causal_strength"));
+    }
+}
+
+#[cfg(test)]
+mod dedup_tests {
+    //! Inline tests for the dedup-on-add behavior of
+    //! `KnowledgeGraph::add_entity` and
+    //! `KnowledgeGraph::add_relationship`.
+    //!
+    //! These guard against the historical "duplicate petgraph node
+    //! per same-id add" bug: prior to the dedup, calling add_entity
+    //! twice with the same id created two nodes, with the second
+    //! overwriting `entity_index` and orphaning the first node's
+    //! mentions. Same shape for relationships.
+    use super::*;
+
+    fn mention(chunk: &str, off: usize) -> EntityMention {
+        EntityMention {
+            chunk_id: ChunkId::new(chunk.to_string()),
+            start_offset: off,
+            end_offset: off + 5,
+            confidence: 0.9,
+        }
+    }
+
+    fn entity(id: &str, conf: f32, mentions: Vec<EntityMention>) -> Entity {
+        Entity::new(
+            EntityId::new(id.to_string()),
+            id.to_string(),
+            "TEST".to_string(),
+            conf,
+        )
+        .with_mentions(mentions)
+    }
+
+    #[test]
+    fn add_entity_dedupes_by_id_and_merges_mentions() {
+        let mut kg = KnowledgeGraph::new();
+        let e1 = entity("vaswani", 0.7, vec![mention("c1", 10)]);
+        let e2 = entity("vaswani", 0.9, vec![mention("c2", 20)]);
+        let e3 = entity("vaswani", 0.5, vec![mention("c1", 10)]); // dup mention
+
+        let idx1 = kg.add_entity(e1).unwrap();
+        let idx2 = kg.add_entity(e2).unwrap();
+        let idx3 = kg.add_entity(e3).unwrap();
+
+        // Same NodeIndex returned every time — single petgraph node.
+        assert_eq!(idx1, idx2);
+        assert_eq!(idx2, idx3);
+        assert_eq!(kg.entities().count(), 1);
+
+        // Mentions merged in place, dedupe on (chunk_id, start_offset).
+        let stored = kg.get_entity(&EntityId::new("vaswani".to_string())).unwrap();
+        assert_eq!(stored.mentions.len(), 2);
+        assert_eq!(stored.mentions[0].chunk_id, ChunkId::new("c1".to_string()));
+        assert_eq!(stored.mentions[1].chunk_id, ChunkId::new("c2".to_string()));
+
+        // Confidence bumped to the max across all calls.
+        assert!((stored.confidence - 0.9).abs() < 1e-6);
+    }
+
+    #[test]
+    fn add_relationship_dedupes_by_source_target_relation_type() {
+        let mut kg = KnowledgeGraph::new();
+        kg.add_entity(entity("a", 0.9, vec![])).unwrap();
+        kg.add_entity(entity("b", 0.9, vec![])).unwrap();
+
+        let r = || {
+            Relationship::new(
+                EntityId::new("a".to_string()),
+                EntityId::new("b".to_string()),
+                "WORKS_FOR".to_string(),
+                0.9,
+            )
+        };
+
+        kg.add_relationship(r()).unwrap();
+        kg.add_relationship(r()).unwrap(); // exact duplicate
+        kg.add_relationship(r()).unwrap();
+
+        assert_eq!(kg.get_all_relationships().len(), 1);
+
+        // A different relation_type between the same endpoints is
+        // legitimately a new edge, not a duplicate.
+        kg.add_relationship(Relationship::new(
+            EntityId::new("a".to_string()),
+            EntityId::new("b".to_string()),
+            "ADVISES".to_string(),
+            0.9,
+        ))
+        .unwrap();
+        assert_eq!(kg.get_all_relationships().len(), 2);
+    }
+
+    #[test]
+    fn add_entity_takes_max_confidence_and_first_embedding() {
+        let mut kg = KnowledgeGraph::new();
+        let e1 = entity("x", 0.4, vec![]);
+        let mut e2 = entity("x", 0.8, vec![]);
+        e2 = e2.with_embedding(vec![1.0, 2.0, 3.0]);
+        let mut e3 = entity("x", 0.6, vec![]);
+        e3 = e3.with_embedding(vec![9.9, 9.9, 9.9]);
+
+        kg.add_entity(e1).unwrap();
+        kg.add_entity(e2).unwrap();
+        kg.add_entity(e3).unwrap();
+
+        let stored = kg.get_entity(&EntityId::new("x".to_string())).unwrap();
+        assert!((stored.confidence - 0.8).abs() < 1e-6);
+        // First embedding wins (existing.embedding.is_none() check).
+        // e3's embedding does NOT overwrite e2's.
+        assert_eq!(stored.embedding.as_ref().unwrap(), &vec![1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn add_relationship_returns_ok_on_dedup_not_err() {
+        let mut kg = KnowledgeGraph::new();
+        kg.add_entity(entity("a", 0.9, vec![])).unwrap();
+        kg.add_entity(entity("b", 0.9, vec![])).unwrap();
+
+        let r = Relationship::new(
+            EntityId::new("a".to_string()),
+            EntityId::new("b".to_string()),
+            "REL".to_string(),
+            0.9,
+        );
+        assert!(kg.add_relationship(r.clone()).is_ok());
+        // Second add with identical (source, target, relation_type)
+        // is silently deduped, not an error — callers shouldn't
+        // need a try/catch around routine cross-chunk re-mentions
+        // of the same logical edge.
+        assert!(kg.add_relationship(r).is_ok());
+        assert_eq!(kg.get_all_relationships().len(), 1);
     }
 }

@@ -1791,67 +1791,70 @@ impl GraphRAG {
     /// any not-already-present mentions from `new_entity` (compared by
     /// `(chunk_id, start_offset)`); `confidence` is bumped to the max
     /// of the two values.
+    /// Thin metrics-tracking wrapper over `KnowledgeGraph::add_entity`.
+    /// Since `add_entity` itself dedupes by id and merges mentions in
+    /// place, this only counts "was this a new node vs a merge into
+    /// an existing one" so callers (extend_graph) can report
+    /// `new_entities` vs `mentions_merged` accurately.
     fn merge_entity(
         graph: &mut KnowledgeGraph,
         new_entity: Entity,
         metrics: &mut ExtractMetrics,
     ) -> Result<()> {
         let id = new_entity.id.clone();
-        if graph.get_entity(&id).is_some() {
-            // Existing entity → merge mentions in place. Tracked
-            // separately from new_entities so callers can tell whether
-            // the extend pass enriched existing nodes vs added new
-            // ones.
-            let mut local_merged = 0usize;
-            if let Some(existing) = graph.get_entity_mut(&id) {
-                for mention in new_entity.mentions {
-                    let already_present = existing.mentions.iter().any(|m| {
-                        m.chunk_id == mention.chunk_id && m.start_offset == mention.start_offset
-                    });
-                    if !already_present {
-                        existing.mentions.push(mention);
-                        local_merged += 1;
-                    }
-                }
-                if new_entity.confidence > existing.confidence {
-                    existing.confidence = new_entity.confidence;
-                }
-            }
-            metrics.mentions_merged += local_merged;
+        let was_existing = graph.get_entity(&id).is_some();
+        let mentions_to_merge = if was_existing {
+            // Count the mentions that ARE new vs the existing ones,
+            // before add_entity does the merge. We only care about
+            // the count here; the merge happens inside add_entity.
+            let existing_mentions: Vec<_> = graph
+                .get_entity(&id)
+                .map(|e| {
+                    e.mentions
+                        .iter()
+                        .map(|m| (m.chunk_id.clone(), m.start_offset))
+                        .collect()
+                })
+                .unwrap_or_default();
+            new_entity
+                .mentions
+                .iter()
+                .filter(|m| {
+                    !existing_mentions
+                        .iter()
+                        .any(|(c, off)| c == &m.chunk_id && *off == m.start_offset)
+                })
+                .count()
         } else {
-            graph.add_entity(new_entity)?;
+            0
+        };
+        graph.add_entity(new_entity)?;
+        if was_existing {
+            metrics.mentions_merged += mentions_to_merge;
+        } else {
             metrics.new_entities += 1;
         }
         Ok(())
     }
 
-    /// Add `relationship` to `graph` if both endpoints exist and the
-    /// edge isn't already present (by (source, target, relation_type)).
-    /// Errors from `add_relationship` (missing endpoint) are swallowed
-    /// to match build_graph's behaviour — the chunk that mentioned
-    /// the relationship's source might mention a target that wasn't
-    /// extracted from this chunk (it was extracted from a different
-    /// chunk that may or may not have already been processed).
+    /// Thin metrics-tracking wrapper over `KnowledgeGraph::add_relationship`.
+    /// `add_relationship` itself dedupes by `(source, target,
+    /// relation_type)` and silently ignores missing-endpoint errors
+    /// (matching build_graph's existing behavior — the relationship's
+    /// target may have been extracted from a chunk that hasn't been
+    /// processed yet). This wrapper just counts how many were genuinely
+    /// new for telemetry by scanning before the add.
     fn merge_relationship(
         graph: &mut KnowledgeGraph,
         relationship: Relationship,
         metrics: &mut ExtractMetrics,
     ) {
-        // Cheap dedup: scan existing edges between these two entities
-        // for an identical relation_type. petgraph doesn't index
-        // edges by endpoints, so this is O(edges_at_source). For
-        // typical graph sizes (low thousands) the cost is negligible
-        // and avoids double-counting cross-chunk mentions of the same
-        // semantic relationship.
-        let already_present = graph.relationships().any(|r| {
+        let was_existing = graph.relationships().any(|r| {
             r.source == relationship.source
                 && r.target == relationship.target
                 && r.relation_type == relationship.relation_type
         });
-        if already_present {
-            return;
-        }
-        if graph.add_relationship(relationship).is_ok() {
+        if graph.add_relationship(relationship).is_ok() && !was_existing {
             metrics.new_relationships += 1;
         }
         // add_relationship error (missing endpoint) is intentionally
