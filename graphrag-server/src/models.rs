@@ -25,12 +25,27 @@ use std::fmt;
 /// - `reason`: query decomposition for multi-hop questions; sub-queries are
 ///   answered and composed into a final answer. Calls
 ///   `GraphRAG::ask_with_reasoning`. Slower than `ask`.
-/// - `local`: Microsoft GraphRAG-style `local_search`. Embeds the query,
-///   vector-searches the entity sidecar (top-K seed entities), expands
-///   to 1-hop neighbors, gathers their mentioning chunks, and feeds
-///   the assembled context to the chat backend via
-///   `GraphRAG::ask_with_seed_entities`. Most graph-aware mode —
-///   actually uses the entity vector index Phase H+ persists.
+/// - `local`: Microsoft GraphRAG-style `local_search` and equivalent of
+///   LightRAG's `local` mode. Embeds the query, vector-searches the
+///   entity sidecar (top-K seed entities), expands to 1-hop neighbors,
+///   gathers their mentioning chunks, and feeds the assembled context
+///   to the chat backend.
+/// - `global`: LightRAG-paper `global` mode. Extracts dual-level
+///   keywords from the query (one LLM call), embeds the **high-level**
+///   set, vector-searches the *relationship* sidecar for top-K seed
+///   relations, resolves their endpoint entities, expands neighborhoods,
+///   gathers chunks, sends to chat backend. Themes-and-concepts shape;
+///   answers thematic / cross-cutting questions better than `local`.
+/// - `hybrid`: LightRAG-paper `hybrid` mode. Runs both retrieval streams
+///   — low-level keywords → entity vector search → entity seeds; and
+///   high-level keywords → relationship vector search → relation seeds.
+///   Merges the result sets and feeds the union to the chat backend.
+///   Most graph-aware retrieval; best default for entity-centric
+///   questions where you also want thematic context.
+/// - `mix`: LightRAG-paper `mix` mode. Hybrid plus a chunk-vector
+///   search using the original query — the chunk results are added
+///   directly as seed chunks alongside the entity/relation expansion.
+///   Strongest recall, slightly slower (one extra Qdrant call).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMode {
@@ -39,6 +54,9 @@ pub enum QueryMode {
     Explain,
     Reason,
     Local,
+    Global,
+    Hybrid,
+    Mix,
 }
 
 impl Default for QueryMode {
@@ -55,6 +73,9 @@ impl QueryMode {
             QueryMode::Explain => "explain",
             QueryMode::Reason => "reason",
             QueryMode::Local => "local",
+            QueryMode::Global => "global",
+            QueryMode::Hybrid => "hybrid",
+            QueryMode::Mix => "mix",
         }
     }
 }

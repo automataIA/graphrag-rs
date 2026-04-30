@@ -275,7 +275,10 @@ async fn root(state: Data<AppState>) -> impl Responder {
                     "ask": "graph-aware retrieval + LLM-composed answer",
                     "explain": "ask + confidence + source attribution + reasoning trace",
                     "reason": "query decomposition for multi-hop questions",
-                    "local": "MS GraphRAG-style local_search: embed query → vector-search entity sidecar → expand to 1-hop neighbors → LLM answer with assembled context"
+                    "local": "LightRAG `local` / MS GraphRAG `local_search`: vector-search entity sidecar → expand 1-hop → LLM answer (entity-centric)",
+                    "global": "LightRAG `global`: high-level keywords → vector-search relationship sidecar → resolve endpoints → LLM answer (theme-centric)",
+                    "hybrid": "LightRAG `hybrid`: dual-keyword extraction; both entity and relationship vector searches merged into one answer (best for mixed entity+theme questions)",
+                    "mix": "LightRAG `mix`: hybrid + chunk-vector results merged; strongest recall, slightly slower"
                 }
             },
             "documents": {
@@ -740,6 +743,163 @@ async fn graph_aware_query(
                 sources: Some(sources),
                 processing_time_ms: processing_time,
                 backend: "graphrag-local-search".to_string(),
+            }))
+        },
+        QueryMode::Global | QueryMode::Hybrid | QueryMode::Mix => {
+            // LightRAG dual-level retrieval (arXiv:2410.05779).
+            //
+            // Pipeline:
+            //   1. One LLM call extracts {low_level_keywords, high_level_keywords}
+            //      from the user query.
+            //   2. Each non-empty keyword set is joined into a single
+            //      embed string, embedded once via OVMS/EmbeddingService,
+            //      and used to vector-search the appropriate sidecar:
+            //        - low-level  → graphrag-entities sidecar       (entity seeds)
+            //        - high-level → graphrag-relationships sidecar  (relation seeds)
+            //   3. For mode=mix, ALSO chunk-vector search with the
+            //      original query → top-K chunk seeds.
+            //   4. Hand the assembled `DualSeeds` to graphrag-core's
+            //      ask_with_dual_seeds, which expands every seed
+            //      (entities + relation endpoints), gathers mentioning
+            //      chunks, and asks the chat backend for a synthesized
+            //      answer.
+            //
+            // Mode-to-stream mapping:
+            //   - global : relations only       (high-level keywords)
+            //   - hybrid : entities + relations (both keyword sets)
+            //   - mix    : entities + relations + chunk-vector
+            let kw = graphrag.extract_query_keywords(&body.query).await.map_err(|e| {
+                tracing::error!(error = %e, "extract_query_keywords() failed");
+                ApiError::InternalError(format!("extract_query_keywords() failed: {}", e))
+            })?;
+
+            let mut seeds = graphrag_core::DualSeeds::default();
+
+            #[cfg(feature = "qdrant")]
+            if let Some(qdrant) = state.qdrant.as_ref() {
+                // Low-level → entity sidecar (skip for global, which is
+                // relation-only by definition).
+                if !matches!(mode, QueryMode::Global) && !kw.low_level.is_empty() {
+                    let low_text = kw.low_level.join(" ");
+                    if let Ok(emb) = state.embeddings.generate_single(&low_text).await {
+                        if let Ok(hits) = qdrant.search_entities(emb, body.top_k.max(5)).await {
+                            seeds.entities = hits
+                                .into_iter()
+                                .map(|(id, _)| graphrag_core::core::EntityId::new(id))
+                                .collect();
+                        }
+                    }
+                }
+                // High-level → relationship sidecar (driven by both
+                // global and hybrid).
+                if !kw.high_level.is_empty() {
+                    let high_text = kw.high_level.join(" ");
+                    if let Ok(emb) = state.embeddings.generate_single(&high_text).await {
+                        if let Ok(hits) =
+                            qdrant.search_relationships(emb, body.top_k.max(5)).await
+                        {
+                            seeds.relations = hits
+                                .into_iter()
+                                .map(|((s, t, r), _)| {
+                                    (
+                                        graphrag_core::core::EntityId::new(s),
+                                        graphrag_core::core::EntityId::new(t),
+                                        r,
+                                    )
+                                })
+                                .collect();
+                        }
+                    }
+                }
+                // Mix mode also pulls a fresh chunk-vector pass.
+                if matches!(mode, QueryMode::Mix) {
+                    if let Ok(emb) = state.embeddings.generate_single(&body.query).await {
+                        if let Ok(hits) = qdrant.search(emb, body.top_k.max(5), None).await {
+                            // Caller-side chunk ids — Qdrant point ids
+                            // for chunks ARE the document ids (one
+                            // chunk per doc today; the mapping holds
+                            // even if that changes).
+                            seeds.chunks = hits
+                                .into_iter()
+                                .map(|r| graphrag_core::core::ChunkId::new(r.id))
+                                .collect();
+                        }
+                    }
+                }
+            }
+
+            let max_neighbors_per_seed = 5usize;
+            let explained = graphrag
+                .ask_with_dual_seeds(&body.query, &seeds, max_neighbors_per_seed)
+                .await
+                .map_err(|e| {
+                    tracing::error!(error = %e, "ask_with_dual_seeds() failed");
+                    ApiError::InternalError(format!("ask_with_dual_seeds() failed: {}", e))
+                })?;
+
+            // Prepend a reasoning step that documents the keyword
+            // extraction itself so callers can audit which keywords
+            // drove retrieval.
+            let mut reasoning_steps: Vec<ReasoningStepDto> = vec![ReasoningStepDto {
+                step: 0,
+                description: format!(
+                    "LightRAG dual-keyword extraction: low_level={:?}, high_level={:?}",
+                    kw.low_level, kw.high_level
+                ),
+                entities_used: vec![],
+                evidence: None,
+                confidence: 1.0,
+            }];
+            reasoning_steps.extend(
+                explained
+                    .reasoning_steps
+                    .iter()
+                    .map(|s| ReasoningStepDto {
+                        step: s.step_number,
+                        description: s.description.clone(),
+                        entities_used: s.entities_used.clone(),
+                        evidence: s.evidence_snippet.clone(),
+                        confidence: s.confidence,
+                    }),
+            );
+
+            let sources: Vec<SourceReferenceDto> = explained
+                .sources
+                .iter()
+                .map(|s| SourceReferenceDto {
+                    id: s.id.clone(),
+                    kind: match s.source_type {
+                        graphrag_core::retrieval::SourceType::TextChunk => SourceKind::TextChunk,
+                        graphrag_core::retrieval::SourceType::Entity => SourceKind::Entity,
+                        graphrag_core::retrieval::SourceType::Relationship => {
+                            SourceKind::Relationship
+                        },
+                        graphrag_core::retrieval::SourceType::Summary => SourceKind::Summary,
+                    },
+                    excerpt: s.excerpt.clone(),
+                    relevance: s.relevance_score,
+                })
+                .collect();
+
+            let backend_label = match mode {
+                QueryMode::Global => "graphrag-lightrag-global",
+                QueryMode::Hybrid => "graphrag-lightrag-hybrid",
+                QueryMode::Mix => "graphrag-lightrag-mix",
+                _ => "graphrag-lightrag",
+            };
+
+            let processing_time = start.elapsed().as_millis() as u64;
+            Ok(Json(QueryResponse {
+                query: body.query.clone(),
+                mode: mode.as_str().to_string(),
+                results: vector_results,
+                answer: Some(explained.answer.clone()),
+                confidence: Some(explained.confidence),
+                key_entities: Some(explained.key_entities.clone()),
+                reasoning_steps: Some(reasoning_steps),
+                sources: Some(sources),
+                processing_time_ms: processing_time,
+                backend: backend_label.to_string(),
             }))
         },
         QueryMode::Search => unreachable!("search dispatched outside graph_aware_query"),

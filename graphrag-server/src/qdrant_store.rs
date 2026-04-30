@@ -464,6 +464,65 @@ impl QdrantStore {
         Ok(summaries)
     }
 
+    /// Vector-search the relationship sidecar collection. Returns
+    /// `((source_entity_id, target_entity_id, relation_type), score)`
+    /// triples — the stable graphrag-core identity for a relationship,
+    /// read out of the PersistedRelationship payload (NOT the Qdrant
+    /// point UUID).
+    ///
+    /// Returns an empty Vec if the collection doesn't exist (cold
+    /// start). Callers should treat that as "no high-level seeds,
+    /// fall back to entity-only retrieval or chunk-vector path."
+    ///
+    /// This is the primitive behind LightRAG's `global` retrieval:
+    /// the caller embeds the user query (or its high-level keywords),
+    /// calls this for top-K seed relations, then asks graphrag-core
+    /// to expand from those seeds and synthesize an answer.
+    pub async fn search_relationships(
+        &self,
+        query_embedding: Vec<f32>,
+        limit: usize,
+    ) -> Result<Vec<((String, String, String), f32)>, QdrantError> {
+        let coll = self.relationships_collection();
+        if self.client.collection_info(&coll).await.is_err() {
+            return Ok(Vec::new());
+        }
+        let resp = self
+            .client
+            .search_points(
+                SearchPointsBuilder::new(&coll, query_embedding, limit as u64).with_payload(true),
+            )
+            .await
+            .map_err(|e| QdrantError::OperationError(e.to_string()))?;
+
+        let mut out = Vec::new();
+        for point in resp.result {
+            let score = point.score;
+            let payload_value = match serde_json::to_value(&point.payload) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let source = match payload_value.get("source").and_then(|v| v.as_str()) {
+                Some(s) => s.to_string(),
+                None => continue,
+            };
+            let target = match payload_value.get("target").and_then(|v| v.as_str()) {
+                Some(s) => s.to_string(),
+                None => continue,
+            };
+            let relation_type = match payload_value
+                .get("relation_type")
+                .and_then(|v| v.as_str())
+            {
+                Some(s) => s.to_string(),
+                None => continue,
+            };
+            out.push(((source, target, relation_type), score));
+        }
+        Ok(out)
+    }
+
+
     /// Scroll through the collection returning full DocumentMetadata payloads.
     /// Unlike `list_documents` (which returns lightweight summaries with a
     /// 160-char excerpt), this returns the full text so callers can rechunk

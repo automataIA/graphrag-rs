@@ -310,6 +310,55 @@ struct ExtractMetrics {
     mentions_merged: usize,
 }
 
+/// LightRAG-style dual-level query keywords.
+///
+/// Reference: LightRAG paper (arXiv:2410.05779). At query time, one
+/// LLM call extracts both keyword sets from the user query; each
+/// drives a separate retrieval stream:
+///   - `low_level` keywords are embedded and used to vector-search
+///     the *entity* store for top-K seed entities (concrete things).
+///   - `high_level` keywords are embedded and used to vector-search
+///     the *relationship* store for top-K seed relations (themes,
+///     abstract connections).
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct QueryKeywords {
+    /// Specific named entities, attributes, or details mentioned in
+    /// the query (e.g. "PostgreSQL", "ACID compliance").
+    pub low_level: Vec<String>,
+    /// Overarching themes, concepts, or topics the query is about
+    /// (e.g. "database transactions", "concurrency control").
+    pub high_level: Vec<String>,
+}
+
+/// Wire envelope for parsing the dual-keyword JSON LLM output. Field
+/// names match LightRAG's published prompt; not exposed publicly.
+#[derive(Debug, serde::Deserialize)]
+struct QueryKeywordsWire {
+    high_level_keywords: Option<Vec<String>>,
+    low_level_keywords: Option<Vec<String>>,
+}
+
+/// Caller-supplied seed populations for [`GraphRAG::ask_with_dual_seeds`].
+/// Each LightRAG retrieval mode maps to a different non-empty subset:
+/// local → entities; global → relations; hybrid → entities + relations;
+/// mix → all three (entities, relations, chunks).
+#[derive(Debug, Clone, Default)]
+pub struct DualSeeds {
+    /// Entity ids — typically the top-K result of vector-searching
+    /// an entity-description embedding store with the embedded
+    /// `low_level` keywords.
+    pub entities: Vec<EntityId>,
+    /// Relation triples `(source_entity_id, target_entity_id,
+    /// relation_type)` — typically from vector-searching a
+    /// relationship-description embedding store with the embedded
+    /// `high_level` keywords.
+    pub relations: Vec<(EntityId, EntityId, String)>,
+    /// Direct chunk ids — for LightRAG's `mix` mode, where chunk-level
+    /// vector search results are merged with the entity/relation
+    /// expansion. Empty for local/global/hybrid.
+    pub chunks: Vec<ChunkId>,
+}
+
 /// Summary returned by [`GraphRAG::extend_graph`] — what changed in
 /// this incremental pass.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -2176,6 +2225,428 @@ impl GraphRAG {
         let explained = retrieval::ExplainedAnswer::from_results(answer, &search_results, query);
 
         Ok(explained)
+    }
+
+    // =====================================================================
+    // LightRAG-style dual-level retrieval
+    //
+    // Reference: "LightRAG: Simple and Fast Retrieval-Augmented Generation"
+    //   (Guo, Wang, Lin, Hu, Bei, Chen, Liao, Lu, Zhang, Yan, Lu;
+    //   arXiv:2410.05779, 2024)
+    //
+    // The paper's core idea: instead of MS GraphRAG's expensive
+    // community-detection-and-LLM-summary index step, LightRAG keeps
+    // index-time work to entity + relation extraction (with descriptions),
+    // embeds both, and shifts intelligence to query time. Each query is
+    // decomposed into TWO keyword sets via one LLM call:
+    //
+    //   - low_level_keywords: specific named entities, attributes,
+    //     properties mentioned in the question
+    //   - high_level_keywords: themes, concepts, abstract topics
+    //
+    // The two sets feed two retrieval streams:
+    //   - low_level → vector-search the entity store → seed entities →
+    //     1-hop expand → mentioning chunks
+    //   - high_level → vector-search the relation store → seed
+    //     relationships → resolve endpoints → mentioning chunks
+    //
+    // The four LightRAG modes are characterized by which streams run:
+    //   - naive   : neither (chunk-vector RAG only — same as `ask`)
+    //   - local   : low-level only (entities)  (== `ask_with_seed_entities`)
+    //   - global  : high-level only (relations)
+    //   - hybrid  : both streams, merged
+    //   - mix     : hybrid + chunk-vector merged
+    //
+    // graphrag-core exposes one unified API for all of these via
+    // `ask_with_dual_seeds` — the caller (e.g. graphrag-server) is
+    // responsible for the vector-search step (it owns the embedding
+    // service and the Qdrant sidecars); graphrag-core does the
+    // graph expansion, context assembly, and LLM call.
+    // =====================================================================
+
+    /// LightRAG dual-level keyword extraction. Returns the two keyword
+    /// sets the paper specifies, packaged for easy use as embedding
+    /// inputs by the caller.
+    #[cfg(feature = "async")]
+    pub async fn extract_query_keywords(&self, query: &str) -> Result<QueryKeywords> {
+        use crate::ollama::OllamaClient;
+
+        let client = OllamaClient::new(self.config.ollama.clone());
+
+        let prompt = format!(
+            "---Goal---\n\
+             Given a user query, extract two sets of keywords:\n\
+             - low_level_keywords: specific named entities, attributes, or details mentioned in the query (people, products, places, concrete things)\n\
+             - high_level_keywords: overarching themes, concepts, or topics the query is about (abstractions, categories, processes)\n\n\
+             ---Format---\n\
+             Output ONLY a single valid JSON object, nothing else (no prose, no markdown, no explanation):\n\
+             {{\"high_level_keywords\": [\"...\", \"...\"], \"low_level_keywords\": [\"...\", \"...\"]}}\n\n\
+             Each list should have 1-5 keywords. Empty lists are allowed when nothing matches.\n\n\
+             ---Query---\n\
+             {}\n\n\
+             ---Output---",
+            query
+        );
+
+        let max_answer_tokens: u32 = 256;
+        let prompt_tokens = (prompt.len() / 4) as u32;
+        let total = prompt_tokens + max_answer_tokens;
+        let with_margin = (total as f32 * 1.20) as u32;
+        let num_ctx = (((with_margin + 1023) / 1024) * 1024).max(2048).min(16384);
+        let params = crate::ollama::OllamaGenerationParams {
+            num_predict: Some(max_answer_tokens),
+            temperature: Some(0.1), // low temperature; we want deterministic JSON
+            num_ctx: Some(num_ctx),
+            keep_alive: self.config.ollama.keep_alive.clone(),
+            ..Default::default()
+        };
+
+        let raw = client
+            .generate_with_params(&prompt, params)
+            .await
+            .map_err(|e| GraphRAGError::Generation {
+                message: format!("dual-keyword extraction LLM call failed: {}", e),
+            })?;
+
+        let stripped = Self::remove_thinking_tags(&raw);
+        // Accept either a bare JSON object or one wrapped in ```json fences.
+        let cleaned = stripped
+            .trim()
+            .trim_start_matches("```json")
+            .trim_start_matches("```")
+            .trim_end_matches("```")
+            .trim();
+
+        // Find the first { and last } and parse just that — robust to
+        // models that prepend explanatory prose despite our "ONLY JSON"
+        // instruction.
+        let json_slice = match (cleaned.find('{'), cleaned.rfind('}')) {
+            (Some(a), Some(b)) if b > a => &cleaned[a..=b],
+            _ => cleaned,
+        };
+
+        match serde_json::from_str::<QueryKeywordsWire>(json_slice) {
+            Ok(wire) => Ok(QueryKeywords {
+                low_level: wire.low_level_keywords.unwrap_or_default(),
+                high_level: wire.high_level_keywords.unwrap_or_default(),
+            }),
+            Err(e) => {
+                #[cfg(feature = "tracing")]
+                tracing::warn!(
+                    error = %e,
+                    raw_response = %raw.chars().take(200).collect::<String>(),
+                    "dual-keyword JSON parse failed; returning empty keyword sets so caller can fall back"
+                );
+                let _ = e;
+                Ok(QueryKeywords::default())
+            },
+        }
+    }
+
+    /// LightRAG-style retrieval over an arbitrary mix of seed populations
+    /// — entities, relationships, and/or text chunks — combined into one
+    /// LLM-answered context.
+    ///
+    /// The four LightRAG retrieval modes are all expressible by varying
+    /// which fields of `seeds` are non-empty:
+    ///
+    /// | LightRAG mode | seeds.entities | seeds.relations | seeds.chunks |
+    /// |---|---|---|---|
+    /// | local   | non-empty | empty | empty |
+    /// | global  | empty | non-empty | empty |
+    /// | hybrid  | non-empty | non-empty | empty |
+    /// | mix     | non-empty | non-empty | non-empty |
+    ///
+    /// All four expand entity seeds to 1-hop neighbors (capped by
+    /// `max_neighbors_per_seed`), resolve relation seeds to their
+    /// source/target entities (and pull those endpoints' neighbors
+    /// too), gather every mentioning chunk for every entity touched,
+    /// merge the chunk seeds in, and feed the assembled
+    /// ENTITIES / RELATIONSHIPS / SOURCE TEXT block to the chat
+    /// backend — the same prompt skeleton `ask_with_seed_entities`
+    /// uses, so output style stays consistent across modes.
+    ///
+    /// graphrag-core does not own the seeding step — the caller is
+    /// responsible for vector-searching the entity / relationship /
+    /// chunk stores and producing the seed sets. graphrag-server's
+    /// Qdrant sidecars (`{coll}-entities`, `{coll}-relationships`,
+    /// `{coll}` for chunks) are the canonical seeding surface.
+    #[cfg(feature = "async")]
+    pub async fn ask_with_dual_seeds(
+        &self,
+        query: &str,
+        seeds: &DualSeeds,
+        max_neighbors_per_seed: usize,
+    ) -> Result<retrieval::ExplainedAnswer> {
+        use crate::ollama::OllamaClient;
+        use std::collections::{HashMap, HashSet};
+
+        let kg = self.knowledge_graph.as_ref().ok_or_else(|| {
+            GraphRAGError::Config { message: "Knowledge graph not initialized".to_string() }
+        })?;
+
+        let mut entity_set: HashMap<EntityId, Entity> = HashMap::new();
+        let mut chunk_ids: HashSet<ChunkId> = HashSet::new();
+        let mut bridge_rels: Vec<(String, String, String)> = Vec::new();
+
+        // ---- Stream 1: entity seeds (low-level / local) ---------------
+        for seed_id in &seeds.entities {
+            if let Some(seed) = kg.get_entity(seed_id) {
+                let seed_name = seed.name.clone();
+                entity_set.insert(seed_id.clone(), seed.clone());
+                for m in &seed.mentions {
+                    chunk_ids.insert(m.chunk_id.clone());
+                }
+                let neighbors = kg.get_neighbors(seed_id);
+                for (neighbor, rel) in neighbors.into_iter().take(max_neighbors_per_seed) {
+                    bridge_rels.push((
+                        seed_name.clone(),
+                        rel.relation_type.clone(),
+                        neighbor.name.clone(),
+                    ));
+                    if !entity_set.contains_key(&neighbor.id) {
+                        entity_set.insert(neighbor.id.clone(), neighbor.clone());
+                        for m in &neighbor.mentions {
+                            chunk_ids.insert(m.chunk_id.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- Stream 2: relation seeds (high-level / global) -----------
+        for (src_id, tgt_id, relation_type) in &seeds.relations {
+            // Record the bridge triple even if endpoints are missing,
+            // so the LLM sees the relation. Use stored ids as fallback names.
+            let src_name = kg
+                .get_entity(src_id)
+                .map(|e| e.name.clone())
+                .unwrap_or_else(|| src_id.0.clone());
+            let tgt_name = kg
+                .get_entity(tgt_id)
+                .map(|e| e.name.clone())
+                .unwrap_or_else(|| tgt_id.0.clone());
+            bridge_rels.push((src_name, relation_type.clone(), tgt_name));
+
+            for endpoint_id in [src_id, tgt_id] {
+                if let Some(endpoint) = kg.get_entity(endpoint_id) {
+                    if !entity_set.contains_key(&endpoint.id) {
+                        entity_set.insert(endpoint.id.clone(), endpoint.clone());
+                        for m in &endpoint.mentions {
+                            chunk_ids.insert(m.chunk_id.clone());
+                        }
+                        // Also expand 1-hop from each relation endpoint.
+                        let neighbors = kg.get_neighbors(endpoint_id);
+                        for (neighbor, rel) in
+                            neighbors.into_iter().take(max_neighbors_per_seed)
+                        {
+                            bridge_rels.push((
+                                endpoint.name.clone(),
+                                rel.relation_type.clone(),
+                                neighbor.name.clone(),
+                            ));
+                            if !entity_set.contains_key(&neighbor.id) {
+                                entity_set.insert(neighbor.id.clone(), neighbor.clone());
+                                for m in &neighbor.mentions {
+                                    chunk_ids.insert(m.chunk_id.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- Stream 3: direct chunk seeds (mix) -----------------------
+        for cid in &seeds.chunks {
+            chunk_ids.insert(cid.clone());
+        }
+
+        // ---- Build context block -------------------------------------
+        let entities_block = if entity_set.is_empty() {
+            "(no entities resolved in graph)".to_string()
+        } else {
+            entity_set
+                .values()
+                .map(|e| {
+                    format!(
+                        "- {} (type={}, mentioned_in={} chunks, confidence={:.2})",
+                        e.name,
+                        e.entity_type,
+                        e.mentions.len(),
+                        e.confidence
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+
+        // Dedupe bridge_rels in case a triple appears via both streams.
+        let mut seen_rels: HashSet<(String, String, String)> = HashSet::new();
+        bridge_rels.retain(|t| seen_rels.insert(t.clone()));
+
+        let relationships_block = if bridge_rels.is_empty() {
+            "(no relationships gathered)".to_string()
+        } else {
+            bridge_rels
+                .iter()
+                .map(|(s, r, t)| format!("- {} --[{}]--> {}", s, r, t))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+
+        let chunks_block = chunk_ids
+            .iter()
+            .filter_map(|cid| kg.chunks().find(|c| c.id == *cid))
+            .map(|c| format!("- {}", c.content))
+            .collect::<Vec<_>>()
+            .join("\n\n");
+
+        let context = format!(
+            "ENTITIES:\n{}\n\nRELATIONSHIPS:\n{}\n\nSOURCE TEXT:\n{}",
+            entities_block, relationships_block, chunks_block,
+        );
+
+        // ---- LLM call -------------------------------------------------
+        let client = OllamaClient::new(self.config.ollama.clone());
+
+        let prompt = format!(
+            "You are a knowledgeable assistant answering questions grounded in a knowledge graph.\n\n\
+             IMPORTANT INSTRUCTIONS:\n\
+             - Answer ONLY using the provided entities, relationships, and source text below\n\
+             - Synthesize across all three sections; relationships in particular often supply the connective tissue\n\
+             - Provide direct, conversational, natural responses\n\
+             - Do NOT show your reasoning process or use <think> tags\n\
+             - If the context lacks sufficient information, clearly state: \"I don't have enough information to answer this question.\"\n\
+             - Aim for a complete answer (3-6 sentences)\n\n\
+             CONTEXT:\n\
+             {}\n\n\
+             QUESTION: {}\n\n\
+             ANSWER (direct response only, no reasoning):",
+            context, query
+        );
+
+        let max_answer_tokens: u32 = 800;
+        let prompt_tokens = (prompt.len() / 4) as u32;
+        let total = prompt_tokens + max_answer_tokens;
+        let with_margin = (total as f32 * 1.20) as u32;
+        let num_ctx = (((with_margin + 1023) / 1024) * 1024)
+            .max(4096)
+            .min(131_072);
+        let params = crate::ollama::OllamaGenerationParams {
+            num_predict: Some(max_answer_tokens),
+            temperature: self.config.ollama.temperature,
+            num_ctx: Some(num_ctx),
+            keep_alive: self.config.ollama.keep_alive.clone(),
+            ..Default::default()
+        };
+
+        let raw_answer = client
+            .generate_with_params(&prompt, params)
+            .await
+            .map_err(|e| GraphRAGError::Generation {
+                message: format!("LLM generation failed: {}", e),
+            })?;
+        let answer = Self::remove_thinking_tags(&raw_answer).trim().to_string();
+
+        // ---- Pack ExplainedAnswer ------------------------------------
+        let total_seeds =
+            seeds.entities.len() + seeds.relations.len() + seeds.chunks.len();
+        let confidence = if total_seeds == 0 {
+            0.0
+        } else {
+            let chunk_ratio = (chunk_ids.len() as f32) / (total_seeds as f32 * 2.0);
+            (chunk_ratio.min(1.0) * 0.7 + 0.3).min(1.0)
+        };
+
+        let mut sources: Vec<retrieval::SourceReference> = Vec::new();
+        for cid in chunk_ids.iter().take(12) {
+            if let Some(chunk) = kg.chunks().find(|c| c.id == *cid) {
+                sources.push(retrieval::SourceReference {
+                    id: cid.0.clone(),
+                    source_type: retrieval::SourceType::TextChunk,
+                    excerpt: chunk.content.chars().take(160).collect(),
+                    relevance_score: confidence,
+                });
+            }
+        }
+        for (s, r, t) in bridge_rels.iter().take(10) {
+            sources.push(retrieval::SourceReference {
+                id: format!("{} --[{}]--> {}", s, r, t),
+                source_type: retrieval::SourceType::Relationship,
+                excerpt: format!("{} {} {}", s, r, t),
+                relevance_score: 0.5,
+            });
+        }
+
+        let key_entities: Vec<String> =
+            entity_set.values().map(|e| e.name.clone()).collect();
+
+        let mode_label = match (
+            !seeds.entities.is_empty(),
+            !seeds.relations.is_empty(),
+            !seeds.chunks.is_empty(),
+        ) {
+            (true, false, false) => "local",
+            (false, true, false) => "global",
+            (true, true, false) => "hybrid",
+            (true, true, true) | (false, _, true) | (true, false, true) => "mix",
+            (false, false, false) => "empty",
+        };
+
+        let reasoning_steps = vec![
+            retrieval::ReasoningStep {
+                step_number: 1,
+                description: format!(
+                    "LightRAG {} mode: caller supplied {} entity seeds, {} relation seeds, {} chunk seeds",
+                    mode_label,
+                    seeds.entities.len(),
+                    seeds.relations.len(),
+                    seeds.chunks.len()
+                ),
+                entities_used: seeds.entities.iter().map(|e| e.0.clone()).collect(),
+                evidence_snippet: None,
+                confidence: 1.0,
+            },
+            retrieval::ReasoningStep {
+                step_number: 2,
+                description: format!(
+                    "Expanded each seed to 1-hop neighbors (max {} per seed); gathered {} entities total, {} relationship bridges",
+                    max_neighbors_per_seed,
+                    entity_set.len(),
+                    bridge_rels.len()
+                ),
+                entities_used: entity_set.keys().map(|e| e.0.clone()).collect(),
+                evidence_snippet: None,
+                confidence: 0.9,
+            },
+            retrieval::ReasoningStep {
+                step_number: 3,
+                description: format!(
+                    "Collected {} mentioning chunks across all gathered entities and direct chunk seeds",
+                    chunk_ids.len()
+                ),
+                entities_used: vec![],
+                evidence_snippet: None,
+                confidence: 0.85,
+            },
+            retrieval::ReasoningStep {
+                step_number: 4,
+                description: "Sent assembled entities + relationships + source text to chat backend".to_string(),
+                entities_used: vec![],
+                evidence_snippet: None,
+                confidence,
+            },
+        ];
+
+        Ok(retrieval::ExplainedAnswer {
+            answer,
+            confidence,
+            sources,
+            reasoning_steps,
+            key_entities,
+            query_analysis: None,
+        })
     }
 
     /// Microsoft GraphRAG `local_search`-style query: answer the
