@@ -265,7 +265,15 @@ async fn root(state: Data<AppState>) -> impl Responder {
                 "default": "GET /api/config/default - Get default configuration",
                 "validate": "POST /api/config/validate - Validate configuration without applying"
             },
-            "query": "POST /api/query",
+            "query": {
+                "endpoint": "POST /api/query",
+                "modes": {
+                    "search": "vector similarity over Qdrant (default; fast; no LLM)",
+                    "ask": "graph-aware retrieval + LLM-composed answer",
+                    "explain": "ask + confidence + source attribution + reasoning trace",
+                    "reason": "query decomposition for multi-hop questions"
+                }
+            },
             "documents": {
                 "list": "GET /api/documents",
                 "add": "POST /api/documents",
@@ -329,10 +337,26 @@ async fn health(state: Data<AppState>) -> Result<Json<HealthResponse>, ApiError>
 }
 
 /// Query the knowledge graph
+///
+/// Routes by `mode`:
+/// - `search` (default): Qdrant vector search; returns ranked excerpts.
+///   ~350ms, no LLM call.
+/// - `ask`: graph-aware retrieval + LLM-generated answer. Slower
+///   (LLM round-trip) but produces a synthesized response, not just
+///   excerpts.
+/// - `explain`: same as `ask` plus confidence, source attribution
+///   (chunks + entities + relationships), reasoning steps, and
+///   key entities the answer relied on.
+/// - `reason`: query decomposition for multi-hop questions; sub-queries
+///   are answered and composed. Slowest but best for compound questions.
+///
+/// `ask`/`explain`/`reason` require a configured chat backend (POST /config
+/// with `openai.enabled = true` or `ollama.enabled = true`). Without one
+/// they return 400.
 #[api_operation(
     tag = "query",
     summary = "Query the knowledge graph",
-    description = "Search documents using semantic similarity. Returns ranked results with similarity scores.",
+    description = "Search documents (mode=search, default) or ask the graph-aware engine for an LLM-composed answer (mode=ask|explain|reason).",
     error_code = 400,
     error_code = 500
 )]
@@ -355,6 +379,15 @@ async fn query(
 
     // Increment query count
     *state.query_count.write().await += 1;
+
+    let mode = body.mode.unwrap_or_default();
+
+    // Graph-aware modes: dispatch to graphrag-core. We always also attach
+    // the vector-search hits as `results` so the caller still gets source
+    // excerpts even when reading the LLM `answer`.
+    if !matches!(mode, QueryMode::Search) {
+        return graph_aware_query(&state, &body, mode, start).await;
+    }
 
     #[cfg(feature = "qdrant")]
     if let Some(qdrant) = &state.qdrant {
@@ -390,7 +423,13 @@ async fn query(
 
                 return Ok(Json(QueryResponse {
                     query: body.query.clone(),
+                    mode: mode.as_str().to_string(),
                     results,
+                    answer: None,
+                    confidence: None,
+                    key_entities: None,
+                    reasoning_steps: None,
+                    sources: None,
                     processing_time_ms: processing_time,
                     backend: "qdrant".to_string(),
                 }));
@@ -451,10 +490,161 @@ async fn query(
 
     Ok(Json(QueryResponse {
         query: body.query.clone(),
+        mode: mode.as_str().to_string(),
         results,
+        answer: None,
+        confidence: None,
+        key_entities: None,
+        reasoning_steps: None,
+        sources: None,
         processing_time_ms: processing_time,
         backend: "memory".to_string(),
     }))
+}
+
+/// Graph-aware query path. Dispatches to `GraphRAG::ask`, `ask_explained`,
+/// or `ask_with_reasoning` depending on `mode`. Always also runs a vector
+/// search in parallel so the caller gets `results` (source excerpts) even
+/// when the LLM call drives the `answer`.
+async fn graph_aware_query(
+    state: &AppState,
+    body: &QueryRequest,
+    mode: QueryMode,
+    start: std::time::Instant,
+) -> Result<Json<QueryResponse>, ApiError> {
+    // Pre-compute vector hits (best-effort; failures don't block the
+    // graph path because `answer` is the primary signal here).
+    let vector_results: Vec<QueryResult> = {
+        #[cfg(feature = "qdrant")]
+        if let Some(qdrant) = &state.qdrant {
+            match state.embeddings.generate_single(&body.query).await {
+                Ok(embedding) => match qdrant.search(embedding, body.top_k, None).await {
+                    Ok(results) => results
+                        .into_iter()
+                        .map(|r| QueryResult {
+                            document_id: r.id,
+                            title: r.metadata.title,
+                            similarity: r.score,
+                            excerpt: if r.metadata.text.len() > 200 {
+                                format!("{}...", &r.metadata.text[..200])
+                            } else {
+                                r.metadata.text
+                            },
+                        })
+                        .collect(),
+                    Err(_) => Vec::new(),
+                },
+                Err(_) => Vec::new(),
+            }
+        } else {
+            Vec::new()
+        }
+        #[cfg(not(feature = "qdrant"))]
+        {
+            Vec::new()
+        }
+    };
+
+    let mut graphrag_guard = state.graphrag.write().await;
+    let graphrag = graphrag_guard.as_mut().ok_or_else(|| {
+        ApiError::BadRequest(
+            "Mode requires a configured chat backend. POST /config with \
+             openai.enabled=true or ollama.enabled=true first."
+                .to_string(),
+        )
+    })?;
+
+    match mode {
+        QueryMode::Ask => {
+            let answer = graphrag.ask(&body.query).await.map_err(|e| {
+                tracing::error!(error = %e, "ask() failed");
+                ApiError::InternalError(format!("ask() failed: {}", e))
+            })?;
+            let processing_time = start.elapsed().as_millis() as u64;
+            Ok(Json(QueryResponse {
+                query: body.query.clone(),
+                mode: mode.as_str().to_string(),
+                results: vector_results,
+                answer: Some(answer),
+                confidence: None,
+                key_entities: None,
+                reasoning_steps: None,
+                sources: None,
+                processing_time_ms: processing_time,
+                backend: "graphrag".to_string(),
+            }))
+        },
+        QueryMode::Explain => {
+            let explained = graphrag.ask_explained(&body.query).await.map_err(|e| {
+                tracing::error!(error = %e, "ask_explained() failed");
+                ApiError::InternalError(format!("ask_explained() failed: {}", e))
+            })?;
+            let sources: Vec<SourceReferenceDto> = explained
+                .sources
+                .iter()
+                .map(|s| SourceReferenceDto {
+                    id: s.id.clone(),
+                    kind: match s.source_type {
+                        graphrag_core::retrieval::SourceType::TextChunk => SourceKind::TextChunk,
+                        graphrag_core::retrieval::SourceType::Entity => SourceKind::Entity,
+                        graphrag_core::retrieval::SourceType::Relationship => {
+                            SourceKind::Relationship
+                        },
+                        graphrag_core::retrieval::SourceType::Summary => SourceKind::Summary,
+                    },
+                    excerpt: s.excerpt.clone(),
+                    relevance: s.relevance_score,
+                })
+                .collect();
+            let reasoning_steps: Vec<ReasoningStepDto> = explained
+                .reasoning_steps
+                .iter()
+                .map(|s| ReasoningStepDto {
+                    step: s.step_number,
+                    description: s.description.clone(),
+                    entities_used: s.entities_used.clone(),
+                    evidence: s.evidence_snippet.clone(),
+                    confidence: s.confidence,
+                })
+                .collect();
+            let processing_time = start.elapsed().as_millis() as u64;
+            Ok(Json(QueryResponse {
+                query: body.query.clone(),
+                mode: mode.as_str().to_string(),
+                results: vector_results,
+                answer: Some(explained.answer.clone()),
+                confidence: Some(explained.confidence),
+                key_entities: Some(explained.key_entities.clone()),
+                reasoning_steps: Some(reasoning_steps),
+                sources: Some(sources),
+                processing_time_ms: processing_time,
+                backend: "graphrag".to_string(),
+            }))
+        },
+        QueryMode::Reason => {
+            let answer = graphrag
+                .ask_with_reasoning(&body.query)
+                .await
+                .map_err(|e| {
+                    tracing::error!(error = %e, "ask_with_reasoning() failed");
+                    ApiError::InternalError(format!("ask_with_reasoning() failed: {}", e))
+                })?;
+            let processing_time = start.elapsed().as_millis() as u64;
+            Ok(Json(QueryResponse {
+                query: body.query.clone(),
+                mode: mode.as_str().to_string(),
+                results: vector_results,
+                answer: Some(answer),
+                confidence: None,
+                key_entities: None,
+                reasoning_steps: None,
+                sources: None,
+                processing_time_ms: processing_time,
+                backend: "graphrag".to_string(),
+            }))
+        },
+        QueryMode::Search => unreachable!("search dispatched outside graph_aware_query"),
+    }
 }
 
 /// Add a document to the knowledge graph

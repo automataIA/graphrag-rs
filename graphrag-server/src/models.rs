@@ -13,6 +13,44 @@ use std::fmt;
 // Query Models
 // ============================================================================
 
+/// Query mode — how the server interprets the question.
+///
+/// - `search` (default): pure vector similarity over Qdrant. Fast (~350ms),
+///   returns ranked excerpts. No LLM call. Back-compatible default.
+/// - `ask`: graph-aware retrieval + LLM-generated answer. Calls
+///   `GraphRAG::ask`. Requires a configured chat backend.
+/// - `explain`: like `ask`, but also returns confidence, source attribution
+///   (text-chunk / entity / relationship), reasoning steps, and key entities.
+///   Calls `GraphRAG::ask_explained`.
+/// - `reason`: query decomposition for multi-hop questions; sub-queries are
+///   answered and composed into a final answer. Calls
+///   `GraphRAG::ask_with_reasoning`. Slower than `ask`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum QueryMode {
+    Search,
+    Ask,
+    Explain,
+    Reason,
+}
+
+impl Default for QueryMode {
+    fn default() -> Self {
+        QueryMode::Search
+    }
+}
+
+impl QueryMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            QueryMode::Search => "search",
+            QueryMode::Ask => "ask",
+            QueryMode::Explain => "explain",
+            QueryMode::Reason => "reason",
+        }
+    }
+}
+
 /// Query request
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ApiComponent)]
 #[serde(rename_all = "camelCase")]
@@ -25,6 +63,11 @@ pub struct QueryRequest {
     #[serde(default = "default_top_k")]
     #[schemars(example = "example_top_k")]
     pub top_k: usize,
+
+    /// Retrieval mode. Defaults to `search` for back-compat.
+    /// See [QueryMode] for the full menu and their tradeoffs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<QueryMode>,
 }
 
 fn default_top_k() -> usize {
@@ -61,20 +104,95 @@ fn example_similarity() -> f32 {
     0.85
 }
 
-/// Query response
+/// Type of source reference returned in `explain` mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceKind {
+    TextChunk,
+    Entity,
+    Relationship,
+    Summary,
+}
+
+/// A source the answer relied on. Returned in `explain` mode alongside the
+/// vector-search excerpts so callers can audit which chunks/entities/edges
+/// supported the answer.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ApiComponent)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceReferenceDto {
+    /// Identifier of the source (chunk/entity/relationship id).
+    pub id: String,
+    /// What kind of source this is.
+    pub kind: SourceKind,
+    /// Excerpt or rendered summary of the source.
+    pub excerpt: String,
+    /// Relevance score to the query (0.0-1.0; higher = more relevant).
+    pub relevance: f32,
+}
+
+/// One step in a reasoning trace. Returned in `explain` and `reason` modes.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ApiComponent)]
+#[serde(rename_all = "camelCase")]
+pub struct ReasoningStepDto {
+    /// 1-indexed step number.
+    pub step: u8,
+    /// Human-readable description of what the engine did at this step.
+    pub description: String,
+    /// Entity ids touched at this step.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub entities_used: Vec<String>,
+    /// Snippet of evidence that backed this step.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence: Option<String>,
+    /// Per-step confidence (0.0-1.0).
+    pub confidence: f32,
+}
+
+/// Query response.
+///
+/// `results` is always populated (vector-search hits, ranked). Modes other
+/// than `search` additionally populate `answer` (LLM-composed answer) and,
+/// for `explain`, the full reasoning trace + source attribution.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ApiComponent)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryResponse {
     /// Original query string
     pub query: String,
 
-    /// List of matching results
+    /// Mode the server actually used (echoes the request, or `search` if
+    /// the request omitted `mode`).
+    pub mode: String,
+
+    /// List of matching text-chunk results (vector search hits). Always
+    /// populated.
     pub results: Vec<QueryResult>,
+
+    /// LLM-composed answer. Populated for `ask`, `explain`, `reason` modes.
+    /// `None` for `search` mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answer: Option<String>,
+
+    /// Overall answer confidence (0.0-1.0). Populated for `explain` mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f32>,
+
+    /// Entities that were key to producing the answer. `explain` mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_entities: Option<Vec<String>>,
+
+    /// Reasoning trace (one entry per retrieval/synthesis step). `explain` mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_steps: Option<Vec<ReasoningStepDto>>,
+
+    /// Full source attribution (text chunks + entities + relationships
+    /// the answer relied on). `explain` mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sources: Option<Vec<SourceReferenceDto>>,
 
     /// Processing time in milliseconds
     pub processing_time_ms: u64,
 
-    /// Backend used ("qdrant" or "memory")
+    /// Backend used (`qdrant`, `memory`, or `graphrag` for graph-aware modes).
     pub backend: String,
 }
 
