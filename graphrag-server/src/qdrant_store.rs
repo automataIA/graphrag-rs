@@ -21,8 +21,9 @@
 
 use qdrant_client::{
     qdrant::{
-        CreateCollectionBuilder, DeletePointsBuilder, Distance, Filter, PointStruct, PointsIdsList,
-        SearchPointsBuilder, UpsertPointsBuilder, Value as QdrantValue, VectorParamsBuilder,
+        Condition, CreateCollectionBuilder, DeletePointsBuilder, Distance, Filter, PointStruct,
+        PointsIdsList, ScrollPointsBuilder, SearchPointsBuilder, UpsertPointsBuilder,
+        Value as QdrantValue, VectorParamsBuilder,
     },
     Qdrant,
 };
@@ -64,6 +65,34 @@ pub struct Relationship {
     pub properties: HashMap<String, serde_json::Value>,
 }
 
+/// Wire-format envelope for persisting a single graphrag-core Entity in
+/// Qdrant. We store the whole serde-serialized Entity in `entity_json`
+/// and surface a few flat fields (id/name/type) so basic Qdrant filters
+/// stay possible without parsing JSON. Versioned to make future schema
+/// migrations explicit (currently always 1).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PersistedEntity {
+    pub schema_version: u32,
+    pub id: String,
+    pub name: String,
+    pub entity_type: String,
+    /// Full graphrag-core::Entity round-tripped through serde_json. Treated
+    /// as opaque on the persistence side; loaders deserialize into the
+    /// canonical Entity struct.
+    pub entity_json: serde_json::Value,
+}
+
+/// Wire-format envelope for persisting a single graphrag-core Relationship
+/// in Qdrant. Same pattern as PersistedEntity.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PersistedRelationship {
+    pub schema_version: u32,
+    pub source: String,
+    pub target: String,
+    pub relation_type: String,
+    pub relationship_json: serde_json::Value,
+}
+
 /// Document metadata stored in Qdrant
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentMetadata {
@@ -74,8 +103,44 @@ pub struct DocumentMetadata {
     pub entities: Vec<Entity>,
     pub relationships: Vec<Relationship>,
     pub timestamp: String,
+    /// SHA-256 of the document content (lowercase hex). Used for
+    /// dedup at ingest: if a point with the same hash already exists,
+    /// `add_document` returns its id instead of inserting a duplicate.
+    /// Optional so payloads written by older builds parse cleanly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_hash: Option<String>,
+    /// Caller-supplied id. The Qdrant point id itself is a UUID
+    /// (Qdrant requires UUID/u64 ids); we store the human-supplied
+    /// id separately in the payload so callers can delete by it.
+    /// Optional for back-compat with payloads written before this
+    /// field existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_id: Option<String>,
     #[serde(flatten)]
     pub custom: HashMap<String, serde_json::Value>,
+}
+
+/// Lightweight summary returned by `list_documents` — title, ids,
+/// and a content excerpt are enough for an agent to decide whether
+/// to read the full doc, without paying the bandwidth of every
+/// Qdrant payload field on a fleet-wide list.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentSummary {
+    pub id: String,
+    pub user_id: Option<String>,
+    pub title: String,
+    pub timestamp: String,
+    pub excerpt: String,
+}
+
+/// Render a `RetrievedPoint`'s id into a String. Qdrant ids are either
+/// UUID strings or u64 numbers; both render to a String here so callers
+/// don't have to branch.
+fn point_id_to_string(point: qdrant_client::qdrant::RetrievedPoint) -> Option<String> {
+    match point.id?.point_id_options? {
+        qdrant_client::qdrant::point_id::PointIdOptions::Uuid(s) => Some(s),
+        qdrant_client::qdrant::point_id::PointIdOptions::Num(n) => Some(n.to_string()),
+    }
 }
 
 /// Search result from Qdrant
@@ -286,6 +351,176 @@ impl QdrantStore {
         Ok(())
     }
 
+    /// Look up a Qdrant point id by the caller-supplied user_id. Returns
+    /// the first match (user_id is treated as unique-per-document). Used
+    /// by `delete_document` so callers can refer to documents by the id
+    /// they handed us at ingest, not the internal UUID.
+    pub async fn find_id_by_user_id(&self, user_id: &str) -> Result<Option<String>, QdrantError> {
+        let filter = Filter::must([Condition::matches("user_id", user_id.to_string())]);
+        let resp = self
+            .client
+            .scroll(
+                ScrollPointsBuilder::new(&self.collection_name)
+                    .filter(filter)
+                    .with_payload(false)
+                    .with_vectors(false)
+                    .limit(1u32),
+            )
+            .await
+            .map_err(|e| QdrantError::OperationError(e.to_string()))?;
+        Ok(resp.result.into_iter().next().and_then(point_id_to_string))
+    }
+
+    /// Look up an existing point by content hash. Returns the Qdrant
+    /// point id (and stored DocumentMetadata) if a match exists. Drives
+    /// dedup at ingest: same content → same point, no duplicate.
+    pub async fn find_by_content_hash(
+        &self,
+        hash: &str,
+    ) -> Result<Option<(String, DocumentMetadata)>, QdrantError> {
+        let filter = Filter::must([Condition::matches("content_hash", hash.to_string())]);
+        let resp = self
+            .client
+            .scroll(
+                ScrollPointsBuilder::new(&self.collection_name)
+                    .filter(filter)
+                    .with_payload(true)
+                    .with_vectors(false)
+                    .limit(1u32),
+            )
+            .await
+            .map_err(|e| QdrantError::OperationError(e.to_string()))?;
+        let Some(point) = resp.result.into_iter().next() else {
+            return Ok(None);
+        };
+        let id = match point_id_to_string(point.clone()) {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+        let payload_value = serde_json::to_value(&point.payload)
+            .map_err(|e| QdrantError::OperationError(e.to_string()))?;
+        let metadata: DocumentMetadata = serde_json::from_value(payload_value)
+            .map_err(|e| QdrantError::OperationError(e.to_string()))?;
+        Ok(Some((id, metadata)))
+    }
+
+    /// List documents stored in Qdrant. Pages through the collection
+    /// using scroll; capped at `limit` to keep responses bounded.
+    /// Returns lightweight summaries (id, title, timestamp, excerpt) —
+    /// callers needing full text should query individual points.
+    pub async fn list_documents(&self, limit: u32) -> Result<Vec<DocumentSummary>, QdrantError> {
+        let mut summaries = Vec::new();
+        let mut offset: Option<qdrant_client::qdrant::PointId> = None;
+        let page_size = limit.min(256).max(1);
+
+        while summaries.len() < limit as usize {
+            let mut builder = ScrollPointsBuilder::new(&self.collection_name)
+                .with_payload(true)
+                .with_vectors(false)
+                .limit(page_size);
+            if let Some(off) = offset.take() {
+                builder = builder.offset(off);
+            }
+            let resp = self
+                .client
+                .scroll(builder)
+                .await
+                .map_err(|e| QdrantError::OperationError(e.to_string()))?;
+
+            if resp.result.is_empty() {
+                break;
+            }
+            for point in resp.result {
+                let id = match point_id_to_string(point.clone()) {
+                    Some(s) => s,
+                    None => continue,
+                };
+                let payload_value = match serde_json::to_value(&point.payload) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+                let md: DocumentMetadata = match serde_json::from_value(payload_value) {
+                    Ok(m) => m,
+                    Err(_) => continue,
+                };
+                let excerpt = md.text.chars().take(160).collect::<String>();
+                summaries.push(DocumentSummary {
+                    id,
+                    user_id: md.user_id,
+                    title: md.title,
+                    timestamp: md.timestamp,
+                    excerpt,
+                });
+                if summaries.len() >= limit as usize {
+                    break;
+                }
+            }
+            offset = resp.next_page_offset;
+            if offset.is_none() {
+                break;
+            }
+        }
+
+        Ok(summaries)
+    }
+
+    /// Scroll through the collection returning full DocumentMetadata payloads.
+    /// Unlike `list_documents` (which returns lightweight summaries with a
+    /// 160-char excerpt), this returns the full text so callers can rechunk
+    /// it for graph hydration on startup. `limit` caps the total returned;
+    /// pass a generous value (e.g. 1_000_000) to drain the whole collection.
+    pub async fn list_full_documents(
+        &self,
+        limit: u32,
+    ) -> Result<Vec<(String, DocumentMetadata)>, QdrantError> {
+        let mut docs = Vec::new();
+        let mut offset: Option<qdrant_client::qdrant::PointId> = None;
+        let page_size = limit.min(256).max(1);
+
+        while docs.len() < limit as usize {
+            let mut builder = ScrollPointsBuilder::new(&self.collection_name)
+                .with_payload(true)
+                .with_vectors(false)
+                .limit(page_size);
+            if let Some(off) = offset.take() {
+                builder = builder.offset(off);
+            }
+            let resp = self
+                .client
+                .scroll(builder)
+                .await
+                .map_err(|e| QdrantError::OperationError(e.to_string()))?;
+
+            if resp.result.is_empty() {
+                break;
+            }
+            for point in resp.result {
+                let id = match point_id_to_string(point.clone()) {
+                    Some(s) => s,
+                    None => continue,
+                };
+                let payload_value = match serde_json::to_value(&point.payload) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+                let md: DocumentMetadata = match serde_json::from_value(payload_value) {
+                    Ok(m) => m,
+                    Err(_) => continue,
+                };
+                docs.push((id, md));
+                if docs.len() >= limit as usize {
+                    break;
+                }
+            }
+            offset = resp.next_page_offset;
+            if offset.is_none() {
+                break;
+            }
+        }
+
+        Ok(docs)
+    }
+
     /// Clear all documents from collection
     #[allow(dead_code)]
     pub async fn clear(&self) -> Result<(), QdrantError> {
@@ -314,6 +549,298 @@ impl QdrantStore {
         self.create_collection(dimension).await?;
 
         Ok(())
+    }
+
+    /// Name of the Qdrant collection that backs entity persistence.
+    /// Suffixed off the main collection so a deployment with multiple
+    /// graphrag-server instances against the same Qdrant cleanly isolates
+    /// per-collection graphs (e.g. `graphrag` + `graphrag-entities`).
+    pub fn entities_collection(&self) -> String {
+        format!("{}-entities", self.collection_name)
+    }
+
+    /// Name of the Qdrant collection that backs relationship persistence.
+    pub fn relationships_collection(&self) -> String {
+        format!("{}-relationships", self.collection_name)
+    }
+
+    /// Create the entity + relationship sidecar collections if they don't
+    /// already exist, with the supplied vector dimension. Idempotent —
+    /// existing collections are left alone (even if their dim differs).
+    /// To migrate an existing deploy from a different dim, call
+    /// `clear_graph_collections` instead, which delete-and-recreates.
+    ///
+    /// Currently unused at the call sites: `clear_graph_collections`
+    /// recreates from scratch on every persist, which already covers
+    /// the bootstrap case. Kept public for a future incremental upsert
+    /// path that wants to pre-warm the schema without dropping data.
+    #[allow(dead_code)]
+    pub async fn ensure_graph_collections(&self, dimension: u64) -> Result<(), QdrantError> {
+        for name in [self.entities_collection(), self.relationships_collection()] {
+            match self.client.collection_info(&name).await {
+                Ok(_) => {},
+                Err(_) => {
+                    self.client
+                        .create_collection(
+                            CreateCollectionBuilder::new(&name).vectors_config(
+                                VectorParamsBuilder::new(dimension, Distance::Cosine),
+                            ),
+                        )
+                        .await
+                        .map_err(|e| QdrantError::CollectionError(e.to_string()))?;
+                },
+            }
+        }
+        Ok(())
+    }
+
+    /// Wipe the entity + relationship sidecar collections and recreate
+    /// them at the supplied dimension. Used by `persist_graph` so a full
+    /// rebuild leaves no stale entries behind, and so a deploy that
+    /// previously ran with placeholder 1-D vectors gets rebuilt with
+    /// real-dimensional vectors on the next build.
+    ///
+    /// Robust against Qdrant's eventual-consistency on collection
+    /// deletion: a `delete_collection` can return Ok before the
+    /// namespace is actually freed, so a follow-up `create_collection`
+    /// can fail with "already exists." This impl retries the delete +
+    /// create once with a short sleep when create errors — observed
+    /// in the wild leaving the entities collection wiped but never
+    /// repopulated, which is silent data loss against the in-memory
+    /// graph.
+    pub async fn clear_graph_collections(&self, dimension: u64) -> Result<(), QdrantError> {
+        for name in [self.entities_collection(), self.relationships_collection()] {
+            self.recreate_collection(&name, dimension).await?;
+        }
+        Ok(())
+    }
+
+    async fn recreate_collection(&self, name: &str, dimension: u64) -> Result<(), QdrantError> {
+        let _ = self.client.delete_collection(name).await;
+        let first_attempt = self
+            .client
+            .create_collection(
+                CreateCollectionBuilder::new(name)
+                    .vectors_config(VectorParamsBuilder::new(dimension, Distance::Cosine)),
+            )
+            .await;
+        if first_attempt.is_ok() {
+            return Ok(());
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        let _ = self.client.delete_collection(name).await;
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        self.client
+            .create_collection(
+                CreateCollectionBuilder::new(name)
+                    .vectors_config(VectorParamsBuilder::new(dimension, Distance::Cosine)),
+            )
+            .await
+            .map_err(|e| QdrantError::CollectionError(format!("recreate {name}: {e}")))?;
+        Ok(())
+    }
+
+    /// Vector-search the entity sidecar collection. Returns
+    /// `(entity_id, score)` pairs where `entity_id` is the stable
+    /// graphrag-core `EntityId` string (read out of the persisted
+    /// payload, NOT the Qdrant point UUID). `limit` is the top-K.
+    /// Returns an empty Vec if the collection doesn't exist.
+    ///
+    /// Primitive behind MS GraphRAG-style local_search.
+    pub async fn search_entities(
+        &self,
+        query_embedding: Vec<f32>,
+        limit: usize,
+    ) -> Result<Vec<(String, f32)>, QdrantError> {
+        let coll = self.entities_collection();
+        if self.client.collection_info(&coll).await.is_err() {
+            return Ok(Vec::new());
+        }
+        let resp = self
+            .client
+            .search_points(
+                SearchPointsBuilder::new(&coll, query_embedding, limit as u64).with_payload(true),
+            )
+            .await
+            .map_err(|e| QdrantError::OperationError(e.to_string()))?;
+
+        let mut out = Vec::new();
+        for point in resp.result {
+            let score = point.score;
+            let payload_value = match serde_json::to_value(&point.payload) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let entity_id = match payload_value.get("id").and_then(|v| v.as_str()) {
+                Some(s) => s.to_string(),
+                None => continue,
+            };
+            out.push((entity_id, score));
+        }
+        Ok(out)
+    }
+
+    /// Persist (entities, relationships) to their sidecar collections,
+    /// each row carrying a real description embedding so the collections
+    /// double as a vector index over the entity / relationship graph.
+    /// Mirrors Microsoft GraphRAG's `final_entities.parquet` +
+    /// `description_embedding` column convention: enables semantic
+    /// seed-point retrieval (find entities similar to query, walk the
+    /// graph from there) — the engine behind MS's `local_search`.
+    ///
+    /// Strategy: clear-and-repopulate at the supplied dimension. The
+    /// in-memory graph is the source of truth at the moment of this
+    /// call; anything not present is removed from persistence.
+    ///
+    /// Each `(payload, embedding)` pair gets a deterministic UUID5
+    /// point id derived from its stable identity (entity id, or
+    /// `source|relation|target` for relationships) so a future
+    /// incremental upsert path can target individual rows without
+    /// reading the whole collection.
+    pub async fn persist_graph(
+        &self,
+        entity_payloads: Vec<(PersistedEntity, Vec<f32>)>,
+        relationship_payloads: Vec<(PersistedRelationship, Vec<f32>)>,
+        dimension: u64,
+    ) -> Result<(usize, usize), QdrantError> {
+        self.clear_graph_collections(dimension).await?;
+
+        if !entity_payloads.is_empty() {
+            let points: Vec<PointStruct> = entity_payloads
+                .iter()
+                .map(|(e, embedding)| {
+                    let pid = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, e.id.as_bytes())
+                        .to_string();
+                    let payload_value = serde_json::to_value(e).unwrap_or(serde_json::json!({}));
+                    let payload_map: HashMap<String, QdrantValue> = payload_value
+                        .as_object()
+                        .cloned()
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|(k, v)| (k, QdrantValue::from(v)))
+                        .collect();
+                    PointStruct::new(pid, embedding.clone(), payload_map)
+                })
+                .collect();
+            self.client
+                .upsert_points(UpsertPointsBuilder::new(self.entities_collection(), points))
+                .await
+                .map_err(|e| QdrantError::OperationError(e.to_string()))?;
+        }
+
+        if !relationship_payloads.is_empty() {
+            let points: Vec<PointStruct> = relationship_payloads
+                .iter()
+                .map(|(r, embedding)| {
+                    let stable = format!("{}|{}|{}", r.source, r.relation_type, r.target);
+                    let pid = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, stable.as_bytes())
+                        .to_string();
+                    let payload_value = serde_json::to_value(r).unwrap_or(serde_json::json!({}));
+                    let payload_map: HashMap<String, QdrantValue> = payload_value
+                        .as_object()
+                        .cloned()
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|(k, v)| (k, QdrantValue::from(v)))
+                        .collect();
+                    PointStruct::new(pid, embedding.clone(), payload_map)
+                })
+                .collect();
+            self.client
+                .upsert_points(UpsertPointsBuilder::new(
+                    self.relationships_collection(),
+                    points,
+                ))
+                .await
+                .map_err(|e| QdrantError::OperationError(e.to_string()))?;
+        }
+
+        Ok((entity_payloads.len(), relationship_payloads.len()))
+    }
+
+    /// Load all persisted entities by scrolling the entities sidecar
+    /// collection. Returns the wire-format envelopes; callers
+    /// (graphrag-server::config_endpoints::set_config) deserialize
+    /// `entity_json` into graphrag-core::Entity. Tolerates a missing
+    /// collection (returns empty vec) so first-run hydration doesn't
+    /// require pre-creating the sidecar.
+    pub async fn load_persisted_entities(&self) -> Result<Vec<PersistedEntity>, QdrantError> {
+        let coll = self.entities_collection();
+        if self.client.collection_info(&coll).await.is_err() {
+            return Ok(Vec::new());
+        }
+        let mut out = Vec::new();
+        let mut offset: Option<qdrant_client::qdrant::PointId> = None;
+        loop {
+            let mut builder = ScrollPointsBuilder::new(&coll)
+                .with_payload(true)
+                .with_vectors(false)
+                .limit(256u32);
+            if let Some(off) = offset.take() {
+                builder = builder.offset(off);
+            }
+            let resp = self
+                .client
+                .scroll(builder)
+                .await
+                .map_err(|e| QdrantError::OperationError(e.to_string()))?;
+            if resp.result.is_empty() {
+                break;
+            }
+            for point in resp.result {
+                if let Ok(v) = serde_json::to_value(&point.payload) {
+                    if let Ok(p) = serde_json::from_value::<PersistedEntity>(v) {
+                        out.push(p);
+                    }
+                }
+            }
+            offset = resp.next_page_offset;
+            if offset.is_none() {
+                break;
+            }
+        }
+        Ok(out)
+    }
+
+    /// Load all persisted relationships. Mirror of `load_persisted_entities`.
+    pub async fn load_persisted_relationships(
+        &self,
+    ) -> Result<Vec<PersistedRelationship>, QdrantError> {
+        let coll = self.relationships_collection();
+        if self.client.collection_info(&coll).await.is_err() {
+            return Ok(Vec::new());
+        }
+        let mut out = Vec::new();
+        let mut offset: Option<qdrant_client::qdrant::PointId> = None;
+        loop {
+            let mut builder = ScrollPointsBuilder::new(&coll)
+                .with_payload(true)
+                .with_vectors(false)
+                .limit(256u32);
+            if let Some(off) = offset.take() {
+                builder = builder.offset(off);
+            }
+            let resp = self
+                .client
+                .scroll(builder)
+                .await
+                .map_err(|e| QdrantError::OperationError(e.to_string()))?;
+            if resp.result.is_empty() {
+                break;
+            }
+            for point in resp.result {
+                if let Ok(v) = serde_json::to_value(&point.payload) {
+                    if let Ok(p) = serde_json::from_value::<PersistedRelationship>(v) {
+                        out.push(p);
+                    }
+                }
+            }
+            offset = resp.next_page_offset;
+            if offset.is_none() {
+                break;
+            }
+        }
+        Ok(out)
     }
 
     /// Get collection statistics
@@ -366,6 +893,8 @@ mod tests {
             entities: vec![],
             relationships: vec![],
             timestamp: chrono::Utc::now().to_rfc3339(),
+            content_hash: None,
+            user_id: None,
             custom: HashMap::new(),
         };
 
