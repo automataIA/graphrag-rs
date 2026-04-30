@@ -8,6 +8,7 @@
 //!
 //! Reference: LangChain SemanticChunker, Greg Kamradt's 5 Levels of Text Splitting
 
+use crate::core::traits::DynEmbedder;
 use crate::core::Result;
 use crate::vector::EmbeddingGenerator;
 
@@ -78,6 +79,10 @@ impl Default for SemanticChunkerConfig {
 pub struct SemanticChunker {
     config: SemanticChunkerConfig,
     embedding_generator: EmbeddingGenerator,
+    /// Optional injected embedding service. When `Some`, sentence
+    /// embeddings come from the host's real embedder (mxbai etc.)
+    /// rather than the hash-based fallback.
+    embedding_provider: Option<DynEmbedder>,
 }
 
 impl SemanticChunker {
@@ -86,11 +91,18 @@ impl SemanticChunker {
         Self {
             config,
             embedding_generator,
+            embedding_provider: None,
         }
     }
 
+    /// Inject a real embedding provider. Subsequent chunking calls embed
+    /// sentences via this provider instead of the hash fallback.
+    pub fn set_embedding_provider(&mut self, provider: DynEmbedder) {
+        self.embedding_provider = Some(provider);
+    }
+
     /// Split text into semantic chunks
-    pub fn chunk(&mut self, text: &str) -> Result<Vec<SemanticChunk>> {
+    pub async fn chunk(&mut self, text: &str) -> Result<Vec<SemanticChunk>> {
         // 1. Split into sentences
         let sentences = self.split_sentences(text);
 
@@ -108,7 +120,7 @@ impl SemanticChunker {
         }
 
         // 2. Generate embeddings for each sentence
-        let embeddings = self.embed_sentences(&sentences)?;
+        let embeddings = self.embed_sentences(&sentences).await?;
 
         // 3. Calculate similarity differences between consecutive sentences
         let similarity_diffs = self.calculate_similarity_differences(&embeddings);
@@ -163,12 +175,17 @@ impl SemanticChunker {
         sentences
     }
 
-    /// Generate embeddings for all sentences
-    fn embed_sentences(&mut self, sentences: &[String]) -> Result<Vec<Vec<f32>>> {
+    /// Generate embeddings for all sentences. Uses the injected provider
+    /// when present; falls back to the hash-based generator otherwise.
+    async fn embed_sentences(&mut self, sentences: &[String]) -> Result<Vec<Vec<f32>>> {
         let mut embeddings = Vec::new();
 
         for sentence in sentences {
-            let embedding = self.embedding_generator.generate_embedding(sentence);
+            let embedding = if let Some(provider) = self.embedding_provider.clone() {
+                provider.embed(sentence).await?
+            } else {
+                self.embedding_generator.generate_embedding(sentence)
+            };
             embeddings.push(embedding);
         }
 
@@ -392,8 +409,8 @@ mod tests {
         assert!((threshold - 0.5).abs() < 0.001); // Should be mean when std=0
     }
 
-    #[test]
-    fn test_semantic_chunking_basic() {
+    #[tokio::test]
+    async fn test_semantic_chunking_basic() {
         let config = SemanticChunkerConfig {
             breakpoint_strategy: BreakpointStrategy::Percentile,
             threshold_amount: 50.0, // Lower threshold for testing
@@ -408,7 +425,7 @@ mod tests {
         let text = "Alice loves programming. Bob also codes daily. \
                     The weather is sunny. Rain is expected tomorrow.";
 
-        let chunks = chunker.chunk(text).unwrap();
+        let chunks = chunker.chunk(text).await.unwrap();
 
         // Should create at least 1 chunk
         assert!(!chunks.is_empty());

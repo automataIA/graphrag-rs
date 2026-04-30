@@ -61,6 +61,16 @@ pub async fn set_config(
     let mut graphrag = graphrag_core::GraphRAG::new(config)
         .map_err(|e| ApiError::InternalError(format!("GraphRAG init failed: {}", e)))?;
 
+    // Inject the server's real embedding service into graphrag-core BEFORE
+    // initialize() runs. Replaces graphrag-core's hash-based dummy embedder
+    // for every internal embedding call (query embedding in hybrid_query,
+    // sentence embedding in semantic chunking, entity/chunk embeddings
+    // during build_graph). Without this, paths like mode=reason walked the
+    // entity graph but matched entities with toy 128-dim hash vectors
+    // despite the real mxbai embeddings being right here in
+    // `state.embeddings`.
+    graphrag.set_embedding_provider(state.embeddings.clone());
+
     graphrag
         .initialize()
         .map_err(|e| ApiError::InternalError(format!("GraphRAG initialization failed: {}", e)))?;

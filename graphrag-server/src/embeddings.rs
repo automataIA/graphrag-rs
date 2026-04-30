@@ -272,6 +272,44 @@ impl EmbeddingService {
     }
 }
 
+// Bridge `EmbeddingService` (the server's real, multi-backend embedder)
+// into graphrag-core's `AsyncEmbedder` trait. With this impl, the server
+// can hand its `Arc<EmbeddingService>` to `GraphRAG::set_embedding_provider`
+// and every internal embedding call inside graphrag-core (query embedding
+// in `hybrid_query`, sentence embedding in `SemanticChunker`, etc.) routes
+// through this real service instead of the hash-based dummy generator.
+#[async_trait::async_trait]
+impl graphrag_core::core::traits::AsyncEmbedder for EmbeddingService {
+    type Error = graphrag_core::core::GraphRAGError;
+
+    async fn embed(&self, text: &str) -> graphrag_core::Result<Vec<f32>> {
+        self.generate_single(text)
+            .await
+            .map_err(|e| graphrag_core::core::GraphRAGError::Embedding {
+                message: format!("EmbeddingService::generate_single: {}", e),
+            })
+    }
+
+    async fn embed_batch(&self, texts: &[&str]) -> graphrag_core::Result<Vec<Vec<f32>>> {
+        self.generate(texts)
+            .await
+            .map_err(|e| graphrag_core::core::GraphRAGError::Embedding {
+                message: format!("EmbeddingService::generate: {}", e),
+            })
+    }
+
+    fn dimension(&self) -> usize {
+        self.config.dimension
+    }
+
+    async fn is_ready(&self) -> bool {
+        // The service self-tests its backends in `new()` (probe + fallback);
+        // by the time we hand it to core it's always ready in the sense
+        // that embed() will succeed (real backend or hash fallback).
+        true
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -295,6 +295,13 @@ pub struct GraphRAG {
     /// chunks" filter; everything else still iterates over
     /// `knowledge_graph.chunks()` directly.
     processed_chunks: std::collections::HashSet<core::ChunkId>,
+    /// Optional injected real embedding service (e.g. graphrag-server's
+    /// mxbai-via-OVMS / Ollama / OpenAI-compat backend). Set via
+    /// `set_embedding_provider`; propagated into `retrieval_system` so
+    /// every internal embedding call uses the real provider instead of
+    /// the hash-based dummy `EmbeddingGenerator`. `None` means tests /
+    /// standalone use — fall back to dummy.
+    embedding_provider: Option<core::traits::DynEmbedder>,
     #[cfg(feature = "parallel-processing")]
     #[allow(dead_code)]
     parallel_processor: Option<parallel::ParallelProcessor>,
@@ -392,9 +399,23 @@ impl GraphRAG {
             query_planner: None,
             critic: None,
             processed_chunks: std::collections::HashSet::new(),
+            embedding_provider: None,
             #[cfg(feature = "parallel-processing")]
             parallel_processor: None,
         })
+    }
+
+    /// Inject a real embedding service. Call this once after
+    /// `GraphRAG::new(config)` (or after `initialize()`) and before
+    /// the first query. The provider is propagated into the retrieval
+    /// system so every internal embedding call uses the real service.
+    /// Without injection, retrieval falls back to a hash-based dummy
+    /// embedder — fine for tests, useless for real grounding.
+    pub fn set_embedding_provider(&mut self, provider: core::traits::DynEmbedder) {
+        self.embedding_provider = Some(provider.clone());
+        if let Some(rs) = self.retrieval_system.as_mut() {
+            rs.set_embedding_provider(provider);
+        }
     }
 
     /// Create a Zero-Config local GraphRAG instance
@@ -439,7 +460,14 @@ impl GraphRAG {
             self.knowledge_graph = Some(KnowledgeGraph::new());
         }
 
-        self.retrieval_system = Some(retrieval::RetrievalSystem::new(&self.config)?);
+        let mut rs = retrieval::RetrievalSystem::new(&self.config)?;
+        // Propagate any provider that was set BEFORE initialize() into
+        // the freshly-constructed retrieval system. Order-independence:
+        // hosts can call set_embedding_provider before or after init.
+        if let Some(provider) = self.embedding_provider.clone() {
+            rs.set_embedding_provider(provider);
+        }
+        self.retrieval_system = Some(rs);
 
         if self.config.ollama.enabled {
             let client = ollama::OllamaClient::new(self.config.ollama.clone());

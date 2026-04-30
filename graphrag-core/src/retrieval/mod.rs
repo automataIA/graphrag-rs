@@ -18,7 +18,7 @@ pub mod symbolic_anchoring;
 use crate::parallel::ParallelProcessor;
 use crate::{
     config::Config,
-    core::{ChunkId, EntityId, KnowledgeGraph},
+    core::{traits::DynEmbedder, ChunkId, EntityId, KnowledgeGraph},
     summarization::DocumentTree,
     vector::{EmbeddingGenerator, VectorUtils},
     Result,
@@ -41,6 +41,13 @@ use crate::vector::store::VectorStore;
 pub struct RetrievalSystem {
     vector_store: std::sync::Arc<dyn VectorStore>,
     embedding_generator: EmbeddingGenerator,
+    /// Optional injected embedding service. When `Some`, every internal
+    /// embedding call (query-time and index-time) uses this provider
+    /// instead of the dummy hash-based `embedding_generator`. The host
+    /// (e.g. graphrag-server) injects its real mxbai / OVMS / Ollama
+    /// service via `set_embedding_provider`. When `None` (tests,
+    /// standalone use), we fall back to the hash-based generator.
+    embedding_provider: Option<DynEmbedder>,
     config: RetrievalConfig,
     #[cfg(feature = "parallel-processing")]
     parallel_processor: Option<ParallelProcessor>,
@@ -75,6 +82,7 @@ impl RetrievalSystem {
         Ok(Self {
             vector_store,
             embedding_generator: EmbeddingGenerator::new(128), // 128-dimensional embeddings
+            embedding_provider: None,
             config: retrieval_config,
             #[cfg(feature = "parallel-processing")]
             parallel_processor: None,
@@ -84,6 +92,24 @@ impl RetrievalSystem {
             #[cfg(feature = "lazygraphrag")]
             concept_filtering_enabled: false,
         })
+    }
+
+    /// Inject a real embedding provider. After this is called, every
+    /// internal call to `embed_text` / `embed_batch` will route through
+    /// the provider instead of the dummy hash generator.
+    pub fn set_embedding_provider(&mut self, provider: DynEmbedder) {
+        self.embedding_provider = Some(provider);
+    }
+
+    /// Embed a single text. Prefers the injected provider; falls back to
+    /// the hash-based generator. Use this everywhere instead of calling
+    /// `embedding_generator.generate_embedding` directly.
+    async fn embed_text(&mut self, text: &str) -> Result<Vec<f32>> {
+        if let Some(provider) = self.embedding_provider.clone() {
+            provider.embed(text).await
+        } else {
+            Ok(self.embedding_generator.generate_embedding(text))
+        }
     }
 }
 
@@ -499,6 +525,7 @@ impl RetrievalSystem {
         Ok(Self {
             vector_store,
             embedding_generator,
+            embedding_provider: None,
             config: retrieval_config,
             parallel_processor: Some(parallel_processor),
             #[cfg(feature = "pagerank")]
@@ -666,8 +693,8 @@ impl RetrievalSystem {
         // 1. Analyze query to determine optimal strategy
         let analysis = self.analyze_query(query, graph)?;
 
-        // 2. Generate query embedding
-        let query_embedding = self.embedding_generator.generate_embedding(query);
+        // 2. Generate query embedding (real provider when injected; dummy fallback)
+        let query_embedding = self.embed_text(query).await?;
 
         // 3. Execute multi-strategy retrieval based on analysis
         let mut results = self
@@ -692,8 +719,8 @@ impl RetrievalSystem {
         query: &str,
         graph: &KnowledgeGraph,
     ) -> Result<Vec<SearchResult>> {
-        // 1. Generate query embedding
-        let query_embedding = self.embedding_generator.generate_embedding(query);
+        // 1. Generate query embedding (real provider when injected; dummy fallback)
+        let query_embedding = self.embed_text(query).await?;
 
         // 2. Perform comprehensive search
         let results = self.comprehensive_search(&query_embedding, graph).await?;
@@ -748,17 +775,17 @@ impl RetrievalSystem {
             );
         }
 
-        // Process chunks
+        // Process chunks (real provider when injected; dummy fallback)
         for (chunk_id, text) in chunk_texts {
-            let embedding = self.embedding_generator.generate_embedding(&text);
+            let embedding = self.embed_text(&text).await?;
             if let Some(chunk) = graph.get_chunk_mut(&chunk_id) {
                 chunk.embedding = Some(embedding);
             }
         }
 
-        // Process entities
+        // Process entities (real provider when injected; dummy fallback)
         for (entity_id, text) in entity_texts {
-            let embedding = self.embedding_generator.generate_embedding(&text);
+            let embedding = self.embed_text(&text).await?;
             if let Some(entity) = graph.get_entity_mut(&entity_id) {
                 entity.embedding = Some(embedding);
             }
@@ -772,28 +799,34 @@ impl RetrievalSystem {
 
     /// Sequential embedding generation (fallback)
     async fn add_embeddings_sequential(&mut self, graph: &mut KnowledgeGraph) -> Result<()> {
-        // Debug: Check total counts first (uncomment for debugging)
-        let _total_chunks = graph.chunks().count();
-        let _total_entities = graph.entities().count();
-        // println!("DEBUG: Found {} total chunks and {} total entities in graph", _total_chunks, _total_entities);
+        // Collect texts up-front so we don't hold an iterator borrow on
+        // `graph` across `await` points.
+        let chunk_texts: Vec<(ChunkId, String)> = graph
+            .chunks()
+            .filter(|c| c.embedding.is_none())
+            .map(|c| (c.id.clone(), c.content.clone()))
+            .collect();
+        let entity_texts: Vec<(EntityId, String)> = graph
+            .entities()
+            .filter(|e| e.embedding.is_none())
+            .map(|e| (e.id.clone(), format!("{} {}", e.name, e.entity_type)))
+            .collect();
 
-        // Generate embeddings for all chunks
+        // Generate embeddings for chunks (real provider when injected; dummy fallback)
         let mut chunk_count = 0;
-        for chunk in graph.chunks_mut() {
-            if chunk.embedding.is_none() {
-                let embedding = self.embedding_generator.generate_embedding(&chunk.content);
+        for (chunk_id, text) in chunk_texts {
+            let embedding = self.embed_text(&text).await?;
+            if let Some(chunk) = graph.get_chunk_mut(&chunk_id) {
                 chunk.embedding = Some(embedding);
                 chunk_count += 1;
             }
         }
 
-        // Generate embeddings for all entities (using their name and context)
+        // Generate embeddings for entities (real provider when injected; dummy fallback)
         let mut entity_count = 0;
-        for entity in graph.entities_mut() {
-            if entity.embedding.is_none() {
-                // Create entity text from name and entity type
-                let entity_text = format!("{} {}", entity.name, entity.entity_type);
-                let embedding = self.embedding_generator.generate_embedding(&entity_text);
+        for (entity_id, text) in entity_texts {
+            let embedding = self.embed_text(&text).await?;
+            if let Some(entity) = graph.get_entity_mut(&entity_id) {
                 entity.embedding = Some(embedding);
                 entity_count += 1;
             }
@@ -803,7 +836,6 @@ impl RetrievalSystem {
             "Generated embeddings for {chunk_count} chunks and {entity_count} entities"
         );
 
-        // Re-index the graph with new embeddings
         // Re-index the graph with new embeddings
         self.index_graph(graph).await?;
 
