@@ -436,6 +436,63 @@ impl QdrantStore {
         Ok(summaries)
     }
 
+    /// Scroll through the collection returning full DocumentMetadata payloads.
+    /// Unlike `list_documents` (which returns lightweight summaries with a
+    /// 160-char excerpt), this returns the full text so callers can rechunk
+    /// it for graph hydration on startup. `limit` caps the total returned;
+    /// pass a generous value (e.g. 1_000_000) to drain the whole collection.
+    pub async fn list_full_documents(
+        &self,
+        limit: u32,
+    ) -> Result<Vec<(String, DocumentMetadata)>, QdrantError> {
+        let mut docs = Vec::new();
+        let mut offset: Option<qdrant_client::qdrant::PointId> = None;
+        let page_size = limit.min(256).max(1);
+
+        while docs.len() < limit as usize {
+            let mut builder = ScrollPointsBuilder::new(&self.collection_name)
+                .with_payload(true)
+                .with_vectors(false)
+                .limit(page_size);
+            if let Some(off) = offset.take() {
+                builder = builder.offset(off);
+            }
+            let resp = self
+                .client
+                .scroll(builder)
+                .await
+                .map_err(|e| QdrantError::OperationError(e.to_string()))?;
+
+            if resp.result.is_empty() {
+                break;
+            }
+            for point in resp.result {
+                let id = match point_id_to_string(point.clone()) {
+                    Some(s) => s,
+                    None => continue,
+                };
+                let payload_value = match serde_json::to_value(&point.payload) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+                let md: DocumentMetadata = match serde_json::from_value(payload_value) {
+                    Ok(m) => m,
+                    Err(_) => continue,
+                };
+                docs.push((id, md));
+                if docs.len() >= limit as usize {
+                    break;
+                }
+            }
+            offset = resp.next_page_offset;
+            if offset.is_none() {
+                break;
+            }
+        }
+
+        Ok(docs)
+    }
+
     /// Clear all documents from collection
     #[allow(dead_code)]
     pub async fn clear(&self) -> Result<(), QdrantError> {

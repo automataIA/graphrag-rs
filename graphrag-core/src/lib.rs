@@ -1322,6 +1322,28 @@ impl GraphRAG {
         self.processed_chunks.len()
     }
 
+    /// Seed `processed_chunks` with chunk ids that have *already* been
+    /// extracted in a prior session.
+    ///
+    /// Intended for hydration paths: a host that persists per-document
+    /// state in an external store (e.g. graphrag-server's Qdrant) can
+    /// rebuild the in-memory chunk index by re-chunking the source text
+    /// through `add_document_from_text` and then call this to mark
+    /// those chunks as already-extracted, so the next `extend_graph`
+    /// only operates on truly-new chunks rather than re-extracting the
+    /// whole corpus on every restart.
+    ///
+    /// Idempotent: passing chunk ids already in the set has no effect.
+    /// Chunk ids that aren't present in the in-memory graph are still
+    /// inserted (delta computation in `extend_graph` ignores them
+    /// naturally since it iterates the in-memory chunk set).
+    pub fn seed_processed_chunks<I>(&mut self, chunk_ids: I)
+    where
+        I: IntoIterator<Item = ChunkId>,
+    {
+        self.processed_chunks.extend(chunk_ids);
+    }
+
     /// LLM single-pass extension path — mirrors the LLM single-pass
     /// branch in `build_graph` but operates on the supplied delta
     /// slice instead of every chunk in the graph, and dedupes

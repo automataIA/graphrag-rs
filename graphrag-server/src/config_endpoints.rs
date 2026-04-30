@@ -65,6 +65,93 @@ pub async fn set_config(
         .initialize()
         .map_err(|e| ApiError::InternalError(format!("GraphRAG initialization failed: {}", e)))?;
 
+    // Hydrate from Qdrant: every document already in the persistent store
+    // gets re-chunked and pushed into graphrag-core's in-memory
+    // KnowledgeGraph, then their chunk ids are seeded into
+    // `processed_chunks`. Without this, after a server restart the
+    // in-memory chunk index is empty, /api/graph/build only sees chunks
+    // added since restart (a tiny fraction of the corpus), and
+    // /api/graph/append's no-op fast-path lies about how much has
+    // actually been processed. With it: graph_stats matches Qdrant
+    // truth, build_graph covers the full corpus, append_graph only
+    // re-extracts genuinely-new chunks.
+    let mut hydration_summary = json!({ "documents": 0, "chunks": 0, "skipped": 0 });
+    #[cfg(feature = "qdrant")]
+    if let Some(qdrant) = &state.qdrant {
+        // 1_000_000 is an arbitrary "drain everything" cap — Qdrant's
+        // scroll naturally short-circuits when next_page_offset is None.
+        match qdrant.list_full_documents(1_000_000).await {
+            Ok(docs) => {
+                let mut hydrated_docs = 0usize;
+                let mut skipped = 0usize;
+                let chunks_before = graphrag
+                    .knowledge_graph()
+                    .map(|kg| kg.chunks().count())
+                    .unwrap_or(0);
+                for (_id, md) in &docs {
+                    if md.text.is_empty() {
+                        skipped += 1;
+                        continue;
+                    }
+                    if let Err(e) = graphrag.add_document_from_text(&md.text) {
+                        tracing::warn!(
+                            error = %e,
+                            title = %md.title,
+                            "hydration: add_document_from_text failed; skipping"
+                        );
+                        skipped += 1;
+                        continue;
+                    }
+                    hydrated_docs += 1;
+                }
+                let chunks_after = graphrag
+                    .knowledge_graph()
+                    .map(|kg| kg.chunks().count())
+                    .unwrap_or(chunks_before);
+                let hydrated_chunks = chunks_after.saturating_sub(chunks_before);
+
+                // Mark every chunk we just rebuilt as "already extracted"
+                // so /api/graph/append won't re-run LLM extraction over
+                // the entire restored corpus on its first tick. New
+                // chunks added via /api/documents after this seeding
+                // are NOT in the set yet, so they remain in the
+                // append-graph delta as expected.
+                let chunk_ids: Vec<_> = graphrag
+                    .knowledge_graph()
+                    .map(|kg| kg.chunks().map(|c| c.id.clone()).collect())
+                    .unwrap_or_default();
+                graphrag.seed_processed_chunks(chunk_ids);
+
+                tracing::info!(
+                    "🔄 Hydrated KnowledgeGraph from Qdrant: {} documents, {} chunks ({} skipped)",
+                    hydrated_docs,
+                    hydrated_chunks,
+                    skipped
+                );
+
+                // Mirror processed-chunk count into AppState so /health
+                // and /api/graph/stats reflect the true post-hydration
+                // state, not the empty pre-hydration state.
+                state.processed_chunk_count.store(
+                    graphrag.processed_chunk_count(),
+                    std::sync::atomic::Ordering::SeqCst,
+                );
+
+                hydration_summary = json!({
+                    "documents": hydrated_docs,
+                    "chunks": hydrated_chunks,
+                    "skipped": skipped,
+                });
+            },
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "hydration: list_full_documents failed; starting with empty in-memory graph"
+                );
+            },
+        }
+    }
+
     // Store the initialized GraphRAG
     *state.graphrag.write().await = Some(graphrag);
 
@@ -74,7 +161,8 @@ pub async fn set_config(
         "success": true,
         "message": "GraphRAG initialized with custom configuration",
         "configured": true,
-        "mode": "full_pipeline"
+        "mode": "full_pipeline",
+        "hydrated": hydration_summary,
     })))
 }
 
