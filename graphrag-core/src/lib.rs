@@ -80,6 +80,8 @@ pub mod embeddings;
 pub mod nlp;
 /// Ollama LLM integration
 pub mod ollama;
+pub mod openai;
+pub mod chat;
 /// Persistence layer for knowledge graphs (workspace management always available)
 pub mod persistence;
 /// Query processing and execution
@@ -351,8 +353,9 @@ impl GraphRAG {
 
         self.retrieval_system = Some(retrieval::RetrievalSystem::new(&self.config)?);
 
-        if self.config.ollama.enabled {
-            let client = ollama::OllamaClient::new(self.config.ollama.clone());
+        if let Some(client) =
+            chat::ChatClient::from_config(&self.config.ollama, &self.config.openai)
+        {
             self.query_planner = Some(query::planner::QueryPlanner::new(client));
         }
 
@@ -553,12 +556,12 @@ impl GraphRAG {
             self.config.ollama.enabled
         );
 
-        if self.config.entities.use_gleaning && self.config.ollama.enabled {
+        if self.config.entities.use_gleaning && self.config.chat_enabled() {
             // LLM-based extraction with gleaning
             #[cfg(feature = "async")]
             {
                 use crate::entity::GleaningEntityExtractor;
-                use crate::ollama::OllamaClient;
+                use crate::chat::ChatClient;
 
                 #[cfg(feature = "tracing")]
                 tracing::info!(
@@ -566,8 +569,17 @@ impl GraphRAG {
                     self.config.entities.max_gleaning_rounds
                 );
 
-                // Create Ollama client
-                let client = OllamaClient::new(self.config.ollama.clone());
+                // Pick chat backend (ollama or openai). Skip extraction if neither is enabled.
+                let client = match ChatClient::from_config(&self.config.ollama, &self.config.openai) {
+                    Some(c) => c,
+                    None => {
+                        #[cfg(feature = "tracing")]
+                        tracing::warn!(
+                            "Skipping LLM gleaning: neither config.ollama.enabled nor config.openai.enabled"
+                        );
+                        return Ok(());
+                    },
+                };
 
                 // Create gleaning config from our config
                 let gleaning_config = crate::entity::GleaningConfig {
@@ -828,8 +840,8 @@ impl GraphRAG {
                     );
                 }
             }
-        } else if self.config.ollama.enabled {
-            // LLM single-pass extraction (Ollama enabled, gleaning disabled)
+        } else if self.config.chat_enabled() {
+            // LLM single-pass extraction (chat backend enabled, gleaning disabled)
             //
             // Uses LLMEntityExtractor directly for one extraction round per chunk.
             // num_ctx is calculated dynamically from the built prompt + 20% margin,
@@ -837,7 +849,7 @@ impl GraphRAG {
             #[cfg(feature = "async")]
             {
                 use crate::entity::llm_extractor::LLMEntityExtractor;
-                use crate::ollama::OllamaClient;
+                use crate::chat::ChatClient;
 
                 #[cfg(feature = "tracing")]
                 tracing::info!(
@@ -845,7 +857,16 @@ impl GraphRAG {
                     self.config.ollama.keep_alive,
                 );
 
-                let client = OllamaClient::new(self.config.ollama.clone());
+                let client = match ChatClient::from_config(&self.config.ollama, &self.config.openai) {
+                    Some(c) => c,
+                    None => {
+                        #[cfg(feature = "tracing")]
+                        tracing::warn!(
+                            "Skipping LLM extraction: neither config.ollama.enabled nor config.openai.enabled"
+                        );
+                        return Ok(());
+                    },
+                };
                 let entity_types = if self.config.entities.entity_types.is_empty() {
                     vec![
                         "PERSON".to_string(),
@@ -856,9 +877,25 @@ impl GraphRAG {
                     self.config.entities.entity_types.clone()
                 };
 
+                // Read the cap from whichever backend is the active chat
+                // route — historically this only consulted ollama.* even
+                // when openai was enabled, which silently capped openai
+                // extraction at the ollama default. `None` is honored end
+                // to end and means "no cap" (model stops at EOS).
+                let extraction_max_tokens: Option<usize> = if self.config.openai.enabled {
+                    self.config.openai.max_tokens.map(|n| n as usize)
+                } else {
+                    self.config.ollama.max_tokens.map(|n| n as usize)
+                };
+                let extraction_temperature = if self.config.openai.enabled {
+                    self.config.openai.temperature.unwrap_or(0.1)
+                } else {
+                    self.config.ollama.temperature.unwrap_or(0.1)
+                };
+
                 let extractor = LLMEntityExtractor::new(client, entity_types)
-                    .with_temperature(self.config.ollama.temperature.unwrap_or(0.1))
-                    .with_max_tokens(self.config.ollama.max_tokens.unwrap_or(1500) as usize)
+                    .with_temperature(extraction_temperature)
+                    .with_max_tokens_opt(extraction_max_tokens)
                     .with_keep_alive(self.config.ollama.keep_alive.clone());
 
                 let pb = make_pb(total_chunks as u64,
@@ -1240,7 +1277,7 @@ impl GraphRAG {
             }
         }
 
-        if self.config.ollama.enabled {
+        if self.config.chat_enabled() {
             // Initial synthesis
             let mut current_answer = self
                 .generate_semantic_answer_from_results(query, &unique_results)
@@ -1313,8 +1350,8 @@ impl GraphRAG {
         // Get full search results with metadata
         let search_results = self.query_internal_with_results(query).await?;
 
-        // If Ollama is enabled, generate semantic answer using LLM
-        if self.config.ollama.enabled {
+        // If a chat backend is enabled, generate semantic answer using LLM
+        if self.config.chat_enabled() {
             return self
                 .generate_semantic_answer_from_results(query, &search_results)
                 .await;
@@ -1383,7 +1420,7 @@ impl GraphRAG {
         let search_results = self.query_internal_with_results(query).await?;
 
         // Generate the answer
-        let answer = if self.config.ollama.enabled {
+        let answer = if self.config.chat_enabled() {
             self.generate_semantic_answer_from_results(query, &search_results)
                 .await?
         } else {
@@ -1466,7 +1503,7 @@ impl GraphRAG {
         query: &str,
         search_results: &[retrieval::SearchResult],
     ) -> Result<String> {
-        use crate::ollama::OllamaClient;
+        use crate::chat::ChatClient;
 
         let graph = self
             .knowledge_graph
@@ -1544,8 +1581,11 @@ impl GraphRAG {
             return Ok("No relevant information found in the knowledge graph.".to_string());
         }
 
-        // Create Ollama client
-        let client = OllamaClient::new(self.config.ollama.clone());
+        // Pick chat backend (ollama or openai). Bail early if neither is enabled.
+        let client = ChatClient::from_config(&self.config.ollama, &self.config.openai)
+            .ok_or_else(|| GraphRAGError::Generation {
+                message: "no chat backend enabled (config.ollama.enabled / config.openai.enabled both false)".to_string(),
+            })?;
 
         // Build prompt for semantic answer generation with RAG best practices (2025)
         let prompt = format!(

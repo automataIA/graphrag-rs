@@ -89,6 +89,14 @@ pub struct Config {
     /// Ollama integration configuration
     pub ollama: crate::ollama::OllamaConfig,
 
+    /// OpenAI-compatible chat backend configuration. When `enabled`, takes
+    /// precedence over `ollama` for the chat LLM (entity extraction, query
+    /// planner, gleaning). Embeddings are configured separately via
+    /// graphrag-server's EMBEDDING_BACKEND env. Set this to point at any
+    /// OpenAI-spec server: vLLM, llama-server, OpenAI itself, etc.
+    #[serde(default)]
+    pub openai: crate::openai::OpenAIConfig,
+
     /// GLiNER-Relex extractor configuration
     pub gliner: GlinerConfig,
 
@@ -1489,6 +1497,7 @@ impl Default for Config {
                 parallel_vector_ops: true,
             },
             ollama: crate::ollama::OllamaConfig::default(),
+            openai: crate::openai::OpenAIConfig::default(),
             gliner: GlinerConfig::default(),
             enhancements: enhancements::EnhancementsConfig::default(),
             auto_save: AutoSaveConfig {
@@ -1597,6 +1606,14 @@ impl Default for ObjectiveWeightsConfig {
 }
 
 impl Config {
+    /// Whether *any* chat-LLM backend is enabled. Use this everywhere a
+    /// gate previously asked `self.ollama.enabled`, so the OpenAI-compat
+    /// backend (vLLM / llama.cpp / OVMS / real OpenAI) gets treated as
+    /// equivalent. The actual client dispatch lives in `ChatClient::from_config`.
+    pub fn chat_enabled(&self) -> bool {
+        self.ollama.enabled || self.openai.enabled
+    }
+
     /// Load configuration with hierarchical merging (requires `hierarchical-config` feature)
     ///
     /// Configuration sources are merged in order of priority (lowest to highest):
@@ -1864,6 +1881,40 @@ impl Config {
                     .as_str()
                     .map(|s| s.to_string()),
                 num_ctx: parsed["ollama"]["num_ctx"].as_u32(),
+            },
+            openai: crate::openai::OpenAIConfig {
+                enabled: parsed["openai"]["enabled"].as_bool().unwrap_or(false),
+                base_url: parsed["openai"]["base_url"]
+                    .as_str()
+                    .unwrap_or("http://localhost:8000/v1")
+                    .to_string(),
+                chat_model: parsed["openai"]["chat_model"]
+                    .as_str()
+                    .unwrap_or("gpt-4o-mini")
+                    .to_string(),
+                api_key: parsed["openai"]["api_key"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string(),
+                timeout_seconds: parsed["openai"]["timeout_seconds"].as_u64().unwrap_or(60),
+                max_retries: parsed["openai"]["max_retries"].as_u32().unwrap_or(3),
+                max_tokens: parsed["openai"]["max_tokens"].as_u32(),
+                temperature: parsed["openai"]["temperature"].as_f32(),
+                enable_caching: parsed["openai"]["enable_caching"]
+                    .as_bool()
+                    .unwrap_or(true),
+                // Disk-config parser uses the `json` crate; cross-parser
+                // conversion to serde_json::Value goes through a string
+                // round-trip. POST /config (config_endpoints.rs) uses
+                // serde directly and picks up extra_body via #[serde].
+                extra_body: {
+                    let v = &parsed["openai"]["extra_body"];
+                    if v.is_object() {
+                        serde_json::from_str::<serde_json::Value>(&v.dump()).ok()
+                    } else {
+                        None
+                    }
+                },
             },
             gliner: GlinerConfig {
                 enabled: parsed["gliner"]["enabled"].as_bool().unwrap_or(false),

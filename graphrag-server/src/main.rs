@@ -114,6 +114,17 @@ impl AppState {
                 .unwrap_or_else(|_| "http://localhost".to_string()),
             ollama_model: std::env::var("OLLAMA_EMBEDDING_MODEL")
                 .unwrap_or_else(|_| "nomic-embed-text".to_string()),
+            // OPENAI_URL: full base URL with version path included
+            // (e.g. http://localhost:8000/v1, http://localhost:9000/v3,
+            // http://localhost:17171/v1). The /embeddings suffix is
+            // appended by the embedding service.
+            openai_url: std::env::var("OPENAI_URL")
+                .unwrap_or_else(|_| "http://localhost:8000/v1".to_string()),
+            openai_model: std::env::var("OPENAI_EMBEDDING_MODEL")
+                .unwrap_or_else(|_| "BAAI/bge-m3".to_string()),
+            // Empty string disables the Authorization header (fine for
+            // self-hosted servers that don't authenticate).
+            openai_api_key: std::env::var("OPENAI_API_KEY").unwrap_or_default(),
             enable_cache: true,
         };
 
@@ -508,6 +519,26 @@ async fn add_document(
             Ok(_) => {
                 tracing::info!("Added document to Qdrant: {} ({})", title, id);
 
+                // Also feed the doc into the live GraphRAG instance so its
+                // chunker/graph see the content. Without this, /api/graph/build
+                // runs over zero chunks (qdrant stores docs for vector search;
+                // GraphRAG keeps its own knowledge_graph/chunks for LLM-based
+                // entity extraction). Failure is logged but does not poison
+                // the qdrant write — qdrant is the source of truth.
+                {
+                    let mut g = state.graphrag.write().await;
+                    if let Some(ref mut graphrag) = *g {
+                        if let Err(e) = graphrag.add_document_from_text(&content) {
+                            tracing::warn!(
+                                error = %e,
+                                "GraphRAG ingest failed; /api/graph/build will skip this doc"
+                            );
+                        } else {
+                            *state.graph_built.write().await = false;
+                        }
+                    }
+                }
+
                 return Ok(Json(DocumentOperationResponse {
                     success: true,
                     document_id: Some(id),
@@ -588,6 +619,33 @@ async fn list_documents(state: Data<AppState>) -> Json<ListDocumentsResponse> {
         backend: "memory".to_string(),
         note: None,
     })
+}
+
+/// GET /api/embeddings/stats
+/// Reports which embedding backend is currently serving requests
+/// (openai-compat / ollama / hash-fallback) plus per-source counters.
+/// Useful from the e2e harness to confirm a hardware path (e.g. NPU
+/// via OVMS) is actually being hit, separate from whatever the
+/// runtime Config struct happens to say after a /config POST. Plain
+/// Actix handler (no apistos #[api_operation]) — registered below
+/// .build() to avoid the PathItemDefinition trait bound.
+async fn embeddings_stats(state: Data<AppState>) -> Json<serde_json::Value> {
+    let stats = state.embeddings.get_stats().await;
+    Json(json!({
+        "backend": state.embeddings.backend_name(),
+        "dimension": state.embeddings.dimension(),
+        "stats": {
+            "total_requests": stats.total_requests,
+            // ollama_success / ollama_failures are reused as success/failure
+            // counters for whichever backend is active (openai or ollama),
+            // since both routes share the same code path. fallback_used
+            // counts hash-fallback hits triggered by upstream errors.
+            "success": stats.ollama_success,
+            "failures": stats.ollama_failures,
+            "fallback_used": stats.fallback_used,
+            "cache_hits": stats.cache_hits,
+        },
+    }))
 }
 
 /// Delete a document
@@ -1062,6 +1120,14 @@ async fn main() -> std::io::Result<()> {
                     .route("/template", web::get().to(config_endpoints::get_config_template))
                     .route("/default", web::get().to(config_endpoints::get_default_config))
                     .route("/validate", web::post().to(config_endpoints::validate_config))
+            )
+            // Plain Actix scope (not apistos) — same OpenAPI-bypass reason
+            // as /config above. Reports the live EmbeddingService backend
+            // and request counters so callers can verify which path
+            // (openai-compat / ollama / hash-fallback) actually served.
+            .service(
+                web::scope("/api/embeddings")
+                    .route("/stats", web::get().to(embeddings_stats))
             )
     })
     .bind("0.0.0.0:8080")?

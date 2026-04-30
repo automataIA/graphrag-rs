@@ -13,6 +13,7 @@ use crate::{
         prompts::{EntityData, RelationshipData},
     },
     ollama::OllamaClient,
+    chat::ChatClient,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -84,9 +85,11 @@ impl GleaningEntityExtractor {
     /// # Arguments
     /// * `ollama_client` - Ollama client for LLM inference (REQUIRED)
     /// * `config` - Gleaning configuration
-    pub fn new(ollama_client: OllamaClient, config: GleaningConfig) -> Self {
-        // Extract keep_alive before ollama_client is moved into the extractor
-        let keep_alive = ollama_client.config().keep_alive.clone();
+    pub fn new(ollama_client: ChatClient, config: GleaningConfig) -> Self {
+        // Extract keep_alive before ollama_client is moved into the extractor.
+        // ChatClient::keep_alive() returns None when the OpenAI backend is
+        // active (the field is Ollama-specific).
+        let keep_alive = ollama_client.keep_alive();
 
         // Create LLM extractor with configured entity types
         let llm_extractor = LLMEntityExtractor::new(ollama_client, config.entity_types.clone())
@@ -516,7 +519,7 @@ mod tests {
     #[test]
     fn test_gleaning_extractor_creation() {
         let ollama_config = OllamaConfig::default();
-        let ollama_client = OllamaClient::new(ollama_config);
+        let ollama_client = crate::chat::ChatClient::from_ollama(OllamaClient::new(ollama_config));
         let config = GleaningConfig::default();
 
         let extractor = GleaningEntityExtractor::new(ollama_client, config);
@@ -529,7 +532,7 @@ mod tests {
     #[test]
     fn test_merge_entity_data() {
         let ollama_config = OllamaConfig::default();
-        let ollama_client = OllamaClient::new(ollama_config);
+        let ollama_client = crate::chat::ChatClient::from_ollama(OllamaClient::new(ollama_config));
         let config = GleaningConfig::default();
         let extractor = GleaningEntityExtractor::new(ollama_client, config);
 
@@ -562,7 +565,7 @@ mod tests {
     #[test]
     fn test_normalize_name() {
         let ollama_config = OllamaConfig::default();
-        let ollama_client = OllamaClient::new(ollama_config);
+        let ollama_client = crate::chat::ChatClient::from_ollama(OllamaClient::new(ollama_config));
         let config = GleaningConfig::default();
         let extractor = GleaningEntityExtractor::new(ollama_client, config);
 
@@ -573,7 +576,7 @@ mod tests {
     #[test]
     fn test_find_mentions() {
         let ollama_config = OllamaConfig::default();
-        let ollama_client = OllamaClient::new(ollama_config);
+        let ollama_client = crate::chat::ChatClient::from_ollama(OllamaClient::new(ollama_config));
         let config = GleaningConfig::default();
         let extractor = GleaningEntityExtractor::new(ollama_client, config);
 
@@ -587,7 +590,7 @@ mod tests {
     #[test]
     fn test_deduplicate_relationships() {
         let ollama_config = OllamaConfig::default();
-        let ollama_client = OllamaClient::new(ollama_config);
+        let ollama_client = crate::chat::ChatClient::from_ollama(OllamaClient::new(ollama_config));
         let config = GleaningConfig::default();
         let extractor = GleaningEntityExtractor::new(ollama_client, config);
 

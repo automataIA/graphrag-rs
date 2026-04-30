@@ -66,7 +66,7 @@ pub struct ExtractedEntity {
 /// in text. It follows Microsoft GraphRAG methodology for high-quality extraction.
 pub struct LLMRelationshipExtractor {
     /// Optional Ollama client for LLM-based extraction
-    pub ollama_client: Option<crate::ollama::OllamaClient>,
+    pub ollama_client: Option<crate::chat::ChatClient>,
 }
 
 impl LLMRelationshipExtractor {
@@ -100,7 +100,7 @@ impl LLMRelationshipExtractor {
                     num_ctx: config.num_ctx,
                 };
 
-                Some(crate::ollama::OllamaClient::new(local_config))
+                Some(crate::chat::ChatClient::from_ollama(crate::ollama::OllamaClient::new(local_config)))
             } else {
                 None
             }

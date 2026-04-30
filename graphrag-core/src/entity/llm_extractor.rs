@@ -8,16 +8,21 @@ use crate::{
     core::{ChunkId, Entity, EntityId, EntityMention, Relationship, TextChunk},
     entity::prompts::{EntityData, ExtractionOutput, PromptBuilder, RelationshipData},
     ollama::OllamaClient,
+    chat::ChatClient,
     GraphRAGError, Result,
 };
 use serde_json;
 
 /// LLM-based entity extractor that uses actual language model calls
 pub struct LLMEntityExtractor {
-    ollama_client: OllamaClient,
+    ollama_client: ChatClient,
     prompt_builder: PromptBuilder,
     temperature: f32,
-    max_tokens: usize,
+    /// Per-extraction-call generation cap. `None` means "no cap" — let the
+    /// model stop at its EOS token. Sensible for local LLMs where token
+    /// cost is just compute time; reasoning-class models (Qwen3, R1) tend
+    /// to truncate JSON when capped.
+    max_tokens: Option<usize>,
     /// keep_alive value forwarded to every Ollama request (e.g. "1h").
     /// When set, Ollama keeps the model in VRAM between requests so the KV
     /// cache for the static prompt prefix is preserved across all chunks.
@@ -30,12 +35,12 @@ impl LLMEntityExtractor {
     /// # Arguments
     /// * `ollama_client` - Ollama client for LLM inference
     /// * `entity_types` - List of entity types to extract (e.g., ["PERSON", "LOCATION", "ORGANIZATION"])
-    pub fn new(ollama_client: OllamaClient, entity_types: Vec<String>) -> Self {
+    pub fn new(ollama_client: ChatClient, entity_types: Vec<String>) -> Self {
         Self {
             ollama_client,
             prompt_builder: PromptBuilder::new(entity_types),
             temperature: 0.0, // Zero temperature for deterministic JSON extraction
-            max_tokens: 1500,
+            max_tokens: Some(1500),
             keep_alive: None,
         }
     }
@@ -46,8 +51,18 @@ impl LLMEntityExtractor {
         self
     }
 
-    /// Set maximum tokens for LLM generation (default: 1500)
+    /// Set maximum tokens for LLM generation (default: 1500). Wraps in
+    /// `Some(...)` for the field. Use [`with_max_tokens_opt`] to pass
+    /// `None` (uncapped — model stops at EOS).
     pub fn with_max_tokens(mut self, max_tokens: usize) -> Self {
+        self.max_tokens = Some(max_tokens);
+        self
+    }
+
+    /// Set generation cap, including the explicit-uncapped path. `None`
+    /// skips `num_predict` / `max_tokens` in the LLM request body so the
+    /// server uses its own default (typically -1 / unlimited up to ctx).
+    pub fn with_max_tokens_opt(mut self, max_tokens: Option<usize>) -> Self {
         self.max_tokens = max_tokens;
         self
     }
@@ -206,15 +221,22 @@ impl LLMEntityExtractor {
     #[cfg(feature = "async")]
     async fn call_llm_with_retry(&self, prompt: &str) -> Result<String> {
         use crate::ollama::OllamaGenerationParams;
-        let num_ctx = Self::calculate_entity_num_ctx(prompt, self.max_tokens as u32);
+        // num_ctx only matters on the Ollama path (OpenAI-compat servers
+        // ignore it). Fall back to 2048 when uncapped so the formula
+        // still produces a sane window for Ollama.
+        let num_ctx = Self::calculate_entity_num_ctx(
+            prompt,
+            self.max_tokens.unwrap_or(2048) as u32,
+        );
         tracing::debug!(
-            "Entity extraction: prompt_len={} num_ctx={} keep_alive={:?}",
+            "Entity extraction: prompt_len={} num_ctx={} max_tokens={:?} keep_alive={:?}",
             prompt.len(),
             num_ctx,
+            self.max_tokens,
             self.keep_alive,
         );
         let params = OllamaGenerationParams {
-            num_predict: Some(self.max_tokens as u32),
+            num_predict: self.max_tokens.map(|n| n as u32),
             temperature: Some(self.temperature),
             num_ctx: Some(num_ctx),
             keep_alive: self.keep_alive.clone(),
@@ -522,7 +544,7 @@ Here's the extraction:
     #[test]
     fn test_parse_valid_json() {
         let ollama_config = OllamaConfig::default();
-        let ollama_client = OllamaClient::new(ollama_config);
+        let ollama_client = crate::chat::ChatClient::from_ollama(OllamaClient::new(ollama_config));
         let extractor = LLMEntityExtractor::new(
             ollama_client,
             vec!["PERSON".to_string(), "LOCATION".to_string()],
@@ -551,7 +573,7 @@ Here's the extraction:
     #[test]
     fn test_convert_to_entities() {
         let ollama_config = OllamaConfig::default();
-        let ollama_client = OllamaClient::new(ollama_config);
+        let ollama_client = crate::chat::ChatClient::from_ollama(OllamaClient::new(ollama_config));
         let extractor = LLMEntityExtractor::new(ollama_client, vec!["PERSON".to_string()]);
 
         let chunk = create_test_chunk();
@@ -574,7 +596,7 @@ Here's the extraction:
     #[test]
     fn test_find_mentions() {
         let ollama_config = OllamaConfig::default();
-        let ollama_client = OllamaClient::new(ollama_config);
+        let ollama_client = crate::chat::ChatClient::from_ollama(OllamaClient::new(ollama_config));
         let extractor = LLMEntityExtractor::new(ollama_client, vec!["PERSON".to_string()]);
 
         let chunk = create_test_chunk();
@@ -587,7 +609,7 @@ Here's the extraction:
     #[test]
     fn test_normalize_name() {
         let ollama_config = OllamaConfig::default();
-        let ollama_client = OllamaClient::new(ollama_config);
+        let ollama_client = crate::chat::ChatClient::from_ollama(OllamaClient::new(ollama_config));
         let extractor = LLMEntityExtractor::new(ollama_client, vec!["PERSON".to_string()]);
 
         assert_eq!(extractor.normalize_name("Tom Sawyer"), "tom_sawyer");
