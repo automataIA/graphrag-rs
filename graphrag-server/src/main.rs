@@ -930,11 +930,21 @@ async fn delete_document(
     }))
 }
 
-/// Build the knowledge graph
+/// Build the knowledge graph (full re-extraction; deprecated for routine use)
+///
+/// **Deprecated for routine use.** The server persists the entity graph to
+/// Qdrant on every successful build/append and rehydrates it on startup,
+/// so a full rebuild is no longer needed across restarts. The 30-minute
+/// `/api/graph/append` cron handles new ingests. Reserve this endpoint
+/// for explicit user requests or recovery after a config change
+/// (entity_types, prompts, chat model swap). The endpoint stays mounted
+/// for those cases — it isn't going away — but agents should prefer
+/// `/api/graph/append` for everything routine.
 #[api_operation(
     tag = "graph",
-    summary = "Build the knowledge graph",
-    description = "Process all documents and build the knowledge graph structure",
+    summary = "Build the knowledge graph (DEPRECATED for routine use — prefer /api/graph/append)",
+    description = "Full LLM re-extraction over the entire corpus. DEPRECATED for routine use — the entity graph now persists to Qdrant and rehydrates on startup, so manual rebuilds are not needed in normal operation. Use /api/graph/append (which the cron timer also calls) for incremental updates. Reserve this endpoint for explicit user-requested rebuilds or recovery after a config change.",
+    deprecated = true,
     error_code = 400,
     error_code = 500
 )]
