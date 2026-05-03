@@ -3,9 +3,11 @@
 //! These endpoints allow dynamic configuration of the GraphRAG pipeline via JSON REST API
 
 use super::{config_handler, AppState};
+use crate::embeddings::EmbeddingService;
 use crate::models::ApiError;
 use actix_web::web::{Data, Json};
 use serde_json::json;
+use std::sync::Arc;
 
 /// GET /api/config - Get current configuration
 pub async fn get_config(state: Data<AppState>) -> Result<Json<serde_json::Value>, ApiError> {
@@ -30,7 +32,23 @@ pub async fn get_config(state: Data<AppState>) -> Result<Json<serde_json::Value>
     }
 }
 
-/// POST /api/config - Set configuration and initialize GraphRAG
+/// POST /api/config - Set configuration and initialize GraphRAG.
+///
+/// Atomically rebuilds the embedding subsystem to match the new config:
+///
+/// 1. Merge the posted patch into the active config (deep merge).
+/// 2. Build a fresh `EmbeddingService` from the merged
+///    `config.embeddings`. Probe-embed a known string and reject the
+///    POST with HTTP 400 if the returned vector length doesn't equal
+///    `config.embeddings.dimension`. This is the single chokepoint that
+///    prevents silent Qdrant corruption — without it, a config that
+///    claims dim=1024 but talks to a 768-D upstream only fails at
+///    insert time, after we've already accepted documents.
+/// 3. Hot-swap `state.embeddings` (lock-free via `ArcSwap`) and update
+///    `state.config` so `/health`, `/config`, and `/embeddings/stats`
+///    immediately reflect the new struct.
+/// 4. Build a fresh `GraphRAG` instance with the new config and inject
+///    the new embedder before `initialize()`.
 pub async fn set_config(
     state: Data<AppState>,
     payload: Json<serde_json::Value>,
@@ -41,12 +59,12 @@ pub async fn set_config(
     let config_json = serde_json::to_string(&payload)
         .map_err(|e| ApiError::BadRequest(format!("Invalid JSON: {}", e)))?;
 
-    // Set configuration via ConfigManager
+    // Set configuration via ConfigManager (handles deep-merge + validation)
     state
         .config_manager
         .set_from_json(&config_json)
         .await
-        .map_err(|e| ApiError::BadRequest(e))?;
+        .map_err(ApiError::BadRequest)?;
 
     // Get the validated config
     let config = state
@@ -55,21 +73,100 @@ pub async fn set_config(
         .await
         .ok_or(ApiError::InternalError("Failed to get config".to_string()))?;
 
+    // Build the new EmbeddingService from the merged embeddings block.
+    // Failure here is a 400 — the caller's config is bad (unreachable
+    // upstream, missing fields), not an internal server error.
+    let new_embeddings = EmbeddingService::from_config(&config.embeddings)
+        .await
+        .map_err(|e| {
+            ApiError::BadRequest(format!(
+                "Embedding service rebuild failed for backend={}: {}",
+                config.embeddings.backend, e
+            ))
+        })?;
+
+    // Probe-embed to validate dimension end-to-end. Fails HERE rather
+    // than at the next /api/documents POST, which would silently insert
+    // wrong-dim vectors into a Qdrant collection sized to the configured
+    // dimension and corrupt the index. Skip when backend=hash because
+    // the hash generator is sized to `config.dimension` by construction.
+    //
+    // Also catches the upstream-misconfigured case: the EmbeddingService
+    // silently falls through to hash when the real backend returns a
+    // wrong-dim vector (so `generate_single` would return a hash vector
+    // of the correct size and the dim check alone would pass). We
+    // detect that by also asserting `backend_live()` — if the configured
+    // backend isn't live but the user asked for it, that's also a 400.
+    if config.embeddings.backend != "hash" {
+        if !new_embeddings.backend_live() {
+            return Err(ApiError::BadRequest(format!(
+                "Embedding backend '{}' is not reachable at endpoint '{}'. \
+                 Check the upstream server, or set embeddings.backend = \"hash\".",
+                config.embeddings.backend,
+                config.embeddings.api_endpoint.as_deref().unwrap_or("(none)")
+            )));
+        }
+
+        let stats_before = new_embeddings.get_stats().await;
+        let probe = new_embeddings.generate_single("graphrag dimension probe").await;
+        let stats_after = new_embeddings.get_stats().await;
+
+        match probe {
+            Ok(v) if v.len() != config.embeddings.dimension => {
+                return Err(ApiError::BadRequest(format!(
+                    "Embedding dimension mismatch: config.embeddings.dimension={} but \
+                     backend={} returned {}-D vectors. Update config.embeddings.dimension \
+                     or change the model.",
+                    config.embeddings.dimension,
+                    config.embeddings.backend,
+                    v.len()
+                )));
+            },
+            Ok(_) if stats_after.fallback_used > stats_before.fallback_used => {
+                // Real backend errored mid-call (e.g. dim-mismatch caught
+                // inside generate_with_openai), fallback covered it. The
+                // returned vector is hash-sized = config.dimension, so
+                // the length check passed silently. Reject the POST.
+                return Err(ApiError::BadRequest(format!(
+                    "Embedding backend '{}' probe failed (fell through to hash fallback). \
+                     Check server logs for the upstream error, or set embeddings.backend = \"hash\".",
+                    config.embeddings.backend
+                )));
+            },
+            Ok(_) => {},
+            Err(e) => {
+                return Err(ApiError::BadRequest(format!(
+                    "Embedding probe failed during /config validation: {e}"
+                )));
+            },
+        }
+    }
+
+    // Atomically swap the live embedder. Existing in-flight requests
+    // that already grabbed an `Arc<EmbeddingService>` snapshot will
+    // continue using the old one; new calls see the new service.
+    let new_embeddings = Arc::new(new_embeddings);
+    state.embeddings.store(new_embeddings.clone());
+
+    // Update the live config snapshot. AFTER the embedder swap so any
+    // reader that wins the race sees old-config + old-embedder or
+    // new-config + new-embedder, never new-config + old-embedder.
+    *state.config.write().await = config.clone();
+
+    // Re-print the unified backend log line so users see the swap.
+    crate::log_unified_embedding_line(&config.embeddings, new_embeddings.backend_live());
+
     // Initialize GraphRAG with the config
     tracing::info!("Initializing GraphRAG with custom configuration...");
 
     let mut graphrag = graphrag_core::GraphRAG::new(config)
         .map_err(|e| ApiError::InternalError(format!("GraphRAG init failed: {}", e)))?;
 
-    // Inject the server's real embedding service into graphrag-core BEFORE
-    // initialize() runs. Replaces graphrag-core's hash-based dummy embedder
-    // for every internal embedding call (query embedding in hybrid_query,
-    // sentence embedding in semantic chunking, entity/chunk embeddings
-    // during build_graph). Without this, paths like mode=reason walked the
-    // entity graph but matched entities with toy 128-dim hash vectors
-    // despite the real mxbai embeddings being right here in
-    // `state.embeddings`.
-    graphrag.set_embedding_provider(state.embeddings.clone());
+    // Inject the freshly-built embedding service into graphrag-core
+    // BEFORE initialize() runs. Single source of truth: graphrag-core's
+    // retrieval system, semantic chunker, and entity-vector path all
+    // route through this same service.
+    graphrag.set_embedding_provider(new_embeddings.clone());
 
     graphrag
         .initialize()

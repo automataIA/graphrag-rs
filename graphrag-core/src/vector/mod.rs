@@ -823,6 +823,61 @@ impl VectorUtils {
     }
 }
 
+/// `AsyncEmbedder` adapter around the hash-based [`EmbeddingGenerator`].
+/// Used as the default `DynEmbedder` when no real embedding service has
+/// been injected (tests, standalone use, `Config.embeddings.backend ==
+/// "hash"`). Hosts that want a real backend (mxbai via OVMS / Ollama /
+/// OpenAI-compat) inject their own provider via
+/// [`crate::GraphRAG::set_embedding_provider`] and this struct is never
+/// constructed.
+///
+/// Wraps `EmbeddingGenerator` in a `Mutex` because the underlying
+/// generator caches per-word vectors via `&mut self`, but `AsyncEmbedder`
+/// hands out shared (`&self`) references. The mutex is held only for the
+/// duration of a single `generate_embedding` call — there is no `await`
+/// inside the lock — so contention is bounded.
+pub struct HashEmbedder {
+    inner: std::sync::Mutex<EmbeddingGenerator>,
+    dimension: usize,
+}
+
+impl HashEmbedder {
+    /// Build a new hash-based embedder producing `dimension`-D vectors.
+    pub fn new(dimension: usize) -> Self {
+        Self {
+            inner: std::sync::Mutex::new(EmbeddingGenerator::new(dimension)),
+            dimension,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl crate::core::traits::AsyncEmbedder for HashEmbedder {
+    type Error = crate::core::GraphRAGError;
+
+    async fn embed(&self, text: &str) -> Result<Vec<f32>> {
+        let mut g = self.inner.lock().map_err(|e| GraphRAGError::Embedding {
+            message: format!("HashEmbedder mutex poisoned: {e}"),
+        })?;
+        Ok(g.generate_embedding(text))
+    }
+
+    async fn embed_batch(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>> {
+        let mut g = self.inner.lock().map_err(|e| GraphRAGError::Embedding {
+            message: format!("HashEmbedder mutex poisoned: {e}"),
+        })?;
+        Ok(g.batch_generate(texts))
+    }
+
+    fn dimension(&self) -> usize {
+        self.dimension
+    }
+
+    async fn is_ready(&self) -> bool {
+        true
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

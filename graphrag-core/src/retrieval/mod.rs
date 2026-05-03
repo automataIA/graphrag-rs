@@ -20,10 +20,11 @@ use crate::{
     config::Config,
     core::{traits::DynEmbedder, ChunkId, EntityId, KnowledgeGraph},
     summarization::DocumentTree,
-    vector::{EmbeddingGenerator, VectorUtils},
+    vector::{HashEmbedder, VectorUtils},
     Result,
 };
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 pub use bm25::{BM25Result, BM25Retriever, Document as BM25Document};
 pub use enriched::{EnrichedRetrievalConfig, EnrichedRetriever};
@@ -37,17 +38,18 @@ pub use hipporag_ppr::{Fact, HippoRAGConfig, HippoRAGRetriever};
 
 use crate::vector::store::VectorStore;
 
-/// Retrieval system for querying the knowledge graph
+/// Retrieval system for querying the knowledge graph.
+///
+/// Holds a single `embedder: DynEmbedder` — the only path through which
+/// query-time and index-time embeddings are generated. Hosts (e.g.
+/// graphrag-server) inject their real backend via
+/// [`Self::set_embedding_provider`]; without injection, retrieval uses
+/// a hash-based [`HashEmbedder`] sized to `config.embeddings.dimension`.
 pub struct RetrievalSystem {
     vector_store: std::sync::Arc<dyn VectorStore>,
-    embedding_generator: EmbeddingGenerator,
-    /// Optional injected embedding service. When `Some`, every internal
-    /// embedding call (query-time and index-time) uses this provider
-    /// instead of the dummy hash-based `embedding_generator`. The host
-    /// (e.g. graphrag-server) injects its real mxbai / OVMS / Ollama
-    /// service via `set_embedding_provider`. When `None` (tests,
-    /// standalone use), we fall back to the hash-based generator.
-    embedding_provider: Option<DynEmbedder>,
+    /// Single source of truth for embedding generation. Always populated.
+    /// Swapped in place by [`Self::set_embedding_provider`].
+    embedder: DynEmbedder,
     config: RetrievalConfig,
     #[cfg(feature = "parallel-processing")]
     parallel_processor: Option<ParallelProcessor>,
@@ -59,7 +61,10 @@ pub struct RetrievalSystem {
 }
 
 impl RetrievalSystem {
-    /// Create a new retrieval system
+    /// Create a new retrieval system. The embedder is initialized to a
+    /// hash-based [`HashEmbedder`] sized to `config.embeddings.dimension`;
+    /// hosts that need a real backend should call
+    /// [`Self::set_embedding_provider`] immediately after construction.
     pub fn new(config: &Config) -> Result<Self> {
         let retrieval_config = RetrievalConfig {
             top_k: config.retrieval.top_k,
@@ -79,10 +84,11 @@ impl RetrievalSystem {
         let vector_store =
             std::sync::Arc::new(crate::vector::memory_store::MemoryVectorStore::new());
 
+        let embedder: DynEmbedder = Arc::new(HashEmbedder::new(config.embeddings.dimension));
+
         Ok(Self {
             vector_store,
-            embedding_generator: EmbeddingGenerator::new(128), // 128-dimensional embeddings
-            embedding_provider: None,
+            embedder,
             config: retrieval_config,
             #[cfg(feature = "parallel-processing")]
             parallel_processor: None,
@@ -94,22 +100,18 @@ impl RetrievalSystem {
         })
     }
 
-    /// Inject a real embedding provider. After this is called, every
-    /// internal call to `embed_text` / `embed_batch` will route through
-    /// the provider instead of the dummy hash generator.
+    /// Replace the active embedder. After this call, every internal
+    /// embedding (query-time vector search, index-time chunk/entity
+    /// embedding, relationship-similarity scoring) routes through the
+    /// new provider.
     pub fn set_embedding_provider(&mut self, provider: DynEmbedder) {
-        self.embedding_provider = Some(provider);
+        self.embedder = provider;
     }
 
-    /// Embed a single text. Prefers the injected provider; falls back to
-    /// the hash-based generator. Use this everywhere instead of calling
-    /// `embedding_generator.generate_embedding` directly.
-    async fn embed_text(&mut self, text: &str) -> Result<Vec<f32>> {
-        if let Some(provider) = self.embedding_provider.clone() {
-            provider.embed(text).await
-        } else {
-            Ok(self.embedding_generator.generate_embedding(text))
-        }
+    /// Embed a single text via the active embedder. The lone embedding
+    /// path inside the retrieval system — every other site delegates here.
+    async fn embed_text(&self, text: &str) -> Result<Vec<f32>> {
+        self.embedder.embed(text).await
     }
 }
 
@@ -509,23 +511,23 @@ pub struct QueryResult {
 }
 
 impl RetrievalSystem {
-    /// Create a new retrieval system with parallel processing support
+    /// Create a new retrieval system with parallel processing support.
+    /// The embedder is initialized to a hash-based [`HashEmbedder`] sized
+    /// to `embedder_dimension`; use [`Self::set_embedding_provider`] to
+    /// install a real backend.
     #[cfg(feature = "parallel-processing")]
     pub fn with_parallel_processing(
         vector_store: std::sync::Arc<dyn VectorStore>,
-        embedding_generator: EmbeddingGenerator,
+        embedder_dimension: usize,
         parallel_processor: ParallelProcessor,
     ) -> Result<Self> {
-        // VectorStore trait is already Send + Sync and wrapped in Arc
-        // Can be safely used across threads for parallel operations
-        // EmbeddingGenerator operations can be parallelized with rayon
-
         let retrieval_config = RetrievalConfig::default();
+
+        let embedder: DynEmbedder = Arc::new(HashEmbedder::new(embedder_dimension));
 
         Ok(Self {
             vector_store,
-            embedding_generator,
-            embedding_provider: None,
+            embedder,
             config: retrieval_config,
             parallel_processor: Some(parallel_processor),
             #[cfg(feature = "pagerank")]
@@ -1020,7 +1022,8 @@ impl RetrievalSystem {
         if graph_weight > 0.0 {
             let mut graph_results = match analysis.query_type {
                 QueryType::EntityFocused | QueryType::Relationship => {
-                    self.entity_centric_search(query_embedding, graph, &analysis.key_entities)?
+                    self.entity_centric_search(query_embedding, graph, &analysis.key_entities)
+                        .await?
                 },
                 _ => self.entity_based_search(query_embedding, graph)?,
             };
@@ -1220,9 +1223,11 @@ impl RetrievalSystem {
         }
     }
 
-    /// Entity-centric search focusing on specific entities
-    fn entity_centric_search(
-        &mut self,
+    /// Entity-centric search focusing on specific entities. Async because
+    /// it embeds each relationship's `relation_type` via the active
+    /// embedder to score relevance against `query_embedding`.
+    async fn entity_centric_search(
+        &self,
         query_embedding: &[f32],
         graph: &KnowledgeGraph,
         key_entities: &[String],
@@ -1256,10 +1261,10 @@ impl RetrievalSystem {
                     if !visited.contains(&neighbor.id) {
                         visited.insert(neighbor.id.clone());
 
-                        // Calculate relationship relevance
-                        let rel_embedding = self
-                            .embedding_generator
-                            .generate_embedding(&relationship.relation_type);
+                        // Calculate relationship relevance via the active
+                        // embedder (real backend if injected, else hash).
+                        let rel_embedding =
+                            self.embed_text(&relationship.relation_type).await?;
                         let rel_similarity =
                             VectorUtils::cosine_similarity(query_embedding, &rel_embedding);
 
@@ -1759,7 +1764,7 @@ impl RetrievalSystem {
         query: &str,
         max_results: usize,
     ) -> Result<Vec<SearchResult>> {
-        let query_embedding = self.embedding_generator.generate_embedding(query);
+        let query_embedding = self.embed_text(query).await?;
         let similar_vectors = self
             .vector_store
             .search(&query_embedding, max_results)
@@ -1890,10 +1895,10 @@ impl RetrievalSystem {
             "avg_norm" => 0.0 // vector_stats.avg_norm
         };
 
-        // Add embedding generator info
-        json_data["embedding_generator"] = json::object! {
-            "dimension" => self.embedding_generator.dimension(),
-            "cached_words" => self.embedding_generator.cached_words()
+        // Add embedder info. Reflects whichever provider was injected
+        // (host's real backend) or the hash fallback if none.
+        json_data["embedder"] = json::object! {
+            "dimension" => self.embedder.dimension(),
         };
 
         // Add parallel processing info

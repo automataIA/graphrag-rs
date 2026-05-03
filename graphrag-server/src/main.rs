@@ -57,7 +57,7 @@ mod auth;
 use auth::AuthState;
 
 mod embeddings;
-use embeddings::{EmbeddingConfig, EmbeddingService};
+use embeddings::EmbeddingService;
 
 mod validation;
 use validation::{
@@ -81,8 +81,17 @@ struct AppState {
     #[cfg(feature = "qdrant")]
     qdrant: Option<Arc<QdrantStore>>,
 
-    // Embedding service (real or fallback)
-    embeddings: Arc<EmbeddingService>,
+    /// Live embedding service. Wrapped in `ArcSwap` so `POST /config`
+    /// can replace it atomically without touching every read site:
+    /// readers `load()` an `Arc<EmbeddingService>` snapshot (lock-free),
+    /// the writer `store()`s a fresh one built from the new config.
+    embeddings: Arc<arc_swap::ArcSwap<EmbeddingService>>,
+
+    /// Live `Config`. Single source of truth for `embeddings`, `graph`,
+    /// `retrieval`, etc. — read by `/health`, `/config`, and
+    /// `/embeddings/stats`; written by `POST /config`. Bootstrapped
+    /// from `Config::default()` overlaid with env vars.
+    config: Arc<RwLock<graphrag_core::Config>>,
 
     // Full GraphRAG pipeline (when configured via JSON)
     graphrag: Arc<RwLock<Option<GraphRAG>>>,
@@ -101,45 +110,118 @@ struct AppState {
     /// before the first build). Surfaced via /api/graph/stats so agents
     /// can decide whether the graph is fresh enough to query.
     last_built_at: Arc<RwLock<Option<String>>>,
+    /// Number of chunks already passed through entity extraction. Set
+    /// to the post-build chunk count after every /api/graph/build and
+    /// /api/graph/append. Drives the no-op fast-path on /append: if
+    /// the live chunk count hasn't grown since this counter, return
+    /// early without re-running extraction.
+    processed_chunk_count: Arc<std::sync::atomic::AtomicUsize>,
     query_count: Arc<RwLock<usize>>,
+}
+
+/// Overlay env-var bootstrap defaults onto a `Config.embeddings` block.
+/// Lets deployments that only set env vars (the legacy path) keep working
+/// without first posting `/config`. Once `POST /config` lands a complete
+/// embeddings block, those values win on subsequent rebuilds.
+///
+/// Recognised env vars (all optional):
+/// - `EMBEDDING_BACKEND` → `embeddings.backend` ("hash" / "openai" / "ollama")
+/// - `EMBEDDING_DIM`     → `embeddings.dimension`
+/// - `OPENAI_URL`        → `embeddings.api_endpoint` (when backend=openai)
+/// - `OPENAI_EMBEDDING_MODEL` → `embeddings.model` (when backend=openai)
+/// - `OPENAI_API_KEY`    → `embeddings.api_key`
+/// - `OLLAMA_URL`+`OLLAMA_PORT` → `embeddings.api_endpoint` (joined "host:port")
+/// - `OLLAMA_EMBEDDING_MODEL` → `embeddings.model` (when backend=ollama)
+fn overlay_embedding_env_vars(emb: &mut graphrag_core::config::EmbeddingConfig) {
+    if let Ok(b) = std::env::var("EMBEDDING_BACKEND") {
+        emb.backend = b;
+    }
+    if let Ok(d) = std::env::var("EMBEDDING_DIM") {
+        if let Ok(n) = d.parse::<usize>() {
+            emb.dimension = n;
+        }
+    }
+    match emb.backend.as_str() {
+        "openai" => {
+            if let Ok(u) = std::env::var("OPENAI_URL") {
+                emb.api_endpoint = Some(u);
+            }
+            if let Ok(m) = std::env::var("OPENAI_EMBEDDING_MODEL") {
+                emb.model = Some(m);
+            }
+            if let Ok(k) = std::env::var("OPENAI_API_KEY") {
+                emb.api_key = Some(k);
+            }
+        },
+        "ollama" => {
+            // Combine OLLAMA_URL + OLLAMA_PORT into a single endpoint
+            // string so the core `EmbeddingConfig` can stay backend-
+            // agnostic. `EmbeddingService::from_config` parses it back
+            // out via `parse_ollama_endpoint`.
+            let host = std::env::var("OLLAMA_URL").ok();
+            let port = std::env::var("OLLAMA_PORT").ok();
+            if host.is_some() || port.is_some() {
+                let h = host.unwrap_or_else(|| "http://localhost".to_string());
+                let p = port.unwrap_or_else(|| "11434".to_string());
+                emb.api_endpoint = Some(format!("{h}:{p}"));
+            }
+            if let Ok(m) = std::env::var("OLLAMA_EMBEDDING_MODEL") {
+                emb.model = Some(m);
+            }
+        },
+        _ => {},
+    }
+}
+
+/// Single canonical log line that prints once after the embedding
+/// service is built (boot or after `POST /config`). Replaces the two
+/// older messages ("Initializing with backend: ..." printed before the
+/// probe, and "Using hash-based fallback embeddings" printed regardless
+/// of whether the upstream actually came up) so log readers can trust
+/// what they see.
+pub(crate) fn log_unified_embedding_line(
+    cfg: &graphrag_core::config::EmbeddingConfig,
+    live: bool,
+) {
+    let model = cfg.model.as_deref().unwrap_or("-");
+    let endpoint = cfg.api_endpoint.as_deref().unwrap_or("-");
+    let status = if live { "live" } else { "fallback=hash" };
+    tracing::info!(
+        "embeddings: backend={} model={} dim={} endpoint={} ({})",
+        cfg.backend,
+        model,
+        cfg.dimension,
+        endpoint,
+        status
+    );
 }
 
 impl AppState {
     async fn new() -> Self {
-        // Initialize embedding service
-        let embedding_backend =
-            std::env::var("EMBEDDING_BACKEND").unwrap_or_else(|_| "hash".to_string()); // Default to hash fallback
-        let embedding_dim: usize = std::env::var("EMBEDDING_DIM")
-            .unwrap_or_else(|_| "384".to_string())
-            .parse()
-            .unwrap_or(384);
+        // One source of truth for embeddings: a `graphrag_core::Config`
+        // whose `embeddings` block is overlaid with env-var bootstrap
+        // defaults so existing deployments that only set env vars still
+        // work without posting `/config`. The same `config.embeddings`
+        // is then handed to `EmbeddingService::from_config` and kept in
+        // `state.config` for `/health`, `/config`, and
+        // `/embeddings/stats` to read.
+        let mut config = graphrag_core::Config::default();
+        overlay_embedding_env_vars(&mut config.embeddings);
 
-        let embedding_config = EmbeddingConfig {
-            backend: embedding_backend,
-            dimension: embedding_dim,
-            ollama_url: std::env::var("OLLAMA_URL")
-                .unwrap_or_else(|_| "http://localhost".to_string()),
-            ollama_model: std::env::var("OLLAMA_EMBEDDING_MODEL")
-                .unwrap_or_else(|_| "nomic-embed-text".to_string()),
-            enable_cache: true,
-        };
-
-        let embeddings = match EmbeddingService::new(embedding_config).await {
-            Ok(service) => {
-                tracing::info!(
-                    "✅ Embedding service initialized: {}",
-                    service.backend_name()
-                );
-                Arc::new(service)
-            },
+        let embeddings = match EmbeddingService::from_config(&config.embeddings).await {
+            Ok(service) => Arc::new(arc_swap::ArcSwap::from_pointee(service)),
             Err(e) => {
                 tracing::error!(
-                    "❌ Failed to initialize embedding service: {}. Server may not work correctly.",
+                    "❌ Failed to initialize embedding service: {}. Server cannot start.",
                     e
                 );
                 std::process::exit(1);
             },
         };
+        log_unified_embedding_line(&config.embeddings, embeddings.load().backend_live());
+
+        let config = Arc::new(RwLock::new(config));
+        let embedding_dim = embeddings.load().dimension();
 
         #[cfg(feature = "qdrant")]
         {
@@ -173,6 +255,7 @@ impl AppState {
                     Self {
                         qdrant: Some(Arc::new(store)),
                         embeddings,
+                        config,
                         graphrag: Arc::new(RwLock::new(None)),
                         config_manager: Arc::new(ConfigManager::new()),
                         #[cfg(feature = "auth")]
@@ -182,6 +265,7 @@ impl AppState {
                         documents: Arc::new(RwLock::new(Vec::new())),
                         graph_built: Arc::new(RwLock::new(false)),
                         last_built_at: Arc::new(RwLock::new(None)),
+                        processed_chunk_count: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
                         query_count: Arc::new(RwLock::new(0)),
                     }
                 },
@@ -193,6 +277,7 @@ impl AppState {
                     Self {
                         qdrant: None,
                         embeddings,
+                        config,
                         graphrag: Arc::new(RwLock::new(None)),
                         config_manager: Arc::new(ConfigManager::new()),
                         #[cfg(feature = "auth")]
@@ -202,6 +287,7 @@ impl AppState {
                         documents: Arc::new(RwLock::new(Vec::new())),
                         graph_built: Arc::new(RwLock::new(false)),
                         last_built_at: Arc::new(RwLock::new(None)),
+                        processed_chunk_count: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
                         query_count: Arc::new(RwLock::new(0)),
                     }
                 },
@@ -213,6 +299,7 @@ impl AppState {
             tracing::info!("📦 Using in-memory storage (Qdrant feature disabled)");
             Self {
                 embeddings,
+                config,
                 graphrag: Arc::new(RwLock::new(None)),
                 config_manager: Arc::new(ConfigManager::new()),
                 #[cfg(feature = "auth")]
@@ -222,6 +309,7 @@ impl AppState {
                 documents: Arc::new(RwLock::new(Vec::new())),
                 graph_built: Arc::new(RwLock::new(false)),
                 last_built_at: Arc::new(RwLock::new(None)),
+                processed_chunk_count: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
                 query_count: Arc::new(RwLock::new(0)),
             }
         }
@@ -329,6 +417,17 @@ async fn health(state: Data<AppState>) -> Result<Json<HealthResponse>, ApiError>
         graph_built = *state.graph_built.read().await;
     }
 
+    let cfg = state.config.read().await;
+    let svc = state.embeddings.load_full();
+    let emb_block = HealthEmbeddings {
+        backend: cfg.embeddings.backend.clone(),
+        model: cfg.embeddings.model.clone().unwrap_or_default(),
+        dimension: cfg.embeddings.dimension,
+        endpoint: cfg.embeddings.api_endpoint.clone().unwrap_or_default(),
+        live: svc.backend_live(),
+    };
+    drop(cfg);
+
     Ok(Json(HealthResponse {
         status: "healthy".to_string(),
         timestamp: chrono::Utc::now().to_rfc3339(),
@@ -340,6 +439,7 @@ async fn health(state: Data<AppState>) -> Result<Json<HealthResponse>, ApiError>
         } else {
             "memory".to_string()
         },
+        embeddings: emb_block,
     }))
 }
 
@@ -399,7 +499,7 @@ async fn query(
     #[cfg(feature = "qdrant")]
     if let Some(qdrant) = &state.qdrant {
         // Real vector search with Qdrant using real embeddings
-        let query_embedding = match state.embeddings.generate_single(&body.query).await {
+        let query_embedding = match state.embeddings.load_full().generate_single(&body.query).await {
             Ok(embedding) => embedding,
             Err(e) => {
                 tracing::error!("Failed to generate query embedding: {}", e);
@@ -524,7 +624,7 @@ async fn graph_aware_query(
     let vector_results: Vec<QueryResult> = {
         #[cfg(feature = "qdrant")]
         if let Some(qdrant) = &state.qdrant {
-            match state.embeddings.generate_single(&body.query).await {
+            match state.embeddings.load_full().generate_single(&body.query).await {
                 Ok(embedding) => match qdrant.search(embedding, body.top_k, None).await {
                     Ok(results) => results
                         .into_iter()
@@ -652,22 +752,25 @@ async fn graph_aware_query(
         },
         QueryMode::Local => {
             // Microsoft GraphRAG `local_search` shape:
-            //   1. Embed the user query through the EmbeddingService.
+            //   1. Embed the user query through the EmbeddingService
+            //      (same one the document path uses).
             //   2. Vector-search the entity sidecar collection for
             //      top-K seed entities.
             //   3. Hand those entity ids to graphrag-core, which
             //      expands to 1-hop neighbors, gathers mentioning
             //      chunks, and feeds the assembly to the chat backend.
+            //
+            // If Qdrant or the entity sidecar is unavailable (cold
+            // start, no build has run yet), top_k_ids is empty —
+            // graphrag-core will return "no relevant information"
+            // rather than fabricating an answer.
             let mut seed_ids: Vec<graphrag_core::core::EntityId> = Vec::new();
 
             #[cfg(feature = "qdrant")]
             if let Some(qdrant) = state.qdrant.as_ref() {
-                match state.embeddings.generate_single(&body.query).await {
+                match state.embeddings.load_full().generate_single(&body.query).await {
                     Ok(query_embedding) => {
-                        match qdrant
-                            .search_entities(query_embedding, body.top_k.max(5))
-                            .await
-                        {
+                        match qdrant.search_entities(query_embedding, body.top_k.max(5)).await {
                             Ok(hits) => {
                                 seed_ids = hits
                                     .into_iter()
@@ -781,7 +884,7 @@ async fn graph_aware_query(
                 // relation-only by definition).
                 if !matches!(mode, QueryMode::Global) && !kw.low_level.is_empty() {
                     let low_text = kw.low_level.join(" ");
-                    if let Ok(emb) = state.embeddings.generate_single(&low_text).await {
+                    if let Ok(emb) = state.embeddings.load_full().generate_single(&low_text).await {
                         if let Ok(hits) = qdrant.search_entities(emb, body.top_k.max(5)).await {
                             seeds.entities = hits
                                 .into_iter()
@@ -794,7 +897,7 @@ async fn graph_aware_query(
                 // global and hybrid).
                 if !kw.high_level.is_empty() {
                     let high_text = kw.high_level.join(" ");
-                    if let Ok(emb) = state.embeddings.generate_single(&high_text).await {
+                    if let Ok(emb) = state.embeddings.load_full().generate_single(&high_text).await {
                         if let Ok(hits) =
                             qdrant.search_relationships(emb, body.top_k.max(5)).await
                         {
@@ -813,7 +916,7 @@ async fn graph_aware_query(
                 }
                 // Mix mode also pulls a fresh chunk-vector pass.
                 if matches!(mode, QueryMode::Mix) {
-                    if let Ok(emb) = state.embeddings.generate_single(&body.query).await {
+                    if let Ok(emb) = state.embeddings.load_full().generate_single(&body.query).await {
                         if let Ok(hits) = qdrant.search(emb, body.top_k.max(5), None).await {
                             // Caller-side chunk ids — Qdrant point ids
                             // for chunks ARE the document ids (one
@@ -968,7 +1071,7 @@ async fn add_document(
         }
 
         // Generate real embeddings
-        let embedding = match state.embeddings.generate_single(&content).await {
+        let embedding = match state.embeddings.load_full().generate_single(&content).await {
             Ok(emb) => emb,
             Err(e) => {
                 tracing::error!("Failed to generate document embedding: {}", e);
@@ -995,6 +1098,26 @@ async fn add_document(
         match qdrant.add_document(&id, embedding, metadata).await {
             Ok(_) => {
                 tracing::info!("Added document to Qdrant: {} ({})", title, id);
+
+                // Also feed the doc into the live GraphRAG instance so its
+                // chunker/graph see the content. Without this, /api/graph/build
+                // runs over zero chunks (qdrant stores docs for vector search;
+                // GraphRAG keeps its own knowledge_graph/chunks for LLM-based
+                // entity extraction). Failure is logged but does not poison
+                // the qdrant write — qdrant is the source of truth.
+                {
+                    let mut g = state.graphrag.write().await;
+                    if let Some(ref mut graphrag) = *g {
+                        if let Err(e) = graphrag.add_document_from_text(&content) {
+                            tracing::warn!(
+                                error = %e,
+                                "GraphRAG ingest failed; /api/graph/build will skip this doc"
+                            );
+                        } else {
+                            *state.graph_built.write().await = false;
+                        }
+                    }
+                }
 
                 return Ok(Json(DocumentOperationResponse {
                     success: true,
@@ -1113,6 +1236,33 @@ async fn list_documents(state: Data<AppState>) -> Json<ListDocumentsResponse> {
     })
 }
 
+/// GET /embeddings/stats
+/// Reports the configured embedding backend (sourced from
+/// `state.config.embeddings` — single source of truth, can't disagree
+/// with `GET /config`) plus runtime counters from the live
+/// `EmbeddingService`. Plain Actix handler (no apistos
+/// `#[api_operation]`) — registered below `.build()` to avoid the
+/// `PathItemDefinition` trait bound (same workaround as `/config`).
+async fn embeddings_stats(state: Data<AppState>) -> Json<serde_json::Value> {
+    let svc = state.embeddings.load_full();
+    let stats = svc.get_stats().await;
+    let cfg = state.config.read().await;
+    Json(json!({
+        "backend": cfg.embeddings.backend,
+        "model": cfg.embeddings.model.clone().unwrap_or_default(),
+        "dimension": cfg.embeddings.dimension,
+        "endpoint": cfg.embeddings.api_endpoint.clone().unwrap_or_default(),
+        "live": svc.backend_live(),
+        "stats": {
+            "total_requests": stats.total_requests,
+            "success": stats.backend_success,
+            "failures": stats.backend_failures,
+            "fallback_used": stats.fallback_used,
+            "cache_hits": stats.cache_hits,
+        },
+    }))
+}
+
 /// Delete a document
 #[api_operation(
     tag = "documents",
@@ -1214,10 +1364,14 @@ async fn build_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>, 
             // Use actual pipeline to build graph
             match graphrag.build_graph().await {
                 Ok(_) => {
-                    let (entities, relationships) = graphrag
+                    let (entities, relationships, chunk_count) = graphrag
                         .knowledge_graph()
-                        .map(|kg| (kg.entities().count(), kg.relationships().count()))
-                        .unwrap_or((0, 0));
+                        .map(|kg| (
+                            kg.entities().count(),
+                            kg.relationships().count(),
+                            kg.chunks().count(),
+                        ))
+                        .unwrap_or((0, 0, 0));
 
                     // Persist the freshly-built graph to Qdrant so it
                     // survives a server restart. Best-effort: a Qdrant
@@ -1225,7 +1379,7 @@ async fn build_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>, 
                     // is still usable for the rest of the session.
                     #[cfg(feature = "qdrant")]
                     if let Some(qdrant) = state.qdrant.as_ref() {
-                        match graph_persistence::persist_in_memory_graph(graphrag, qdrant, state.embeddings.as_ref()).await
+                        match graph_persistence::persist_in_memory_graph(graphrag, qdrant, state.embeddings.load_full().as_ref()).await
                         {
                             Ok((e, r)) => tracing::info!(
                                 "💾 Persisted graph to Qdrant: {} entities, {} relationships",
@@ -1242,6 +1396,9 @@ async fn build_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>, 
 
                     *state.graph_built.write().await = true;
                     *state.last_built_at.write().await = Some(chrono::Utc::now().to_rfc3339());
+                    state
+                        .processed_chunk_count
+                        .store(chunk_count, std::sync::atomic::Ordering::SeqCst);
 
                     tracing::info!(
                         "Built knowledge graph via pipeline in {}ms ({} entities, {} relationships)",
@@ -1336,9 +1493,24 @@ async fn build_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>, 
 /// Append-extract entities for chunks ingested since the last build.
 ///
 /// Semantic-equivalent of Microsoft GraphRAG's `graphrag append`: run
-/// after a batch of `/api/documents` calls so newly-ingested content
+/// after a batch of /api/documents calls so newly-ingested content
 /// shows up in queries, without paying for a wholesale re-extraction
 /// of everything that was already indexed.
+///
+/// **Implementation note** (today): under the hood this still calls
+/// `GraphRAG::build_graph()` because graphrag-core's `incremental`
+/// module isn't yet wired into the runtime pipeline. The LLM-call
+/// cache (`enable_caching = true`) makes repeat extraction near-free
+/// for unchanged chunks, so the cost scales with new content rather
+/// than corpus size — but it's not a true incremental update yet.
+/// A follow-up will route this through `graphrag-core::incremental::
+/// add_content` for genuine incremental behavior.
+///
+/// Fast-paths: returns `{success: true, document_count: 0,
+/// message: "no new chunks since last build"}` immediately when the
+/// chunk count hasn't grown since the previous build/append. Cheap
+/// for cron-driven callers that fire periodically regardless of
+/// whether anything new was ingested.
 ///
 /// Internally calls `GraphRAG::extend_graph` — a real incremental
 /// pass that only walks the chunks ingested since the last build /
@@ -1347,12 +1519,6 @@ async fn build_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>, 
 /// node), and merges relationships keyed by (source, target,
 /// relation_type). Cost scales with the size of the delta, not with
 /// the total corpus.
-///
-/// Fast-paths: returns `{success: true, document_count: 0,
-/// message: "no new chunks since last build"}` immediately when the
-/// chunk count hasn't grown since the previous build/append. Cheap
-/// for cron-driven callers that fire periodically regardless of
-/// whether anything new was ingested.
 #[api_operation(
     tag = "graph",
     summary = "Append new chunks to the knowledge graph",
@@ -1393,7 +1559,7 @@ async fn append_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>,
             // Persist the extended graph to Qdrant. Best-effort.
             #[cfg(feature = "qdrant")]
             if let Some(qdrant) = state.qdrant.as_ref() {
-                match graph_persistence::persist_in_memory_graph(graphrag, qdrant, state.embeddings.as_ref()).await {
+                match graph_persistence::persist_in_memory_graph(graphrag, qdrant, state.embeddings.load_full().as_ref()).await {
                     Ok((e, r)) => tracing::info!(
                         "💾 Persisted graph to Qdrant: {} entities, {} relationships",
                         e, r
@@ -1409,6 +1575,12 @@ async fn append_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>,
 
             *state.graph_built.write().await = true;
             *state.last_built_at.write().await = Some(chrono::Utc::now().to_rfc3339());
+            // Mirror processed_chunks count into AppState for /health
+            // and /embeddings/stats consumers.
+            state.processed_chunk_count.store(
+                graphrag.processed_chunk_count(),
+                std::sync::atomic::Ordering::SeqCst,
+            );
 
             tracing::info!(
                 "extend_graph: {} delta chunks, +{} entities, +{} rels, {} mentions merged ({}ms; graph: {} entities, {} rels)",
@@ -1437,7 +1609,10 @@ async fn append_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>,
                 backend: "graphrag-pipeline".to_string(),
             }))
         },
-        Err(e) => Err(ApiError::InternalError(format!("Append failed: {}", e))),
+        Err(e) => Err(ApiError::InternalError(format!(
+            "Append failed: {}",
+            e
+        ))),
     }
 }
 
@@ -1707,8 +1882,9 @@ async fn main() -> std::io::Result<()> {
                     // Documents endpoints
                     .service(
                         scope("/documents")
-                            .service(resource("").route(get().to(list_documents)))
-                            .service(resource("").route(post().to(add_document)))
+                            .service(resource("")
+                                .route(get().to(list_documents))
+                                .route(post().to(add_document)))
                             .service(resource("/{id}").route(delete().to(delete_document)))
                     )
                     // Query endpoints
@@ -1740,14 +1916,31 @@ async fn main() -> std::io::Result<()> {
             // Build OpenAPI spec endpoint
             .build("/openapi.json")
 
-            // Config endpoints (plain Actix-web routing — no #[api_operation] yet)
+            // Config endpoints — exposed at /config (plain Actix-web routing).
+            // NOTE: prefix is /config not /api/config because the apistos /api
+            // scope above is registered first and matches /api/config (which
+            // has no /config sub-route), shadowing this block. apistos's typed
+            // scope/route requires handlers to implement PathItemDefinition
+            // (i.e. carry #[api_operation]); plain web::scope can't be
+            // registered before .build() either. Renaming to /config is the
+            // simplest unblock and avoids both constraints.
             .service(
-                web::scope("/api/config")
+                web::scope("/config")
                     .route("", web::get().to(config_endpoints::get_config))
                     .route("", web::post().to(config_endpoints::set_config))
                     .route("/template", web::get().to(config_endpoints::get_config_template))
                     .route("/default", web::get().to(config_endpoints::get_default_config))
                     .route("/validate", web::post().to(config_endpoints::validate_config))
+            )
+            // Plain Actix scope (not apistos) — same OpenAPI-bypass reason
+            // as /config above. Mounted at /embeddings (top-level, not
+            // /api/embeddings) because the apistos /api scope above
+            // matches /api/embeddings and shadows this block. Reports
+            // the configured backend (from state.config.embeddings) and
+            // runtime counters from the live EmbeddingService.
+            .service(
+                web::scope("/embeddings")
+                    .route("/stats", web::get().to(embeddings_stats))
             )
     })
     .bind("0.0.0.0:8080")?

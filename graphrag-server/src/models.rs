@@ -385,8 +385,26 @@ pub struct HealthResponse {
     /// Total queries processed
     pub total_queries: usize,
 
-    /// Backend in use
+    /// Backend in use (qdrant / memory)
     pub backend: String,
+
+    /// Active embedding backend snapshot. Sourced from
+    /// `state.config.embeddings` so it can never disagree with
+    /// `GET /config` or `GET /embeddings/stats`.
+    pub embeddings: HealthEmbeddings,
+}
+
+/// Embedding subsystem snapshot embedded in `/health` responses.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ApiComponent)]
+#[serde(rename_all = "camelCase")]
+pub struct HealthEmbeddings {
+    pub backend: String,
+    pub model: String,
+    pub dimension: usize,
+    pub endpoint: String,
+    /// `true` if the configured upstream is reachable; `false` means
+    /// the service is silently using the hash-based fallback.
+    pub live: bool,
 }
 
 // ============================================================================

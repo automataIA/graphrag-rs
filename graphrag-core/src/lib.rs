@@ -409,8 +409,12 @@ impl GraphRAG {
     /// `GraphRAG::new(config)` (or after `initialize()`) and before
     /// the first query. The provider is propagated into the retrieval
     /// system so every internal embedding call uses the real service.
-    /// Without injection, retrieval falls back to a hash-based dummy
-    /// embedder — fine for tests, useless for real grounding.
+    ///
+    /// Hosts (e.g. graphrag-server) MUST inject a real provider before
+    /// `initialize()` unless they are content with hash embeddings —
+    /// `initialize()` will fail when `config.embeddings.backend != "hash"`
+    /// and no provider has been wired in, since graphrag-core itself
+    /// can't construct HTTP clients.
     pub fn set_embedding_provider(&mut self, provider: core::traits::DynEmbedder) {
         self.embedding_provider = Some(provider.clone());
         if let Some(rs) = self.retrieval_system.as_mut() {
@@ -464,8 +468,26 @@ impl GraphRAG {
         // Propagate any provider that was set BEFORE initialize() into
         // the freshly-constructed retrieval system. Order-independence:
         // hosts can call set_embedding_provider before or after init.
-        if let Some(provider) = self.embedding_provider.clone() {
-            rs.set_embedding_provider(provider);
+        // If no provider was injected and the configured backend isn't
+        // "hash", error out — graphrag-core itself can't construct HTTP
+        // clients, so silently falling back to hash here would corrupt
+        // any host that thinks it's running real embeddings.
+        match self.embedding_provider.clone() {
+            Some(provider) => rs.set_embedding_provider(provider),
+            None if self.config.embeddings.backend == "hash" => {
+                // RetrievalSystem::new already installs a HashEmbedder
+                // sized to config.embeddings.dimension; nothing to do.
+            },
+            None => {
+                return Err(GraphRAGError::Config {
+                    message: format!(
+                        "embeddings.backend is '{}' but no embedding provider has been injected. \
+                         Call GraphRAG::set_embedding_provider before initialize(), or set \
+                         embeddings.backend = \"hash\".",
+                        self.config.embeddings.backend
+                    ),
+                });
+            },
         }
         self.retrieval_system = Some(rs);
 

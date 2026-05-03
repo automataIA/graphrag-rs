@@ -4,10 +4,11 @@ use crate::{
         bm25::{BM25Result, BM25Retriever},
         ResultType,
     },
-    vector::{EmbeddingGenerator, VectorIndex},
+    vector::{HashEmbedder, VectorIndex},
     GraphRAGError, Result,
 };
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Hybrid search result combining multiple retrieval strategies
 #[derive(Debug, Clone)]
@@ -76,14 +77,17 @@ impl Default for HybridConfig {
     }
 }
 
-/// Hybrid retriever that combines semantic and keyword search
+/// Hybrid retriever that combines semantic and keyword search.
+///
+/// The active embedder is the single source of truth for query and
+/// document embeddings. Defaults to a hash-based [`HashEmbedder`];
+/// hosts swap in a real backend via [`Self::set_embedding_provider`].
 pub struct HybridRetriever {
     /// Vector-based retrieval system
     vector_index: VectorIndex,
-    /// Embedding generator (dummy hash-based fallback)
-    embedding_generator: EmbeddingGenerator,
-    /// Optional injected embedding service (real provider when host wires it)
-    embedding_provider: Option<DynEmbedder>,
+    /// Active embedder. Always populated; swapped by
+    /// [`Self::set_embedding_provider`].
+    embedder: DynEmbedder,
     /// BM25-based keyword retrieval
     bm25_retriever: BM25Retriever,
     /// Configuration for hybrid retrieval
@@ -93,44 +97,40 @@ pub struct HybridRetriever {
 }
 
 impl HybridRetriever {
-    /// Create a new hybrid retriever with default configuration
+    /// Create a new hybrid retriever with default configuration. The
+    /// embedder defaults to a hash-based [`HashEmbedder`] (128-D); use
+    /// [`Self::set_embedding_provider`] to install a real backend.
     pub fn new() -> Self {
         Self {
             vector_index: VectorIndex::new(),
-            embedding_generator: EmbeddingGenerator::new(128),
-            embedding_provider: None,
+            embedder: Arc::new(HashEmbedder::new(128)),
             bm25_retriever: BM25Retriever::new(),
             config: HybridConfig::default(),
             initialized: false,
         }
     }
 
-    /// Create a new hybrid retriever with custom configuration
+    /// Create a new hybrid retriever with custom configuration. Same
+    /// embedder defaulting as [`Self::new`].
     pub fn with_config(config: HybridConfig) -> Self {
         Self {
             vector_index: VectorIndex::new(),
-            embedding_generator: EmbeddingGenerator::new(128),
-            embedding_provider: None,
+            embedder: Arc::new(HashEmbedder::new(128)),
             bm25_retriever: BM25Retriever::new(),
             config,
             initialized: false,
         }
     }
 
-    /// Inject a real embedding provider. Subsequent `search` calls will
-    /// embed queries via this provider instead of the hash fallback.
+    /// Replace the active embedder. Subsequent `search` calls embed
+    /// queries via this provider.
     pub fn set_embedding_provider(&mut self, provider: DynEmbedder) {
-        self.embedding_provider = Some(provider);
+        self.embedder = provider;
     }
 
-    /// Embed a single text via the injected provider when present;
-    /// fall back to the hash-based generator otherwise.
-    async fn embed_text(&mut self, text: &str) -> Result<Vec<f32>> {
-        if let Some(provider) = self.embedding_provider.clone() {
-            provider.embed(text).await
-        } else {
-            Ok(self.embedding_generator.generate_embedding(text))
-        }
+    /// Embed a single text via the active embedder.
+    async fn embed_text(&self, text: &str) -> Result<Vec<f32>> {
+        self.embedder.embed(text).await
     }
 
     /// Initialize the hybrid retriever with a knowledge graph
