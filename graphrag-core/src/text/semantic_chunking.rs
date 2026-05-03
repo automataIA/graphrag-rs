@@ -8,8 +8,10 @@
 //!
 //! Reference: LangChain SemanticChunker, Greg Kamradt's 5 Levels of Text Splitting
 
+use crate::core::traits::DynEmbedder;
 use crate::core::Result;
-use crate::vector::EmbeddingGenerator;
+use crate::vector::HashEmbedder;
+use std::sync::Arc;
 
 /// Chunk of semantically similar sentences
 #[derive(Debug, Clone)]
@@ -74,23 +76,38 @@ impl Default for SemanticChunkerConfig {
     }
 }
 
-/// Semantic text chunker that splits based on embedding similarity
+/// Semantic text chunker that splits based on embedding similarity.
+///
+/// Embeds sentences via a single `embedder: DynEmbedder` — defaulting
+/// to a hash-based [`HashEmbedder`] when [`Self::new`] / [`Self::with_dimension`]
+/// are called without a provider. Hosts inject their real backend via
+/// [`Self::set_embedding_provider`].
 pub struct SemanticChunker {
     config: SemanticChunkerConfig,
-    embedding_generator: EmbeddingGenerator,
+    /// Active embedder. Always populated; swapped by
+    /// [`Self::set_embedding_provider`].
+    embedder: DynEmbedder,
 }
 
 impl SemanticChunker {
-    /// Create a new semantic chunker
-    pub fn new(config: SemanticChunkerConfig, embedding_generator: EmbeddingGenerator) -> Self {
+    /// Create a new semantic chunker. The embedder defaults to a
+    /// hash-based [`HashEmbedder`] sized to `dimension`; install a real
+    /// backend via [`Self::set_embedding_provider`].
+    pub fn new(config: SemanticChunkerConfig, dimension: usize) -> Self {
         Self {
             config,
-            embedding_generator,
+            embedder: Arc::new(HashEmbedder::new(dimension)),
         }
     }
 
+    /// Replace the active embedder. Subsequent chunking calls embed
+    /// sentences via this provider.
+    pub fn set_embedding_provider(&mut self, provider: DynEmbedder) {
+        self.embedder = provider;
+    }
+
     /// Split text into semantic chunks
-    pub fn chunk(&mut self, text: &str) -> Result<Vec<SemanticChunk>> {
+    pub async fn chunk(&mut self, text: &str) -> Result<Vec<SemanticChunk>> {
         // 1. Split into sentences
         let sentences = self.split_sentences(text);
 
@@ -108,7 +125,7 @@ impl SemanticChunker {
         }
 
         // 2. Generate embeddings for each sentence
-        let embeddings = self.embed_sentences(&sentences)?;
+        let embeddings = self.embed_sentences(&sentences).await?;
 
         // 3. Calculate similarity differences between consecutive sentences
         let similarity_diffs = self.calculate_similarity_differences(&embeddings);
@@ -163,15 +180,12 @@ impl SemanticChunker {
         sentences
     }
 
-    /// Generate embeddings for all sentences
-    fn embed_sentences(&mut self, sentences: &[String]) -> Result<Vec<Vec<f32>>> {
+    /// Generate embeddings for all sentences via the active embedder.
+    async fn embed_sentences(&self, sentences: &[String]) -> Result<Vec<Vec<f32>>> {
         let mut embeddings = Vec::new();
-
         for sentence in sentences {
-            let embedding = self.embedding_generator.generate_embedding(sentence);
-            embeddings.push(embedding);
+            embeddings.push(self.embedder.embed(sentence).await?);
         }
-
         Ok(embeddings)
     }
 
@@ -322,8 +336,7 @@ mod tests {
     #[test]
     fn test_sentence_splitting() {
         let config = SemanticChunkerConfig::default();
-        let embedding_gen = EmbeddingGenerator::new(384); // Use simple hash-based for testing
-        let chunker = SemanticChunker::new(config, embedding_gen);
+        let chunker = SemanticChunker::new(config, 384);
 
         let text = "This is sentence one. This is sentence two! Is this sentence three?";
         let sentences = chunker.split_sentences(text);
@@ -337,8 +350,7 @@ mod tests {
     #[test]
     fn test_cosine_similarity() {
         let config = SemanticChunkerConfig::default();
-        let embedding_gen = EmbeddingGenerator::new(384);
-        let chunker = SemanticChunker::new(config, embedding_gen);
+        let chunker = SemanticChunker::new(config, 384);
 
         // Identical vectors
         let a = vec![1.0, 0.0, 0.0];
@@ -366,8 +378,7 @@ mod tests {
             threshold_amount: 95.0,
             ..Default::default()
         };
-        let embedding_gen = EmbeddingGenerator::new(384);
-        let chunker = SemanticChunker::new(config, embedding_gen);
+        let chunker = SemanticChunker::new(config, 384);
 
         let diffs = vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
         let threshold = chunker.calculate_percentile_threshold(&diffs);
@@ -383,8 +394,7 @@ mod tests {
             threshold_amount: 3.0,
             ..Default::default()
         };
-        let embedding_gen = EmbeddingGenerator::new(384);
-        let chunker = SemanticChunker::new(config, embedding_gen);
+        let chunker = SemanticChunker::new(config, 384);
 
         let diffs = vec![0.5, 0.5, 0.5, 0.5, 0.5]; // All same = zero std dev
         let threshold = chunker.calculate_std_threshold(&diffs);
@@ -392,8 +402,8 @@ mod tests {
         assert!((threshold - 0.5).abs() < 0.001); // Should be mean when std=0
     }
 
-    #[test]
-    fn test_semantic_chunking_basic() {
+    #[tokio::test]
+    async fn test_semantic_chunking_basic() {
         let config = SemanticChunkerConfig {
             breakpoint_strategy: BreakpointStrategy::Percentile,
             threshold_amount: 50.0, // Lower threshold for testing
@@ -402,13 +412,12 @@ mod tests {
             buffer_size: 1,
         };
 
-        let embedding_gen = EmbeddingGenerator::new(384);
-        let mut chunker = SemanticChunker::new(config, embedding_gen);
+        let mut chunker = SemanticChunker::new(config, 384);
 
         let text = "Alice loves programming. Bob also codes daily. \
                     The weather is sunny. Rain is expected tomorrow.";
 
-        let chunks = chunker.chunk(text).unwrap();
+        let chunks = chunker.chunk(text).await.unwrap();
 
         // Should create at least 1 chunk
         assert!(!chunks.is_empty());

@@ -21,12 +21,21 @@ qdrant = ["qdrant-client"]
 lancedb = ["dep:lancedb", "arrow-array", "arrow-schema"]
 auth = ["jsonwebtoken", "bcrypt"]
 ollama = ["ollama-rs"]
+# OpenAI-compatible embedding backend (vLLM, OVMS, llama-server, real
+# OpenAI). reqwest is non-optional in this crate, so the gate is purely
+# a code-path toggle, not a dependency one — matching the pattern used
+# on the openai-compat branch.
+openai = []
 
 [dependencies]
 graphrag-core = { path = "../graphrag-core", features = ["caching", "lightrag", "pagerank", "memory-storage"] }
 
 # Optional: Ollama embeddings (requires main graphrag crate)
 ollama-rs = { version = "0.2", optional = true }
+
+# OpenAI-compat embedding backend (vLLM, OVMS, llama.cpp server, etc.).
+# Always compiled — branch is gated by EmbeddingConfig.backend == "openai".
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # Web framework - Actix-web + Apistos for OpenAPI documentation
 actix-web = { workspace = true }
@@ -41,6 +50,7 @@ tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 bincode = { workspace = true }
+sha2 = { workspace = true }
 
 # Storage backends (optional)
 qdrant-client = { workspace = true, optional = true }
@@ -64,6 +74,11 @@ parking_lot = { workspace = true }
 
 # Caching and distributed systems
 redis = { workspace = true }
+
+# Lock-free Arc swap for hot-swapping the live EmbeddingService when
+# /config POST rebuilds it. Read path is wait-free, which matters
+# because every /api/query and /api/documents path grabs the embedder.
+arc-swap = "1.7"
 
 # Other
 uuid = { workspace = true }

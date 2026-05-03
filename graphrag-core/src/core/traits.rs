@@ -189,6 +189,15 @@ pub trait AsyncEmbedder: Send + Sync {
     }
 }
 
+/// Type-erased reference to an `AsyncEmbedder` returning `GraphRAGError`.
+///
+/// Used by graphrag-server and other host environments to inject their
+/// real embedding service (e.g. mxbai via OVMS / Ollama / OpenAI-compat)
+/// into graphrag-core's retrieval and chunking components, replacing
+/// the hash-based dummy `EmbeddingGenerator` for hot-path embedding.
+pub type DynEmbedder =
+    std::sync::Arc<dyn AsyncEmbedder<Error = crate::core::GraphRAGError>>;
+
 /// Vector similarity search abstraction for finding similar embeddings
 ///
 /// ## Synchronous Version

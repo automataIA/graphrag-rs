@@ -1,13 +1,14 @@
 use crate::{
-    core::KnowledgeGraph,
+    core::{traits::DynEmbedder, KnowledgeGraph},
     retrieval::{
         bm25::{BM25Result, BM25Retriever},
         ResultType,
     },
-    vector::{EmbeddingGenerator, VectorIndex},
+    vector::{HashEmbedder, VectorIndex},
     GraphRAGError, Result,
 };
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Hybrid search result combining multiple retrieval strategies
 #[derive(Debug, Clone)]
@@ -76,12 +77,17 @@ impl Default for HybridConfig {
     }
 }
 
-/// Hybrid retriever that combines semantic and keyword search
+/// Hybrid retriever that combines semantic and keyword search.
+///
+/// The active embedder is the single source of truth for query and
+/// document embeddings. Defaults to a hash-based [`HashEmbedder`];
+/// hosts swap in a real backend via [`Self::set_embedding_provider`].
 pub struct HybridRetriever {
     /// Vector-based retrieval system
     vector_index: VectorIndex,
-    /// Embedding generator
-    embedding_generator: EmbeddingGenerator,
+    /// Active embedder. Always populated; swapped by
+    /// [`Self::set_embedding_provider`].
+    embedder: DynEmbedder,
     /// BM25-based keyword retrieval
     bm25_retriever: BM25Retriever,
     /// Configuration for hybrid retrieval
@@ -91,26 +97,40 @@ pub struct HybridRetriever {
 }
 
 impl HybridRetriever {
-    /// Create a new hybrid retriever with default configuration
+    /// Create a new hybrid retriever with default configuration. The
+    /// embedder defaults to a hash-based [`HashEmbedder`] (128-D); use
+    /// [`Self::set_embedding_provider`] to install a real backend.
     pub fn new() -> Self {
         Self {
             vector_index: VectorIndex::new(),
-            embedding_generator: EmbeddingGenerator::new(128),
+            embedder: Arc::new(HashEmbedder::new(128)),
             bm25_retriever: BM25Retriever::new(),
             config: HybridConfig::default(),
             initialized: false,
         }
     }
 
-    /// Create a new hybrid retriever with custom configuration
+    /// Create a new hybrid retriever with custom configuration. Same
+    /// embedder defaulting as [`Self::new`].
     pub fn with_config(config: HybridConfig) -> Self {
         Self {
             vector_index: VectorIndex::new(),
-            embedding_generator: EmbeddingGenerator::new(128),
+            embedder: Arc::new(HashEmbedder::new(128)),
             bm25_retriever: BM25Retriever::new(),
             config,
             initialized: false,
         }
+    }
+
+    /// Replace the active embedder. Subsequent `search` calls embed
+    /// queries via this provider.
+    pub fn set_embedding_provider(&mut self, provider: DynEmbedder) {
+        self.embedder = provider;
+    }
+
+    /// Embed a single text via the active embedder.
+    async fn embed_text(&self, text: &str) -> Result<Vec<f32>> {
+        self.embedder.embed(text).await
     }
 
     /// Initialize the hybrid retriever with a knowledge graph
@@ -165,7 +185,11 @@ impl HybridRetriever {
     }
 
     /// Perform hybrid search combining semantic and keyword retrieval
-    pub fn search(&mut self, query: &str, limit: usize) -> Result<Vec<HybridSearchResult>> {
+    pub async fn search(
+        &mut self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<HybridSearchResult>> {
         if !self.initialized {
             return Err(GraphRAGError::Retrieval {
                 message: "Hybrid retriever not initialized. Call initialize_with_graph() first."
@@ -174,7 +198,9 @@ impl HybridRetriever {
         }
 
         // Get semantic results
-        let semantic_results = self.semantic_search(query, self.config.max_candidates)?;
+        let semantic_results = self
+            .semantic_search(query, self.config.max_candidates)
+            .await?;
 
         // Get keyword results
         let keyword_results = self.keyword_search(query, self.config.max_candidates);
@@ -186,8 +212,12 @@ impl HybridRetriever {
     }
 
     /// Perform semantic search using vector similarity
-    fn semantic_search(&mut self, query: &str, limit: usize) -> Result<Vec<(String, f32, String)>> {
-        let query_embedding = self.embedding_generator.generate_embedding(query);
+    async fn semantic_search(
+        &mut self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<(String, f32, String)>> {
+        let query_embedding = self.embed_text(query).await?;
         let similar_vectors = self.vector_index.search(&query_embedding, limit)?;
 
         let mut results = Vec::new();
@@ -536,10 +566,10 @@ mod tests {
         assert!(retriever.is_initialized());
     }
 
-    #[test]
-    fn test_search_without_initialization() {
+    #[tokio::test]
+    async fn test_search_without_initialization() {
         let mut retriever = HybridRetriever::new();
-        let result = retriever.search("test", 10);
+        let result = retriever.search("test", 10).await;
         assert!(result.is_err());
     }
 }

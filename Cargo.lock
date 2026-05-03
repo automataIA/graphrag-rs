@@ -4044,6 +4044,7 @@ dependencies = [
  "apistos",
  "apistos-gen",
  "apistos-schemars",
+ "arc-swap",
  "arrow-array 56.2.0",
  "arrow-schema 56.2.0",
  "async-trait",
@@ -4058,8 +4059,10 @@ dependencies = [
  "parking_lot",
  "qdrant-client",
  "redis",
+ "reqwest 0.12.24",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
@@ -10371,6 +10374,7 @@ dependencies = [
  "getrandom 0.3.4",
  "js-sys",
  "serde",
+ "sha1_smol",
  "wasm-bindgen",
 ]
 

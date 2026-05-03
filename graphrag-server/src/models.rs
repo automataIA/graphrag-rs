@@ -13,6 +13,73 @@ use std::fmt;
 // Query Models
 // ============================================================================
 
+/// Query mode — how the server interprets the question.
+///
+/// - `search` (default): pure vector similarity over Qdrant. Fast (~350ms),
+///   returns ranked excerpts. No LLM call. Back-compatible default.
+/// - `ask`: graph-aware retrieval + LLM-generated answer. Calls
+///   `GraphRAG::ask`. Requires a configured chat backend.
+/// - `explain`: like `ask`, but also returns confidence, source attribution
+///   (text-chunk / entity / relationship), reasoning steps, and key entities.
+///   Calls `GraphRAG::ask_explained`.
+/// - `reason`: query decomposition for multi-hop questions; sub-queries are
+///   answered and composed into a final answer. Calls
+///   `GraphRAG::ask_with_reasoning`. Slower than `ask`.
+/// - `local`: Microsoft GraphRAG-style `local_search` and equivalent of
+///   LightRAG's `local` mode. Embeds the query, vector-searches the
+///   entity sidecar (top-K seed entities), expands to 1-hop neighbors,
+///   gathers their mentioning chunks, and feeds the assembled context
+///   to the chat backend.
+/// - `global`: LightRAG-paper `global` mode. Extracts dual-level
+///   keywords from the query (one LLM call), embeds the **high-level**
+///   set, vector-searches the *relationship* sidecar for top-K seed
+///   relations, resolves their endpoint entities, expands neighborhoods,
+///   gathers chunks, sends to chat backend. Themes-and-concepts shape;
+///   answers thematic / cross-cutting questions better than `local`.
+/// - `hybrid`: LightRAG-paper `hybrid` mode. Runs both retrieval streams
+///   — low-level keywords → entity vector search → entity seeds; and
+///   high-level keywords → relationship vector search → relation seeds.
+///   Merges the result sets and feeds the union to the chat backend.
+///   Most graph-aware retrieval; best default for entity-centric
+///   questions where you also want thematic context.
+/// - `mix`: LightRAG-paper `mix` mode. Hybrid plus a chunk-vector
+///   search using the original query — the chunk results are added
+///   directly as seed chunks alongside the entity/relation expansion.
+///   Strongest recall, slightly slower (one extra Qdrant call).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum QueryMode {
+    Search,
+    Ask,
+    Explain,
+    Reason,
+    Local,
+    Global,
+    Hybrid,
+    Mix,
+}
+
+impl Default for QueryMode {
+    fn default() -> Self {
+        QueryMode::Search
+    }
+}
+
+impl QueryMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            QueryMode::Search => "search",
+            QueryMode::Ask => "ask",
+            QueryMode::Explain => "explain",
+            QueryMode::Reason => "reason",
+            QueryMode::Local => "local",
+            QueryMode::Global => "global",
+            QueryMode::Hybrid => "hybrid",
+            QueryMode::Mix => "mix",
+        }
+    }
+}
+
 /// Query request
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ApiComponent)]
 #[serde(rename_all = "camelCase")]
@@ -25,6 +92,11 @@ pub struct QueryRequest {
     #[serde(default = "default_top_k")]
     #[schemars(example = "example_top_k")]
     pub top_k: usize,
+
+    /// Retrieval mode. Defaults to `search` for back-compat.
+    /// See [QueryMode] for the full menu and their tradeoffs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<QueryMode>,
 }
 
 fn default_top_k() -> usize {
@@ -61,20 +133,95 @@ fn example_similarity() -> f32 {
     0.85
 }
 
-/// Query response
+/// Type of source reference returned in `explain` mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceKind {
+    TextChunk,
+    Entity,
+    Relationship,
+    Summary,
+}
+
+/// A source the answer relied on. Returned in `explain` mode alongside the
+/// vector-search excerpts so callers can audit which chunks/entities/edges
+/// supported the answer.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ApiComponent)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceReferenceDto {
+    /// Identifier of the source (chunk/entity/relationship id).
+    pub id: String,
+    /// What kind of source this is.
+    pub kind: SourceKind,
+    /// Excerpt or rendered summary of the source.
+    pub excerpt: String,
+    /// Relevance score to the query (0.0-1.0; higher = more relevant).
+    pub relevance: f32,
+}
+
+/// One step in a reasoning trace. Returned in `explain` and `reason` modes.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ApiComponent)]
+#[serde(rename_all = "camelCase")]
+pub struct ReasoningStepDto {
+    /// 1-indexed step number.
+    pub step: u8,
+    /// Human-readable description of what the engine did at this step.
+    pub description: String,
+    /// Entity ids touched at this step.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub entities_used: Vec<String>,
+    /// Snippet of evidence that backed this step.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence: Option<String>,
+    /// Per-step confidence (0.0-1.0).
+    pub confidence: f32,
+}
+
+/// Query response.
+///
+/// `results` is always populated (vector-search hits, ranked). Modes other
+/// than `search` additionally populate `answer` (LLM-composed answer) and,
+/// for `explain`, the full reasoning trace + source attribution.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ApiComponent)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryResponse {
     /// Original query string
     pub query: String,
 
-    /// List of matching results
+    /// Mode the server actually used (echoes the request, or `search` if
+    /// the request omitted `mode`).
+    pub mode: String,
+
+    /// List of matching text-chunk results (vector search hits). Always
+    /// populated.
     pub results: Vec<QueryResult>,
+
+    /// LLM-composed answer. Populated for `ask`, `explain`, `reason` modes.
+    /// `None` for `search` mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answer: Option<String>,
+
+    /// Overall answer confidence (0.0-1.0). Populated for `explain` mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f32>,
+
+    /// Entities that were key to producing the answer. `explain` mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_entities: Option<Vec<String>>,
+
+    /// Reasoning trace (one entry per retrieval/synthesis step). `explain` mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_steps: Option<Vec<ReasoningStepDto>>,
+
+    /// Full source attribution (text chunks + entities + relationships
+    /// the answer relied on). `explain` mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sources: Option<Vec<SourceReferenceDto>>,
 
     /// Processing time in milliseconds
     pub processing_time_ms: u64,
 
-    /// Backend used ("qdrant" or "memory")
+    /// Backend used (`qdrant`, `memory`, or `graphrag` for graph-aware modes).
     pub backend: String,
 }
 
@@ -86,6 +233,13 @@ pub struct QueryResponse {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ApiComponent)]
 #[serde(rename_all = "camelCase")]
 pub struct AddDocumentRequest {
+    /// Optional caller-supplied id. Stored alongside the Qdrant point
+    /// so callers can later delete by this same id (instead of having
+    /// to remember the UUID the server assigned). When omitted, the
+    /// server still returns a UUID.
+    #[serde(default)]
+    pub id: Option<String>,
+
     /// Document title
     #[schemars(example = "example_title")]
     pub title: String,
@@ -142,14 +296,27 @@ pub struct ListDocumentsResponse {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ApiComponent)]
 #[serde(rename_all = "camelCase")]
 pub struct DocumentSummary {
-    /// Document identifier
+    /// Document identifier (Qdrant point UUID).
     pub id: String,
+
+    /// Caller-supplied id, if any (the id passed to POST /api/documents).
+    /// Useful for callers that want to re-issue delete/update by their
+    /// own id without remembering the server-assigned UUID.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_id: Option<String>,
 
     /// Document title
     pub title: String,
 
-    /// Content length in characters
-    pub content_length: usize,
+    /// Content length in characters (memory backend only — Qdrant
+    /// returns an excerpt instead, see `excerpt`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_length: Option<usize>,
+
+    /// First ~160 chars of content. Populated when listing from Qdrant;
+    /// the memory backend leaves it None and uses content_length instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub excerpt: Option<String>,
 
     /// Timestamp when added
     pub added_at: String,
@@ -177,6 +344,13 @@ pub struct GraphStatsResponse {
 
     /// Whether graph has been built
     pub graph_built: bool,
+
+    /// RFC 3339 timestamp of the last successful /api/graph/build, or
+    /// null if the server hasn't built the graph since startup. Lets
+    /// agents/cron decide whether the graph is fresh enough relative
+    /// to recent ingests.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_built_at: Option<String>,
 
     /// Backend used
     pub backend: String,
@@ -211,8 +385,26 @@ pub struct HealthResponse {
     /// Total queries processed
     pub total_queries: usize,
 
-    /// Backend in use
+    /// Backend in use (qdrant / memory)
     pub backend: String,
+
+    /// Active embedding backend snapshot. Sourced from
+    /// `state.config.embeddings` so it can never disagree with
+    /// `GET /config` or `GET /embeddings/stats`.
+    pub embeddings: HealthEmbeddings,
+}
+
+/// Embedding subsystem snapshot embedded in `/health` responses.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ApiComponent)]
+#[serde(rename_all = "camelCase")]
+pub struct HealthEmbeddings {
+    pub backend: String,
+    pub model: String,
+    pub dimension: usize,
+    pub endpoint: String,
+    /// `true` if the configured upstream is reachable; `false` means
+    /// the service is silently using the hash-based fallback.
+    pub live: bool,
 }
 
 // ============================================================================

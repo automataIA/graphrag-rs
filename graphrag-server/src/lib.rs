@@ -20,7 +20,9 @@ pub use lancedb_store::{LanceDBError, LanceDBStore};
 // Re-export shared types (they're identical between stores)
 pub use qdrant_store::{DocumentMetadata, Entity, Relationship, SearchResult};
 
-pub use embeddings::{EmbeddingConfig, EmbeddingError, EmbeddingService, EmbeddingStats};
+pub use embeddings::{EmbeddingError, EmbeddingService, EmbeddingStats};
+// `EmbeddingConfig` is now `graphrag_core::config::EmbeddingConfig` —
+// the server doesn't carry its own copy any more (single source of truth).
 
 pub use distributed_cache::{CacheConfig, CacheStats, DistributedCache};
 
