@@ -25,6 +25,9 @@
 //! # Browser: http://localhost:8080/swagger
 //! ```
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use actix_cors::Cors;
 use actix_web::{
     web::{self, Data, Json, Path as WebPath},
@@ -32,10 +35,11 @@ use actix_web::{
 };
 use apistos::{
     api_operation,
-    app::OpenApiWrapper,
+    app::{BuildConfig, OpenApiWrapper},
     info::Info,
     spec::Spec,
     web::{delete, get, post, resource, scope},
+    SwaggerUIConfig,
 };
 use serde_json::json;
 use std::collections::HashMap;
@@ -436,7 +440,7 @@ async fn query(
         .filter(|r| r.similarity > 0.5)
         .collect();
 
-    results.sort_by(|a, b| b.similarity.partial_cmp(&a.similarity).unwrap());
+    results.sort_by(|a, b| b.similarity.partial_cmp(&a.similarity).unwrap_or(std::cmp::Ordering::Equal));
     results.truncate(body.top_k);
 
     let processing_time = start.elapsed().as_millis() as u64;
@@ -934,8 +938,9 @@ async fn create_api_key(
 // ============================================================================
 
 #[actix_web::main]
-async fn main() -> std::io::Result<()> {
-    // Initialize tracing
+async fn main() -> color_eyre::Result<()> {
+    color_eyre::install()?;
+
     tracing_subscriber::fmt()
         .with_target(false)
         .compact()
@@ -1051,8 +1056,11 @@ async fn main() -> std::io::Result<()> {
             // NOTE: To include them in OpenAPI spec, add #[api_operation] macros to
             //       each handler in config_endpoints.rs, then register via Apistos scope/resource.
 
-            // Build OpenAPI spec endpoint
-            .build("/openapi.json")
+            // Build OpenAPI spec endpoint + interactive Swagger UI at /swagger
+            .build_with(
+                "/openapi.json",
+                BuildConfig::default().with(SwaggerUIConfig::new(&"/swagger")),
+            )
 
             // Config endpoints (plain Actix-web routing — no #[api_operation] yet)
             .service(
@@ -1066,5 +1074,7 @@ async fn main() -> std::io::Result<()> {
     })
     .bind("0.0.0.0:8080")?
     .run()
-    .await
+    .await?;
+
+    Ok(())
 }

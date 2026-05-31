@@ -225,6 +225,7 @@ impl IndexedDBStore {
     ///
     /// # Returns
     /// Deserialized value or error if not found
+    #[allow(dead_code)]
     pub async fn get<T: for<'de> Deserialize<'de>>(
         &self,
         store_name: &str,
@@ -293,7 +294,7 @@ impl IndexedDBStore {
             .map_err(|_| StorageError::DatabaseError("Failed to cast to Array".to_string()))?;
 
         // Apply batch_size limit if specified
-        let max_items = batch_size.map(|s| s as u32).unwrap_or(js_array.length());
+        let max_items = batch_size.unwrap_or_else(|| js_array.length());
         let limit = std::cmp::min(max_items, js_array.length());
 
         let mut results = Vec::new();

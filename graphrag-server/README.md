@@ -2,7 +2,7 @@
 
 Production-ready REST API server for GraphRAG with multiple backend options.
 
-> **📢 Migration Notice:** The server has been migrated from Axum to **Actix-web 4.9** with **Apistos** for automatic OpenAPI 3.0.3 documentation generation. All endpoints remain the same, but the server now includes automatic API documentation at `/openapi.json`.
+> **Migration Notice:** The server has been migrated from Axum to **Actix-web 4.9** with **Apistos** for automatic OpenAPI 3.0.3 documentation generation. All endpoints remain the same, but the server now includes automatic API documentation at `/openapi.json`.
 
 ## Features
 
@@ -19,7 +19,7 @@ Production-ready REST API server for GraphRAG with multiple backend options.
 ### API Features
 - ✅ **REST API** - Clean HTTP endpoints for all operations powered by **Actix-web 4.9**
 - ✅ **OpenAPI 3.0.3** - Automatic API documentation via **Apistos**
-- ✅ **Swagger UI** - Interactive API explorer at `/swagger` (coming soon)
+- ✅ **Swagger UI** - Interactive API explorer at `/swagger`
 - ✅ **Vector Search** - Semantic search with cosine similarity
 - ✅ **Real Embeddings** - Generate actual embeddings for queries and documents
 - ✅ **CORS Support** - Ready for browser clients
@@ -53,7 +53,7 @@ Server starts on `http://0.0.0.0:8080`
 
 **API Documentation:**
 - OpenAPI Spec: `http://localhost:8080/openapi.json`
-- Swagger UI: `http://localhost:8080/swagger` (coming soon)
+- Swagger UI: `http://localhost:8080/swagger`
 
 ### 3. Test API
 
@@ -525,7 +525,7 @@ cargo run --release --bin graphrag-server
 ### Short Term
 - [x] Real embedding generation (Ollama integrated)
 - [x] OpenAPI 3.0.3 documentation (via Apistos)
-- [ ] Complete Swagger UI integration
+- [x] Swagger UI integration (apistos `swagger-ui`, served at `/swagger`)
 - [ ] Entity extraction from documents
 - [ ] Relationship extraction
 - [ ] Batch document upload
@@ -658,7 +658,7 @@ MIT
 - ✅ Distributed deployment support
 - ✅ Advanced filtering and search
 - ✅ Persistent storage with automatic backups
-- ⚠️ Requires separate server (Docker/cloud)
+- Requires separate server (Docker/cloud)
 
 ### LanceDB
 **Best for:** Desktop apps, native applications, embedded use cases
@@ -667,16 +667,16 @@ MIT
 - ✅ Zero-copy data access
 - ✅ Automatic versioning
 - ✅ Works offline
-- ⚠️ Single-process access
-- 🚧 Placeholder implementation (see [lancedb_store.rs](src/lancedb_store.rs) for integration guide)
+- Single-process access
+- Placeholder implementation (see [lancedb_store.rs](src/lancedb_store.rs) for integration guide)
 
 ### In-Memory
 **Best for:** Development, testing, demos
 
 - ✅ No dependencies
 - ✅ Fast for small datasets
-- ⚠️ Data lost on restart
-- ⚠️ Limited scalability
+- Data lost on restart
+- Limited scalability
 
 ## Embeddings Backends
 
@@ -703,8 +703,8 @@ EMBEDDING_BACKEND=ollama cargo run --bin graphrag-server --features "qdrant,olla
 - ✅ Automatic fallback if unavailable
 
 **Cons:**
-- ⚠️ Requires Ollama service running
-- ⚠️ Slower than hash-based (100-200ms per embedding)
+- Requires Ollama service running
+- Slower than hash-based (100-200ms per embedding)
 
 ### Hash-based Fallback
 **Best for:** Testing, offline environments, minimal dependencies
@@ -721,9 +721,9 @@ EMBEDDING_BACKEND=hash cargo run --bin graphrag-server
 - ✅ Works offline
 
 **Cons:**
-- ⚠️ Not semantic (hash-based, not neural)
-- ⚠️ Lower search quality
-- ⚠️ Fixed dimension (384)
+- Not semantic (hash-based, not neural)
+- Lower search quality
+- Fixed dimension (384)
 
 ## Example Workflows
 
@@ -873,8 +873,8 @@ export EMBEDDING_BACKEND=hash
 
 ### Temporary Limitations
 
-- ⚠️ **Authentication feature disabled**: The `auth` feature requires middleware migration and is temporarily unavailable. Will be re-enabled in a future update.
-- ⚠️ **Swagger UI setup incomplete**: Basic OpenAPI spec is generated, but interactive Swagger UI is not yet fully configured (coming soon).
+- **Authentication feature disabled**: The `auth` feature requires middleware migration and is temporarily unavailable. Will be re-enabled in a future update.
+- **Swagger UI setup incomplete**: Basic OpenAPI spec is generated, but interactive Swagger UI is not yet fully configured (coming soon).
 
 ### Developer Notes
 

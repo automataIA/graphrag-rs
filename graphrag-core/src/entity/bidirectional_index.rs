@@ -326,7 +326,7 @@ impl BidirectionalIndex {
             .collect();
 
         // Sort by chunk count descending
-        common_entities.sort_by(|a, b| b.1.cmp(&a.1));
+        common_entities.sort_by_key(|item| std::cmp::Reverse(item.1));
 
         common_entities
     }
@@ -348,7 +348,7 @@ impl BidirectionalIndex {
             .collect();
 
         // Sort by entity count descending
-        dense_chunks.sort_by(|a, b| b.1.cmp(&a.1));
+        dense_chunks.sort_by_key(|item| std::cmp::Reverse(item.1));
 
         dense_chunks
     }

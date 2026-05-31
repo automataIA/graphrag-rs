@@ -51,6 +51,38 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
+    /// Index a document into a workspace. No config file required.
+    ///
+    /// Example: `graphrag index ./book.txt`
+    /// Example: `graphrag index ./book.txt --workspace ./my-graph --ollama`
+    Index {
+        /// Path to document file (txt, md, pdf via plain text)
+        path: PathBuf,
+        /// Workspace directory (created if missing)
+        #[arg(long, default_value = "./graphrag-data")]
+        workspace: PathBuf,
+        /// Enable Ollama LLM extraction (requires running `ollama serve`)
+        #[arg(long)]
+        ollama: bool,
+        /// Override chunk size (default 1000)
+        #[arg(long)]
+        chunk_size: Option<usize>,
+    },
+
+    /// Ask a question against an indexed workspace. No config file required.
+    ///
+    /// Example: `graphrag ask "Who is Diotima?"`
+    Ask {
+        /// Question to ask
+        query: String,
+        /// Workspace directory created by `graphrag index`
+        #[arg(long, default_value = "./graphrag-data")]
+        workspace: PathBuf,
+        /// Enable Ollama LLM for semantic answering
+        #[arg(long)]
+        ollama: bool,
+    },
+
     /// Start interactive TUI (default)
     Tui,
 
@@ -167,6 +199,23 @@ pub async fn run() -> Result<()> {
     match cli.command {
         Some(Commands::Tui) | None => {
             run_tui(cli.config, cli.workspace).await?;
+        },
+        Some(Commands::Index {
+            path,
+            workspace,
+            ollama,
+            chunk_size,
+        }) => {
+            setup_logging(cli.debug)?;
+            run_index(&path, &workspace, ollama, chunk_size, &cli.format).await?;
+        },
+        Some(Commands::Ask {
+            query,
+            workspace,
+            ollama,
+        }) => {
+            setup_logging(cli.debug)?;
+            run_ask(&query, &workspace, ollama, &cli.format).await?;
         },
         Some(Commands::Setup { template, output }) => {
             run_setup_wizard(template, output).await?;
@@ -337,6 +386,94 @@ pub async fn run() -> Result<()> {
 
 async fn load_config_from_file(path: &std::path::Path) -> Result<graphrag_core::Config> {
     config::load_config(path).await
+}
+
+/// Build a turnkey config for the given workspace, optionally enabling Ollama.
+fn turnkey_config(
+    workspace: &std::path::Path,
+    ollama: bool,
+    chunk_size: Option<usize>,
+) -> graphrag_core::Config {
+    let mut cfg = graphrag_core::Config::quick(workspace);
+    if ollama {
+        cfg = cfg.with_ollama();
+    }
+    if let Some(n) = chunk_size {
+        cfg = cfg.with_chunk_size(n);
+    }
+    cfg
+}
+
+async fn run_index(
+    path: &std::path::Path,
+    workspace: &std::path::Path,
+    ollama: bool,
+    chunk_size: Option<usize>,
+    format: &str,
+) -> Result<()> {
+    if !path.exists() {
+        return Err(color_eyre::eyre::eyre!(
+            "Document not found: {}",
+            path.display()
+        ));
+    }
+    let cfg = turnkey_config(workspace, ollama, chunk_size);
+    let handler = handlers::graphrag::GraphRAGHandler::new();
+    handler.initialize(cfg).await?;
+    let summary = handler.load_document_with_options(path, true).await?;
+
+    if format == "json" {
+        println!(
+            "{}",
+            serde_json::json!({
+                "status": "indexed",
+                "document": path.display().to_string(),
+                "workspace": workspace.display().to_string(),
+                "details": summary,
+            })
+        );
+    } else {
+        println!("✅ Indexed `{}` into `{}`", path.display(), workspace.display());
+        println!("   {}", summary);
+        println!("\nAsk a question:");
+        println!("   graphrag ask \"your question\" --workspace {}", workspace.display());
+    }
+    Ok(())
+}
+
+async fn run_ask(
+    query: &str,
+    workspace: &std::path::Path,
+    ollama: bool,
+    format: &str,
+) -> Result<()> {
+    if !workspace.exists() {
+        return Err(color_eyre::eyre::eyre!(
+            "Workspace not found: {}. Run `graphrag index <file>` first.",
+            workspace.display()
+        ));
+    }
+    let cfg = turnkey_config(workspace, ollama, None);
+    let handler = handlers::graphrag::GraphRAGHandler::new();
+    handler.initialize(cfg).await?;
+    let (answer, sources) = handler.query_with_raw(query).await?;
+
+    if format == "json" {
+        println!(
+            "{}",
+            serde_json::json!({"query": query, "answer": answer, "sources": sources})
+        );
+    } else {
+        println!("📝 {}\n", query);
+        println!("💡 {}\n", answer);
+        if !sources.is_empty() {
+            println!("📚 Sources:");
+            for (i, src) in sources.iter().enumerate() {
+                println!("   {}. {}", i + 1, src);
+            }
+        }
+    }
+    Ok(())
 }
 
 fn run_validate(config_file: &std::path::Path, format: &str) -> Result<()> {
@@ -515,8 +652,7 @@ async fn run_setup_wizard(template: Option<String>, output: PathBuf) -> Result<(
     let theme = ColorfulTheme::default();
 
     println!(
-        "\n{}",
-        "╔════════════════════════════════════════════════════════════╗\n\
+        "\n╔════════════════════════════════════════════════════════════╗\n\
          ║           GraphRAG Configuration Setup Wizard              ║\n\
          ╚════════════════════════════════════════════════════════════╝"
     );

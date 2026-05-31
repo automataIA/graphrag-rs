@@ -1,12 +1,12 @@
-///! Load embedding configuration from TOML file
-///!
-///! This example demonstrates how to configure embedding providers
-///! using a TOML configuration file.
-///!
-///! Run with:
-///! ```bash
-///! cargo run --example embeddings_from_config --features "ureq,huggingface-hub"
-///! ```
+//! Load embedding configuration from TOML file
+//!
+//! This example demonstrates how to configure embedding providers
+//! using a TOML configuration file.
+//!
+//! Run with:
+//! ```bash
+//! cargo run --example embeddings_from_config --features "ureq,huggingface-hub"
+//! ```
 use graphrag_core::embeddings::config::EmbeddingProviderConfig;
 use graphrag_core::embeddings::EmbeddingProvider;
 

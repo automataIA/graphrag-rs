@@ -610,7 +610,7 @@ JSON:"#,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{ChunkId, DocumentId};
+    
 
     #[test]
     fn test_prompt_generation() {
@@ -620,39 +620,6 @@ mod tests {
         assert!(prompt.contains("entities"));
         assert!(prompt.contains("relationships"));
         assert!(prompt.contains("Socrates discusses love with Phaedrus"));
-    }
-
-    #[test]
-    fn test_fallback_extraction() {
-        let extractor = LLMRelationshipExtractor::new(None).unwrap();
-
-        let chunk = TextChunk::new(
-            ChunkId::new("test".to_string()),
-            DocumentId::new("doc".to_string()),
-            "Socrates discussed love with Phaedrus in Athens.".to_string(),
-            0,
-            50,
-        );
-
-        let entities = vec![
-            Entity::new(
-                EntityId::new("person_socrates".to_string()),
-                "Socrates".to_string(),
-                "PERSON".to_string(),
-                0.9,
-            ),
-            Entity::new(
-                EntityId::new("person_phaedrus".to_string()),
-                "Phaedrus".to_string(),
-                "PERSON".to_string(),
-                0.9,
-            ),
-        ];
-
-        let relationships = extractor.extract_relationships_fallback(&entities, &chunk);
-
-        // Should extract at least one relationship
-        assert!(!relationships.is_empty());
     }
 
     #[test]

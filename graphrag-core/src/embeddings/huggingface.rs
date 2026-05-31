@@ -269,9 +269,9 @@ impl EmbeddingProvider for HuggingFaceEmbeddings {
 
         #[cfg(feature = "neural-embeddings")]
         {
-            let model = self.model.as_ref().unwrap();
-            let tokenizer = self.tokenizer.as_ref().unwrap();
-            let device = self.device.as_ref().unwrap();
+            let model = self.model.as_ref().expect("checked above");
+            let tokenizer = self.tokenizer.as_ref().expect("checked above");
+            let device = self.device.as_ref().expect("checked above");
 
             let tokens = tokenizer
                 .encode(text, true)

@@ -1,18 +1,30 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="business">
+<html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>GraphRAG WASM Demo</title>
+    <meta name="description" content="GraphRAG WASM — build and query knowledge graphs directly in your browser. WebGPU embeddings, WebLLM inference (Qwen3), pure Rust vector search, IndexedDB persistence. No server required." />
+    <meta name="color-scheme" content="light" />
+    <title>Chat — graphrag.rs</title>
 
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <link data-trunk rel="css" href="tailwind.css" />
 
     <!-- ONNX Runtime Web for GPU Embeddings (200KB from CDN) -->
     <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/ort.min.js" defer></script>
     <script>
-        // Signal when ONNX Runtime is ready
         window.addEventListener('load', () => {
             if (window.ort) {
-                console.log("✅ ONNX Runtime Web loaded");
+                try {
+                    window.ort.env.wasm.proxy = true;
+                    window.ort.env.wasm.numThreads = 1;
+                } catch (e) {
+                    console.warn("ORT proxy mode unavailable:", e);
+                }
+                console.log("✅ ONNX Runtime Web loaded (proxy worker enabled)");
                 window.onnxReady = true;
             } else {
                 console.warn("⚠️  ONNX Runtime Web not available");
@@ -21,77 +33,27 @@
         });
     </script>
 
-    <!-- WebLLM Integration for GPU-Accelerated LLM -->
+    <!-- WebLLM Integration for GPU-Accelerated LLM (main-thread API + worker engine) -->
     <script type="module">
         import * as webllm from "https://esm.run/@mlc-ai/web-llm";
         window.webllm = webllm;
-        console.log("✅ WebLLM loaded successfully");
+        try {
+            window.webllmWorker = new Worker(
+                new URL("./webllm-worker.js", import.meta.url),
+                { type: "module" }
+            );
+            console.log("✅ WebLLM loaded (worker engine ready)");
+        } catch (e) {
+            console.warn("WebLLM worker spawn failed, falling back to main thread:", e);
+            window.webllmWorker = null;
+        }
     </script>
 
-
-    <!-- Lucide Icons CDN (for Leptos components) -->
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
-    <script>
-        // Initialize Lucide icons when DOM is ready
-        document.addEventListener('DOMContentLoaded', function () {
-            if (typeof lucide !== 'undefined' && lucide.createIcons) {
-                lucide.createIcons();
-            }
-
-            // Observe DOM changes for dynamically inserted icons (Leptos SPA behavior)
-            try {
-                if (!document.body) return;
-
-                let pending = false;
-                const observer = new MutationObserver((mutations) => {
-                    const hasNewIcons = mutations.some((m) => {
-                        if (m.type !== 'childList') return false;
-                        for (const node of m.addedNodes) {
-                            if (!(node instanceof Element)) continue;
-                            if (node.matches && node.matches('[data-lucide]')) return true;
-                            if (node.querySelector && node.querySelector('[data-lucide]')) return true;
-                        }
-                        return false;
-                    });
-
-                    if (!hasNewIcons || pending) return;
-                    pending = true;
-
-                    requestAnimationFrame(() => {
-                        try {
-                            observer.disconnect();
-                            if (typeof lucide !== 'undefined' && lucide.createIcons) {
-                                lucide.createIcons();
-                            }
-                        } catch (err) {
-                            console.warn('Lucide refresh failed:', err);
-                        } finally {
-                            pending = false;
-                            observer.observe(document.body, { childList: true, subtree: true });
-                        }
-                    });
-                });
-
-                observer.observe(document.body, { childList: true, subtree: true });
-            } catch (e) {
-                console.warn('Lucide MutationObserver setup failed:', e);
-            }
-        });
-    </script>
-
-    <!-- Tailwind CSS with daisyUI -->
-    <link data-trunk rel="tailwind-css" href="tailwind.css" />
-
-    <!-- Copy tokenizer.json to dist for HuggingFace tokenizer -->
+    <link data-trunk rel="copy-file" href="webllm-worker.js" />
     <link data-trunk rel="copy-file" href="tokenizer.json" />
-
-    <!-- Copy ONNX model to dist -->
     <link data-trunk rel="copy-dir" href="models" />
-
-    <!-- Copy Symposium demo text -->
     <link data-trunk rel="copy-file" href="Symposium.txt" />
 
-    <!-- Include support for wasm-bindgen --weak-refs -->
     <link data-trunk rel="rust" data-wasm-opt="z" data-weak-refs data-bin="graphrag-wasm" data-cargo-features="hydrate" />
 </head>
 <body></body>

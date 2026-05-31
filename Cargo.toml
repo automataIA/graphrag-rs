@@ -4,16 +4,16 @@ members = [
     "graphrag-wasm",
     "graphrag-server",
     "graphrag-cli",
-    "graphrag_py",
     "graphrag",
 ]
-exclude = ["examples/web-app"]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
-rust-version = "1.75"
+# Verified MSRV: the `jsonfixer` dependency uses edition 2024, which requires
+# rustc >= 1.85. Build-verified on 1.85 for graphrag-core and graphrag-cli.
+rust-version = "1.85"
 authors = ["GraphRAG-RS Contributors"]
 license = "MIT"
 repository = "https://github.com/automataIA/graphrag-rs"
@@ -80,17 +80,18 @@ sprs = "0.11"
 nalgebra = "0.32"
 parking_lot = "0.12"
 lru = "0.12"
+mimalloc = { version = "0.1", default-features = false }
+rustc-hash = "2.0"
 
 # Text processing
-text_analysis = "0.3"
 regex = "1.0"
 
 # Utilities
 sha2 = "0.10"
 flate2 = "1.0"
 dashmap = "5.5"
-itertools = "0.12"
-strum = { version = "0.25", features = ["derive"] }
+itertools = "0.13"
+strum = { version = "0.26", features = ["derive"] }
 derive_more = "0.99"
 tap = "1.0"
 rayon = "1.8"
@@ -131,7 +132,7 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 # Vector databases (optional, for persistent storage)
 # NOTE: lancedb 0.26.2 should be compatible with arrow 56
 lancedb = "0.26.2"
-arrow = "57"
+arrow = { version = "57", default-features = false }
 arrow-array = "57"
 arrow-schema = "57"
 
@@ -142,10 +143,15 @@ candle-transformers = { version = "0.8", default-features = false }
 
 [profile.release]
 opt-level = 3
-lto = "thin"
+lto = "fat"
 codegen-units = 1
-strip = true
+strip = "symbols"
 panic = "abort"
+
+# Dev iteration profile — keeps thin LTO for fast linker passes.
+[profile.release-thin]
+inherits = "release"
+lto = "thin"
 
 [profile.wasm-release]
 inherits = "release"

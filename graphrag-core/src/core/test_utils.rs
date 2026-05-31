@@ -59,7 +59,7 @@ impl AsyncEmbedder for MockEmbedder {
 
     async fn embed(&self, text: &str) -> Result<Vec<f32>> {
         // Check if we have a pre-populated embedding
-        if let Some(embedding) = self.embeddings.lock().unwrap().get(text) {
+        if let Some(embedding) = self.embeddings.lock().expect("lock poisoned").get(text) {
             return Ok(embedding.clone());
         }
 
@@ -127,7 +127,7 @@ impl AsyncLanguageModel for MockLanguageModel {
     type Error = GraphRAGError;
 
     async fn complete(&self, prompt: &str) -> Result<String> {
-        if let Some(response) = self.responses.lock().unwrap().get(prompt) {
+        if let Some(response) = self.responses.lock().expect("lock poisoned").get(prompt) {
             Ok(response.clone())
         } else {
             Ok(self.default_response.clone())
@@ -182,7 +182,7 @@ impl MockVectorStore {
 
     /// Pre-populate with vectors for testing
     pub fn with_vector(self, id: impl Into<String>, vector: Vec<f32>) -> Self {
-        self.vectors.lock().unwrap().insert(id.into(), vector);
+        self.vectors.lock().expect("lock poisoned").insert(id.into(), vector);
         self
     }
 
@@ -219,7 +219,7 @@ impl AsyncVectorStore for MockVectorStore {
                 ),
             });
         }
-        self.vectors.lock().unwrap().insert(id, vector);
+        self.vectors.lock().expect("lock poisoned").insert(id, vector);
         Ok(())
     }
 
@@ -241,7 +241,7 @@ impl AsyncVectorStore for MockVectorStore {
             });
         }
 
-        let vectors = self.vectors.lock().unwrap();
+        let vectors = self.vectors.lock().expect("lock poisoned");
         let mut results: Vec<_> = vectors
             .iter()
             .map(|(id, vector)| {
@@ -255,7 +255,7 @@ impl AsyncVectorStore for MockVectorStore {
             .collect();
 
         // Sort by distance (ascending)
-        results.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap());
+        results.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap_or(std::cmp::Ordering::Equal));
 
         // Take top k
         Ok(results.into_iter().take(k).collect())
@@ -275,11 +275,11 @@ impl AsyncVectorStore for MockVectorStore {
     }
 
     async fn remove_vector(&mut self, id: &str) -> Result<bool> {
-        Ok(self.vectors.lock().unwrap().remove(id).is_some())
+        Ok(self.vectors.lock().expect("lock poisoned").remove(id).is_some())
     }
 
     async fn len(&self) -> usize {
-        self.vectors.lock().unwrap().len()
+        self.vectors.lock().expect("lock poisoned").len()
     }
 }
 
@@ -298,7 +298,7 @@ impl MockRetriever {
 
     /// Pre-populate with results for testing
     pub fn with_results(self, results: Vec<String>) -> Self {
-        *self.results.lock().unwrap() = results;
+        *self.results.lock().expect("lock poisoned") = results;
         self
     }
 }
@@ -316,7 +316,7 @@ impl AsyncRetriever for MockRetriever {
     type Error = GraphRAGError;
 
     async fn search(&self, _query: Self::Query, k: usize) -> Result<Vec<Self::Result>> {
-        let results = self.results.lock().unwrap();
+        let results = self.results.lock().expect("lock poisoned");
         Ok(results.iter().take(k).cloned().collect())
     }
 
@@ -330,7 +330,7 @@ impl AsyncRetriever for MockRetriever {
     }
 
     async fn update(&mut self, content: Vec<String>) -> Result<()> {
-        *self.results.lock().unwrap() = content;
+        *self.results.lock().expect("lock poisoned") = content;
         Ok(())
     }
 

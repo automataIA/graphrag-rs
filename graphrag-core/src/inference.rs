@@ -130,7 +130,7 @@ impl InferenceEngine {
         }
 
         // Sort by confidence and limit results
-        inferred_relations.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+        inferred_relations.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
         inferred_relations.truncate(self.config.max_candidates);
 
         inferred_relations

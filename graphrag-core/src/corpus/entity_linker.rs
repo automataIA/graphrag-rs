@@ -312,7 +312,7 @@ impl CrossDocumentEntityLinker {
 
         for entity in entities {
             if exact_clusters.contains_key(&entity.name) {
-                exact_clusters.get_mut(&entity.name).unwrap().push(entity);
+                exact_clusters.get_mut(&entity.name).expect("contains_key checked above").push(entity);
             } else {
                 let similar_found = exact_clusters
                     .keys()

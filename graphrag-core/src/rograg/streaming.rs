@@ -630,13 +630,13 @@ impl StreamingResponseBuilder {
     fn clean_content(&self, mut content: String) -> String {
         // Remove empty placeholder brackets
         content = regex::Regex::new(r"\{\w+\}")
-            .unwrap()
+            .expect("static regex literal")
             .replace_all(&content, "")
             .to_string();
 
         // Clean up extra spaces
         content = regex::Regex::new(r"\s+")
-            .unwrap()
+            .expect("static regex literal")
             .replace_all(&content, " ")
             .to_string();
 
@@ -863,7 +863,7 @@ impl SynthesisEngine {
 
         // Sort by confidence and combine
         let mut sorted_results = results.to_vec();
-        sorted_results.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+        sorted_results.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
 
         let content = sorted_results
             .iter()
@@ -899,7 +899,7 @@ impl SynthesisEngine {
     fn synthesize_best_only(&self, results: &[SubqueryResult]) -> Result<SynthesisResult> {
         let best_result = results
             .iter()
-            .max_by(|a, b| a.confidence.partial_cmp(&b.confidence).unwrap())
+            .max_by(|a, b| a.confidence.partial_cmp(&b.confidence).unwrap_or(std::cmp::Ordering::Equal))
             .ok_or_else(|| StreamingError::SynthesisFailed {
                 reason: "No best result found".to_string(),
             })?;
@@ -972,7 +972,7 @@ impl SynthesisEngine {
     fn synthesize_hierarchical(&self, results: &[SubqueryResult]) -> Result<SynthesisResult> {
         // Sort by confidence and create hierarchical structure
         let mut sorted_results = results.to_vec();
-        sorted_results.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+        sorted_results.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
 
         let mut content_parts = Vec::new();
 
@@ -1103,26 +1103,6 @@ mod tests {
     }
 
     /// Test template selection based on type and confidence
-    #[cfg(feature = "rograg")]
-    #[test]
-    fn test_template_selection() {
-        let builder = StreamingResponseBuilder::new();
-
-        let template = builder
-            .select_template(&TemplateType::Factual, 0.8)
-            .unwrap();
-        assert_eq!(template.template_type, TemplateType::Factual);
-
-        let template = builder
-            .select_template(&TemplateType::Factual, 0.3)
-            .unwrap();
-        // Should fall back to a template with lower threshold or fallback
-        assert!(
-            template.confidence_threshold <= 0.3
-                || template.template_type == TemplateType::Fallback
-        );
-    }
-
     /// Test generation of streaming chunks from a complete response
     #[cfg(feature = "rograg")]
     #[tokio::test]

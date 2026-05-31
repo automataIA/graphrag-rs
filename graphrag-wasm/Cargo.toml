@@ -39,7 +39,6 @@ graphrag-core = { path = "../graphrag-core", features = [
 
 # Leptos framework (merged from graphrag-leptos)
 leptos = { workspace = true }
-leptos-lucide-rs = "0.1"      # Icon library
 
 # WASM bindings
 wasm-bindgen = { workspace = true }

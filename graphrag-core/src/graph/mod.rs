@@ -1,3 +1,8 @@
+//! Knowledge-graph construction and graph algorithms.
+//!
+//! Builds the entity/relationship graph from processed documents and exposes graph
+//! operations (e.g. PageRank scoring) over the resulting [`KnowledgeGraph`].
+
 use crate::{
     core::{Document, Entity, KnowledgeGraph, Relationship},
     entity::EntityExtractor,
@@ -256,7 +261,7 @@ impl GraphBuilder {
                 }
 
                 // Sort by similarity and take top connections
-                similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+                similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
                 similarities.truncate(self.max_connections);
 
                 // Add semantic similarity relationships
@@ -365,15 +370,22 @@ impl GraphStatistics {
     /// Print graph statistics
     #[allow(dead_code)]
     pub fn print(&self) {
+        #[cfg(feature = "tracing")]
         tracing::info!("Graph Statistics:");
+        #[cfg(feature = "tracing")]
         tracing::info!("  Documents: {}", self.document_count);
+        #[cfg(feature = "tracing")]
         tracing::info!("  Chunks: {}", self.chunk_count);
+        #[cfg(feature = "tracing")]
         tracing::info!("  Entities: {}", self.entity_count);
+        #[cfg(feature = "tracing")]
         tracing::info!(
             "  Average entities per chunk: {:.2}",
             self.average_entities_per_chunk
         );
+        #[cfg(feature = "tracing")]
         tracing::info!("  Entity types:");
+        #[cfg(feature = "tracing")]
         for (entity_type, count) in &self.entity_types {
             tracing::info!("    {entity_type}: {count}");
         }

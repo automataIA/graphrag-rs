@@ -136,7 +136,7 @@ impl CustomNER {
         }
 
         self.rules.push(rule);
-        self.rules.sort_by(|a, b| b.priority.cmp(&a.priority));
+        self.rules.sort_by_key(|rule| std::cmp::Reverse(rule.priority));
     }
 
     /// Extract entities from text
@@ -361,7 +361,7 @@ impl CustomNER {
         entities.sort_by(|a, b| {
             a.start
                 .cmp(&b.start)
-                .then(b.confidence.partial_cmp(&a.confidence).unwrap())
+                .then(b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal))
         });
 
         let mut result = Vec::new();

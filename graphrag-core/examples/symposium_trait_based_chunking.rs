@@ -8,7 +8,7 @@
 //! 2. Tree-sitter AST-based chunking for embedded code snippets - preserves syntactic boundaries
 
 use graphrag_core::{
-    core::{ChunkingStrategy, Document, DocumentId, TextChunk},
+    core::{Document, DocumentId, TextChunk},
     text::{HierarchicalChunkingStrategy, TextProcessor},
 };
 use std::path::Path;
@@ -25,6 +25,7 @@ struct ChunkingMetrics {
     avg_chunk_size: f64,
     min_chunk_size: usize,
     max_chunk_size: usize,
+    #[allow(dead_code)]
     total_chars: usize,
     processing_time_ms: u64,
 }

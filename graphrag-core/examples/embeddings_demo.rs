@@ -1,13 +1,13 @@
-///! Demonstration of embedding providers in graphrag-core
-///!
-///! This example shows how to use different embedding providers:
-///! - Hugging Face Hub (free, downloadable models)
-///! - OpenAI API
-///! - Voyage AI API
-///! - Cohere API
-///! - Jina AI API
-///! - Mistral AI API
-///! - Together AI API
+//! Demonstration of embedding providers in graphrag-core
+//!
+//! This example shows how to use different embedding providers:
+//! - Hugging Face Hub (free, downloadable models)
+//! - OpenAI API
+//! - Voyage AI API
+//! - Cohere API
+//! - Jina AI API
+//! - Mistral AI API
+//! - Together AI API
 use graphrag_core::embeddings::{EmbeddingConfig, EmbeddingProvider, EmbeddingProviderType};
 
 #[cfg(feature = "huggingface-hub")]

@@ -204,15 +204,19 @@ pub struct BenchmarkSummary {
     pub query_results: Vec<QueryBenchmark>,
 }
 
+type RetrievalFn = Box<dyn Fn(&str) -> Vec<String> + Send + Sync>;
+type RerankerFn = Box<dyn Fn(&[String]) -> Vec<String> + Send + Sync>;
+type LlmFn = Box<dyn Fn(&str, &[String]) -> String + Send + Sync>;
+
 /// Main benchmarking coordinator
 pub struct BenchmarkRunner {
     config: BenchmarkConfig,
     /// Optional retrieval system for actual benchmarking
-    retrieval_fn: Option<Box<dyn Fn(&str) -> Vec<String> + Send + Sync>>,
+    retrieval_fn: Option<RetrievalFn>,
     /// Optional reranker function
-    reranker_fn: Option<Box<dyn Fn(&[String]) -> Vec<String> + Send + Sync>>,
+    reranker_fn: Option<RerankerFn>,
     /// Optional LLM generation function
-    llm_fn: Option<Box<dyn Fn(&str, &[String]) -> String + Send + Sync>>,
+    llm_fn: Option<LlmFn>,
 }
 
 impl BenchmarkRunner {
@@ -514,7 +518,7 @@ impl BenchmarkRunner {
         let bleu = brevity_penalty * (log_precision_sum / valid_n_grams as f32).exp();
 
         // Clamp to [0, 1] range
-        bleu.max(0.0).min(1.0)
+        bleu.clamp(0.0, 1.0)
     }
 
     /// Calculate precision for n-grams with clipping
@@ -603,7 +607,7 @@ impl BenchmarkRunner {
             ((1.0 + beta_squared) * precision * recall) / (beta_squared * precision + recall);
 
         // Clamp to [0, 1] range
-        f_score.max(0.0).min(1.0)
+        f_score.clamp(0.0, 1.0)
     }
 
     /// Calculate the length of the Longest Common Subsequence (LCS) using dynamic programming

@@ -119,6 +119,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             relation_type: rel_type.to_string(),
             confidence: *confidence,
             context: vec![ChunkId::new("chunk_0".to_string())],
+            embedding: None,
+            temporal_type: None,
+            temporal_range: None,
+            causal_strength: None,
         };
         graph.add_relationship(relationship)?;
     }

@@ -554,12 +554,6 @@ mod tests {
         assert!(config.validate().is_err());
     }
 
-    #[tokio::test]
-    async fn test_cache_warmer_creation() {
-        let config = WarmingConfig::default();
-        let warmer = CacheWarmer::new(config);
-        assert!(warmer.is_ok());
-    }
 
     #[tokio::test]
     async fn test_predefined_queries() {

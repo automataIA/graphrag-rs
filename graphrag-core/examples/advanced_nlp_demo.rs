@@ -82,6 +82,9 @@ fn demo_graph_traversal() -> Result<()> {
             confidence: 0.9,
             mentions: vec![],
             embedding: None,
+            first_mentioned: None,
+            last_mentioned: None,
+            temporal_validity: None,
         })?;
     }
 
@@ -91,6 +94,10 @@ fn demo_graph_traversal() -> Result<()> {
         relation_type: "knows".to_string(),
         confidence: 1.0,
         context: vec![],
+        embedding: None,
+        temporal_type: None,
+        temporal_range: None,
+        causal_strength: None,
     })?;
 
     graph.add_relationship(Relationship {
@@ -99,6 +106,10 @@ fn demo_graph_traversal() -> Result<()> {
         relation_type: "knows".to_string(),
         confidence: 1.0,
         context: vec![],
+        embedding: None,
+        temporal_type: None,
+        temporal_range: None,
+        causal_strength: None,
     })?;
 
     println!(
@@ -161,6 +172,9 @@ fn demo_query_optimization() -> Result<()> {
             confidence: 0.9,
             mentions: vec![],
             embedding: None,
+            first_mentioned: None,
+            last_mentioned: None,
+            temporal_validity: None,
         })?;
     }
 

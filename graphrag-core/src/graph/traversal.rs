@@ -600,10 +600,10 @@ mod tests {
             0.9,
         );
 
-        graph.add_entity(entity_a);
-        graph.add_entity(entity_b);
-        graph.add_entity(entity_c);
-        graph.add_entity(entity_d);
+        let _ = graph.add_entity(entity_a);
+        let _ = graph.add_entity(entity_b);
+        let _ = graph.add_entity(entity_c);
+        let _ = graph.add_entity(entity_d);
 
         // Add relationships
         let _ = graph.add_relationship(Relationship {
@@ -654,7 +654,7 @@ mod tests {
         let result = traversal.bfs(&graph, &source).unwrap();
 
         // Should discover all connected entities
-        assert!(result.entities.len() >= 1);
+        assert!(!result.entities.is_empty());
         assert!(result.distances.contains_key(&source));
     }
 
@@ -667,7 +667,7 @@ mod tests {
         let result = traversal.dfs(&graph, &source).unwrap();
 
         // Should discover entities through DFS
-        assert!(result.entities.len() >= 1);
+        assert!(!result.entities.is_empty());
         assert!(result.distances.contains_key(&source));
     }
 

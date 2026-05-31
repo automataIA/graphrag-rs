@@ -5,6 +5,8 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/graphrag-core"
+readme = "README.md"
 description = "Core portable library for GraphRAG - works on native and WASM"
 keywords = ["graphrag", "knowledge-graph", "rag", "llm", "ai"]
 categories = ["algorithms", "science", "text-processing"]
@@ -200,7 +202,6 @@ metal = [
 # === CORE DEPENDENCIES (always required) ===
 petgraph = { workspace = true }
 indexmap = { workspace = true }
-text_analysis = "0.3"
 regex = { workspace = true }
 ureq = { workspace = true, optional = true } # HTTP client (not needed for WASM)
 json = { workspace = true }
@@ -367,3 +368,13 @@ crate-type = ["rlib", "cdylib"] # rlib for Rust, cdylib for WASM/FFI
 [[bench]]
 name = "incremental_benchmark"
 harness = false                # Use criterion's harness
+
+# Targets that depend on optional features — gated so the default
+# `cargo build/test --workspace` stays green without pulling the feature.
+[[example]]
+name = "hierarchical_graphrag_demo"
+required-features = ["leiden"]
+
+[[test]]
+name = "incremental_integration"
+required-features = ["incremental"]

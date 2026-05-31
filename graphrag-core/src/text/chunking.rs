@@ -280,7 +280,7 @@ mod tests {
         // The second paragraph is long enough (128 chars) and will be chunked
 
         // Verify that we got meaningful chunks from the second paragraph
-        assert!(chunks.len() >= 1, "Should have at least one chunk");
+        assert!(!chunks.is_empty(), "Should have at least one chunk");
 
         // First chunk should start from second paragraph
         assert!(

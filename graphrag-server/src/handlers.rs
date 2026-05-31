@@ -534,7 +534,7 @@ fn extract_entities(text: &str, doc_id: &str) -> HashMap<String, Entity> {
 
     for word in text.split_whitespace() {
         let clean = word.trim_matches(|c: char| !c.is_alphabetic());
-        if clean.len() > 3 && clean.chars().next().unwrap().is_uppercase() {
+        if clean.len() > 3 && clean.chars().next().expect("non-empty string").is_uppercase() {
             *entity_counts.entry(clean.to_string()).or_insert(0) += 1;
         }
     }
@@ -582,7 +582,7 @@ fn query_collection(
         })
         .collect();
 
-    results.sort_by(|a, b| b.similarity.partial_cmp(&a.similarity).unwrap());
+    results.sort_by(|a, b| b.similarity.partial_cmp(&a.similarity).unwrap_or(std::cmp::Ordering::Equal));
     results.iter_mut().enumerate().for_each(|(i, r)| r.rank = i + 1);
     results.truncate(top_k);
 
@@ -608,14 +608,14 @@ fn apply_rrf(result_sets: Vec<Vec<QueryResult>>, top_k: usize) -> Vec<QueryResul
     }
 
     let mut merged: Vec<(String, f32)> = rrf_scores.into_iter().collect();
-    merged.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    merged.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
     merged
         .into_iter()
         .take(top_k)
         .enumerate()
         .map(|(i, (key, _))| {
-            let mut result = result_map.remove(&key).unwrap();
+            let mut result = result_map.remove(&key).expect("key iterated from same map");
             result.rank = i + 1;
             result
         })
@@ -626,7 +626,7 @@ fn apply_rrf(result_sets: Vec<Vec<QueryResult>>, top_k: usize) -> Vec<QueryResul
 fn concat_results(result_sets: Vec<Vec<QueryResult>>, top_k: usize) -> Vec<QueryResult> {
     let mut all_results: Vec<QueryResult> = result_sets.into_iter().flatten().collect();
 
-    all_results.sort_by(|a, b| b.similarity.partial_cmp(&a.similarity).unwrap());
+    all_results.sort_by(|a, b| b.similarity.partial_cmp(&a.similarity).unwrap_or(std::cmp::Ordering::Equal));
     all_results.iter_mut().enumerate().for_each(|(i, r)| r.rank = i + 1);
     all_results.truncate(top_k);
 

@@ -85,12 +85,12 @@ Outputs structured JSON with timings, entity counts, answers, confidence scores,
 | `algo_nlp_mistral__symposium.json5` | **NLP/regex** | nomic-embed-text | ✅ mistral-nemo | ~5-15s* |
 | `kv_no_gleaning_mistral__symposium.json5` | LLM single-pass | nomic-embed-text | ✅ mistral-nemo | ~30-60s |
 
-\* build ~5s, sintesi ~5-10s per domanda (con KV cache dopo la prima)
+\* build ~5s, synthesis ~5-10s per question (with KV cache after the first)
 
-**`algo_nlp_mistral__symposium.json5`** è il config raccomandato per chi vuole:
-- grafo costruito velocemente con metodi NLP classici (nessun LLM a build time)
-- ricerca semantica reale con `nomic-embed-text`
-- risposte sintetizzate da Mistral a query time con KV cache abilitata
+**`algo_nlp_mistral__symposium.json5`** is the recommended config for anyone who wants:
+- a graph built quickly with classic NLP methods (no LLM at build time)
+- real semantic search with `nomic-embed-text`
+- answers synthesized by Mistral at query time with KV cache enabled
 
 ---
 

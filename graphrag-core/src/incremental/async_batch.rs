@@ -460,7 +460,7 @@ impl AsyncBatchUpdater {
     ) {
         let batch = UpdateBatch {
             batch_id: uuid::Uuid::new_v4().to_string(),
-            operations: operations.drain(..).collect(),
+            operations: std::mem::take(operations),
             created_at: Utc::now(),
             started_at: None,
             completed_at: None,
@@ -496,7 +496,7 @@ impl AsyncBatchUpdater {
             let results: Vec<_> = batch
                 .operations
                 .par_iter()
-                .map(|op| Self::process_single_operation(op))
+                .map(Self::process_single_operation)
                 .collect();
 
             for result in results {

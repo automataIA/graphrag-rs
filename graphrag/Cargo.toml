@@ -8,6 +8,7 @@ repository.workspace = true
 homepage.workspace = true
 readme.workspace = true
 description = "GraphRAG - Knowledge Graph RAG: meta-crate that bundles graphrag-core and graphrag-cli"
+documentation = "https://docs.rs/graphrag"
 keywords = ["graphrag", "knowledge-graph", "rag", "llm", "ai"]
 categories = ["command-line-utilities", "algorithms", "science", "text-processing"]
 
@@ -20,7 +21,7 @@ name = "graphrag"
 path = "src/main.rs"
 
 [dependencies]
-graphrag-core = { version = "0.1.1", path = "../graphrag-core", features = [
+graphrag-core = { version = "0.2.0", path = "../graphrag-core", features = [
     "async",
     "pagerank",
     "lightrag",
@@ -34,6 +35,6 @@ graphrag-core = { version = "0.1.1", path = "../graphrag-core", features = [
     "json5-support",
     "vector-hnsw",
 ] }
-graphrag-cli = { version = "0.1.1", path = "../graphrag-cli" }
+graphrag-cli = { version = "0.2.0", path = "../graphrag-cli" }
 tokio = { version = "1.0", features = ["full"] }
 color-eyre = "0.6"

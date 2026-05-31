@@ -128,7 +128,7 @@ impl AuthState {
     ) -> Result<String, AuthError> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("system clock before UNIX epoch")
             .as_secs();
 
         let claims = Claims {
@@ -203,7 +203,7 @@ impl AuthState {
     ) -> Result<(), AuthError> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("system clock before UNIX epoch")
             .as_secs();
 
         let mut rate_limits = self.rate_limits.write().await;

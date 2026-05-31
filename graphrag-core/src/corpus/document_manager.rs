@@ -195,7 +195,7 @@ impl DocumentManager {
         self.collections.insert(collection_id.clone(), collection);
         self.current_collection = Some(collection_id.clone());
 
-        Ok(self.collections.get(&collection_id).unwrap())
+        Ok(self.collections.get(&collection_id).expect("just inserted above"))
     }
 
     /// Add a single document to the current collection

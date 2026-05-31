@@ -430,8 +430,7 @@ impl DistributedCache {
 
     /// Check if key matches pattern
     fn matches_pattern(key: &str, pattern: &str) -> bool {
-        if pattern.ends_with('*') {
-            let prefix = &pattern[..pattern.len() - 1];
+        if let Some(prefix) = pattern.strip_suffix('*') {
             key.starts_with(prefix)
         } else {
             key == pattern

@@ -371,14 +371,14 @@ impl GraphRAGHandler {
     #[allow(dead_code)]
     pub async fn has_documents(&self) -> bool {
         let guard = self.graphrag.lock().await;
-        guard.as_ref().map_or(false, |g| g.has_documents())
+        guard.as_ref().is_some_and(|g| g.has_documents())
     }
 
     /// Check if knowledge graph is built
     #[allow(dead_code)]
     pub async fn has_graph(&self) -> bool {
         let guard = self.graphrag.lock().await;
-        guard.as_ref().map_or(false, |g| g.has_graph())
+        guard.as_ref().is_some_and(|g| g.has_graph())
     }
 
     /// Get knowledge graph statistics

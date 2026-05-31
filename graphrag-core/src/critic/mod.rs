@@ -1,3 +1,8 @@
+//! LLM-based critique of generated answers.
+//!
+//! Scores an answer for quality/faithfulness via an `OllamaClient`, returning an
+//! `EvaluationResult` that callers can use to accept, retry, or refine a response.
+
 use crate::core::{GraphRAGError, Result};
 use crate::ollama::OllamaClient;
 use serde::{Deserialize, Serialize};

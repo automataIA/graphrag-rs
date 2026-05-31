@@ -318,16 +318,16 @@ impl SemanticQueryDecomposer {
                 pattern: regex::Regex::new(r"\b(who|what) is (.+?) and (.+)")?,
                 extractor: |text| {
                     if let Some(caps) = regex::Regex::new(r"\b(who|what) is (.+?) and (.+)")
-                        .unwrap()
+                        .expect("static regex literal")
                         .captures(text)
                     {
                         vec![
                             format!(
                                 "{} is {}",
-                                caps.get(1).unwrap().as_str(),
-                                caps.get(2).unwrap().as_str()
+                                caps.get(1).expect("regex capture").as_str(),
+                                caps.get(2).expect("regex capture").as_str()
                             ),
-                            caps.get(3).unwrap().as_str().to_string(),
+                            caps.get(3).expect("regex capture").as_str().to_string(),
                         ]
                     } else {
                         vec![]
@@ -343,16 +343,16 @@ impl SemanticQueryDecomposer {
                     if let Some(caps) = regex::Regex::new(
                         r"\bhow (?:is|are) (.+?) (?:related to|connected to) (.+)",
                     )
-                    .unwrap()
+                    .expect("static regex literal")
                     .captures(text)
                     {
                         vec![
-                            format!("What is {}", caps.get(1).unwrap().as_str()),
-                            format!("What is {}", caps.get(2).unwrap().as_str()),
+                            format!("What is {}", caps.get(1).expect("regex capture").as_str()),
+                            format!("What is {}", caps.get(2).expect("regex capture").as_str()),
                             format!(
                                 "How are {} and {} related",
-                                caps.get(1).unwrap().as_str(),
-                                caps.get(2).unwrap().as_str()
+                                caps.get(1).expect("regex capture").as_str(),
+                                caps.get(2).expect("regex capture").as_str()
                             ),
                         ]
                     } else {

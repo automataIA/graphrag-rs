@@ -1,0 +1,94 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - img [ref=e7]
+      - heading "GraphRAG WASM" [level=1] [ref=e15]
+    - paragraph [ref=e16]: Knowledge Graph RAG in Your Browser
+    - generic [ref=e17]:
+      - generic [ref=e18]:
+        - img [ref=e19]
+        - text: HuggingFace
+      - generic [ref=e22]:
+        - img [ref=e23]
+        - text: ONNX (WebGPU)
+      - generic [ref=e26]:
+        - img [ref=e27]
+        - text: WebLLM (Qwen3)
+      - generic [ref=e30]:
+        - img [ref=e31]
+        - text: Pure Rust Search
+  - tablist "Main navigation" [ref=e34]:
+    - tab "1. Build Graph 0 docs" [ref=e35] [cursor=pointer]:
+      - generic [ref=e36]:
+        - img [ref=e37]
+        - generic [ref=e40]: 1. Build Graph
+        - generic [ref=e41]: 0 docs
+    - tab "2. Explore Graph" [ref=e42] [cursor=pointer]:
+      - generic [ref=e43]:
+        - img [ref=e44]
+        - generic [ref=e47]: 2. Explore Graph
+    - tab "3. Query Graph" [ref=e48] [cursor=pointer]:
+      - generic [ref=e49]:
+        - img [ref=e50]
+        - generic [ref=e52]: 3. Query Graph
+    - tab "4. Hierarchy" [ref=e53] [cursor=pointer]:
+      - generic [ref=e54]:
+        - img [ref=e55]
+        - generic [ref=e60]: 4. Hierarchy
+    - tab "Settings" [ref=e61] [cursor=pointer]:
+      - generic [ref=e62]:
+        - img [ref=e63]
+        - generic [ref=e66]: Settings
+  - tabpanel [ref=e68]:
+    - generic [ref=e70]:
+      - heading "Add Documents" [level=2] [ref=e71]:
+        - img [ref=e72]
+        - generic [ref=e75]: Add Documents
+      - generic [ref=e76]:
+        - generic [ref=e77]: Upload Files (txt, md, pdf)
+        - button "Upload Files (txt, md, pdf)" [ref=e78] [cursor=pointer]
+      - button "Load Symposium Demo (Plato)" [ref=e80] [cursor=pointer]:
+        - img [ref=e81]
+        - text: Load Symposium Demo (Plato)
+      - generic [ref=e83]:
+        - generic [ref=e84]:
+          - generic [ref=e85]: Document Name (optional)
+          - textbox "Document Name (optional)" [ref=e86]:
+            - /placeholder: My Document
+        - generic [ref=e87]:
+          - generic [ref=e88]: Paste Text Content
+          - textbox "Paste Text Content" [ref=e89]:
+            - /placeholder: Paste your document content here...
+        - button "Add Document" [disabled]:
+          - img
+          - text: Add Document
+    - generic [ref=e91]:
+      - heading "Document Library 0 documents" [level=2] [ref=e92]:
+        - img [ref=e93]
+        - generic [ref=e95]: Document Library
+        - generic [ref=e96]: 0 documents
+      - generic [ref=e97]:
+        - img [ref=e98]
+        - paragraph [ref=e101]: No documents yet
+        - paragraph [ref=e102]: Upload files or paste text to get started
+    - generic [ref=e104]:
+      - heading "Build Knowledge Graph" [level=2] [ref=e105]:
+        - img [ref=e106]
+        - generic [ref=e108]: Build Knowledge Graph
+      - status [ref=e109]:
+        - paragraph [ref=e111]: Add documents above, then click the button below to build your knowledge graph
+      - button "Build Knowledge Graph" [disabled]:
+        - img
+        - text: Build Knowledge Graph
+  - contentinfo [ref=e112]:
+    - paragraph [ref=e113]:
+      - text: Built with
+      - link "Leptos" [ref=e114] [cursor=pointer]:
+        - /url: https://leptos.dev
+      - text: +
+      - link "Rust" [ref=e115] [cursor=pointer]:
+        - /url: https://www.rust-lang.org
+      - text: +
+      - link "WebAssembly" [ref=e116] [cursor=pointer]:
+        - /url: https://webassembly.org
+    - paragraph [ref=e117]: GraphRAG WASM • Complete Document Pipeline • v0.2.0

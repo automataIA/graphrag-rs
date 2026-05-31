@@ -951,8 +951,8 @@ impl App {
                 let mut lines = vec![
                     format!(
                         "🔍 Entities{}",
-                        if filter.is_some() {
-                            format!(" (filtered by '{}')", filter.unwrap())
+                        if let Some(f) = &filter {
+                            format!(" (filtered by '{f}')")
                         } else {
                             String::new()
                         }
@@ -1017,7 +1017,7 @@ impl App {
 
         match self
             .graphrag
-            .load_workspace(workspace_dir.to_str().unwrap(), &name)
+            .load_workspace(workspace_dir.to_str().expect("valid UTF-8 path"), &name)
             .await
         {
             Ok(message) => {
@@ -1061,7 +1061,7 @@ impl App {
 
         match self
             .graphrag
-            .list_workspaces(workspace_dir.to_str().unwrap())
+            .list_workspaces(workspace_dir.to_str().expect("valid UTF-8 path"))
             .await
         {
             Ok(list_output) => {
@@ -1104,7 +1104,7 @@ impl App {
 
         match self
             .graphrag
-            .save_workspace(workspace_dir.to_str().unwrap(), &name)
+            .save_workspace(workspace_dir.to_str().expect("valid UTF-8 path"), &name)
             .await
         {
             Ok(message) => {
@@ -1153,7 +1153,7 @@ impl App {
 
         match self
             .graphrag
-            .delete_workspace(workspace_dir.to_str().unwrap(), &name)
+            .delete_workspace(workspace_dir.to_str().expect("valid UTF-8 path"), &name)
             .await
         {
             Ok(message) => {

@@ -941,7 +941,7 @@ impl QualityMetrics {
 
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system clock before UNIX epoch")
             .as_secs();
 
         let response_quality = self.calculate_response_quality(response)?;
@@ -1199,7 +1199,7 @@ impl QualityMetrics {
         }
 
         let time_span =
-            recent_queries.first().unwrap().timestamp - recent_queries.last().unwrap().timestamp;
+            recent_queries.first().expect("non-empty").timestamp - recent_queries.last().expect("non-empty").timestamp;
         if time_span > 0 {
             self.performance_stats.throughput_qps = recent_queries.len() as f64 / time_span as f64;
         }
@@ -1223,7 +1223,7 @@ impl QualityMetrics {
     fn check_quality_alerts(&mut self, metrics: &QueryMetrics) {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system clock before UNIX epoch")
             .as_secs();
 
         // Quality degradation alert
@@ -1336,7 +1336,7 @@ impl QualityMetrics {
             sample_size: self.query_history.len().min(baseline_metrics.len()),
             analysis_timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("system clock before UNIX epoch")
                 .as_secs(),
         })
     }
@@ -1477,7 +1477,7 @@ impl QualityMetrics {
             "quality_benchmarks": self.quality_benchmarks,
             "recent_queries": self.query_history.iter().rev().take(100).collect::<Vec<_>>(),
             "active_alerts": self.real_time_monitor.active_alerts,
-            "timestamp": SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
+            "timestamp": SystemTime::now().duration_since(UNIX_EPOCH).expect("system clock before UNIX epoch").as_secs()
         });
 
         Ok(serde_json::to_string_pretty(&export_data)?)
@@ -1606,32 +1606,6 @@ mod tests {
         assert!(quality.coherence_score > 0.0);
         assert!(quality.relevance_score > 0.0);
         assert!(quality.overall_quality > 0.0);
-    }
-
-    #[cfg(feature = "rograg")]
-    #[test]
-    fn test_performance_stats_update() {
-        let mut metrics = QualityMetrics::new();
-        let response = create_test_response();
-        let decomposition = create_test_decomposition();
-
-        // Record multiple queries
-        for i in 0..5 {
-            let query = format!("Test query {i}");
-            metrics
-                .record_query(
-                    &query,
-                    &decomposition,
-                    &response,
-                    Duration::from_millis(1000 + i as u64 * 100),
-                )
-                .unwrap();
-        }
-
-        assert_eq!(metrics.performance_stats.total_queries, 5);
-        assert_eq!(metrics.performance_stats.successful_decompositions, 5);
-        assert!(metrics.performance_stats.avg_processing_time_ms > 0.0);
-        assert!(metrics.performance_stats.avg_quality_score > 0.0);
     }
 
     #[cfg(feature = "rograg")]

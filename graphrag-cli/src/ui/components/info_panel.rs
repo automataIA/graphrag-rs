@@ -296,13 +296,13 @@ impl InfoPanel {
         } else {
             Color::Green
         };
-        let bar = confidence_bar(conf, 8);
+        let conf_bar = confidence_bar(conf, 8);
 
         let mut items: Vec<ListItem> = vec![
             ListItem::new(Line::from(vec![
                 Span::styled("  Confidence: ", self.theme.dimmed()),
                 Span::styled(
-                    format!("{:.0}% {}", conf * 100.0, bar),
+                    format!("{:.0}% {}", conf * 100.0, conf_bar),
                     Style::default().fg(conf_color),
                 ),
             ])),

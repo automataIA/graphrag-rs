@@ -176,7 +176,7 @@ impl Node2Vec {
         let mut walk = vec![start.to_string()];
 
         for _ in 1..self.config.walk_length {
-            let current = walk.last().unwrap();
+            let current = walk.last().expect("non-empty");
 
             if let Some(neighbors) = graph.neighbors(current) {
                 if neighbors.is_empty() {
@@ -425,7 +425,7 @@ impl GraphSAGE {
             let aggregated = self.aggregate_neighbors(features, &neighbors);
 
             // Combine with node's own features
-            let node_feat = features.get(node).unwrap();
+            let node_feat = features.get(node).expect("node feature precomputed");
             let combined = self.combine_features(node_feat, &aggregated);
 
             new_features.insert(node.clone(), combined);
@@ -689,7 +689,7 @@ mod tests {
         assert_eq!(walks.len(), 5); // 5 nodes * 1 walk per node
         for walk in &walks {
             assert!(walk.len() <= 5);
-            assert!(walk.len() > 0);
+            assert!(!walk.is_empty());
         }
     }
 }

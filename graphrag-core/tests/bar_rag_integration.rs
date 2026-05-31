@@ -121,7 +121,7 @@ Third paragraph.";
     // Paragraph boundaries or other semantic boundaries should be found
     // BAR-RAG may find sentence or other boundaries even if paragraph detection varies
     assert!(
-        paragraph_boundaries.len() >= 1 || boundaries.len() >= 2,
+        !paragraph_boundaries.is_empty() || boundaries.len() >= 2,
         "Expected paragraph boundaries or other semantic boundaries, found {} paragraph, {} total",
         paragraph_boundaries.len(),
         boundaries.len()
@@ -190,7 +190,7 @@ fn test_boundary_detector_abbreviation_handling() {
         .collect();
 
     // Should detect at least the real sentence ending, but not at "Dr."
-    assert!(sentence_boundaries.len() >= 1);
+    assert!(!sentence_boundaries.is_empty());
 }
 
 #[tokio::test]
@@ -203,7 +203,7 @@ async fn test_coherence_scorer_basic() {
     let score = scorer.score_chunk_coherence(text).await.unwrap();
 
     // Should return a valid coherence score
-    assert!(score >= 0.0 && score <= 1.0);
+    assert!((0.0..=1.0).contains(&score));
 }
 
 #[tokio::test]
@@ -285,7 +285,7 @@ fn test_boundary_aware_chunking_strategy() {
 
     // Should produce at least one chunk
     // Note: Optimal splitting may produce fewer chunks for coherent text
-    assert!(chunks.len() >= 1);
+    assert!(!chunks.is_empty());
 }
 
 #[test]
@@ -392,8 +392,8 @@ async fn test_coherence_adaptive_threshold() {
     let threshold_long = scorer.calculate_adaptive_threshold(&long_text);
 
     // Thresholds should be in valid range
-    assert!(threshold_short >= 0.5 && threshold_short <= 0.9);
-    assert!(threshold_long >= 0.5 && threshold_long <= 0.9);
+    assert!((0.5..=0.9).contains(&threshold_short));
+    assert!((0.5..=0.9).contains(&threshold_long));
 
     // Longer text should have slightly lower threshold (more tolerant)
     assert!(threshold_long <= threshold_short);
@@ -494,7 +494,7 @@ This approach significantly improves retrieval quality and answer accuracy.
     // Should produce at least one chunk
     // Note: Coherence-based optimization may keep related content together
     assert!(
-        chunks.len() >= 1,
+        !chunks.is_empty(),
         "Expected at least 1 chunk, got {}",
         chunks.len()
     );
@@ -553,7 +553,6 @@ fn test_real_world_document_plato_symposium() {
     assert!(!chunks.is_empty(), "Should produce at least one chunk");
 
     let mut total_chars = 0;
-    let mut has_coherence_metadata = false;
 
     for (i, chunk) in chunks.iter().enumerate() {
         assert!(!chunk.content.is_empty(), "Chunk {} is empty", i);
@@ -565,7 +564,6 @@ fn test_real_world_document_plato_symposium() {
 
         // Check coherence score in metadata if available
         if let Some(score) = chunk.metadata.custom.get("coherence_score") {
-            has_coherence_metadata = true;
             println!(
                 "Chunk {}: {} chars, coherence: {}",
                 i,

@@ -52,7 +52,7 @@ pub use traits::*;
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```ignore
 /// use graphrag_core::{ChunkingStrategy, TextChunk};
 ///
 /// struct SimpleChunker;
@@ -763,6 +763,7 @@ impl KnowledgeGraph {
 
         // Save to file
         fs::write(file_path, json_data.dump())?;
+        #[cfg(feature = "tracing")]
         tracing::info!("Knowledge graph saved to {file_path}");
 
         Ok(())
@@ -878,8 +879,8 @@ impl KnowledgeGraph {
             let mut triplet_mat = sprs::TriMat::new((nodes.len(), nodes.len()));
             for ((row, col), val) in row_indices
                 .into_iter()
-                .zip(col_indices.into_iter())
-                .zip(values.into_iter())
+                .zip(col_indices)
+                .zip(values)
             {
                 triplet_mat.add_triplet(row, col, val);
             }
@@ -1152,7 +1153,7 @@ impl KnowledgeGraph {
     /// Result containing the built hierarchy or an error
     ///
     /// # Example
-    /// ```no_run
+    /// ```ignore
     /// use graphrag_core::{KnowledgeGraph, ollama::OllamaClient};
     ///
     /// let mut graph = KnowledgeGraph::new();

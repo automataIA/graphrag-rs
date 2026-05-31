@@ -4,7 +4,7 @@
 
 ---
 
-## 🎯 What is GraphRAG?
+## What is GraphRAG?
 
 GraphRAG (Graph-based Retrieval-Augmented Generation) is an intelligent system that transforms unstructured text into a **knowledge graph** and uses it to answer questions with unprecedented accuracy and context awareness.
 
@@ -30,7 +30,7 @@ That's exactly what GraphRAG does, but at machine scale with scientific precisio
 
 ---
 
-## ⚙️ Configuration-Driven Dynamic Pipeline
+## Configuration-Driven Dynamic Pipeline
 
 **GraphRAG-rs adapts its behavior based on your TOML configuration** - the same codebase can run as:
 - **Fast, lightweight system** (pattern-based, no LLM, <10ms processing)
@@ -89,7 +89,7 @@ The system automatically selects implementations based on config:
 
 ---
 
-## 🎯 Three Pipeline Approaches: Choose Your Strategy
+## Three Pipeline Approaches: Choose Your Strategy
 
 **GraphRAG-rs offers three distinct pipeline approaches**, each optimized for different use cases and resource constraints. This approach-based architecture lets you explicitly choose your quality vs. speed trade-off.
 
@@ -135,9 +135,9 @@ use_hnsw_index = true
 ```
 
 **Performance**:
-- Quality: ⭐⭐⭐⭐⭐ (90-95% accuracy)
-- Speed: ⭐⭐☆☆☆ (100-500 docs/sec)
-- Resource: ⭐⭐⭐⭐⭐ (High: 4-8GB, GPU recommended)
+- Quality: ★★★★★ (90-95% accuracy)
+- Speed: ★★☆☆☆ (100-500 docs/sec)
+- Resource: ★★★★★ (High: 4-8GB, GPU recommended)
 
 **Best For**: Research papers, legal documents, philosophical texts, narrative fiction, nuanced content analysis.
 
@@ -175,9 +175,9 @@ bm25_b = 0.75
 ```
 
 **Performance**:
-- Quality: ⭐⭐⭐☆☆ (70-85% accuracy)
-- Speed: ⭐⭐⭐⭐⭐ (1000-5000 docs/sec)
-- Resource: ⭐☆☆☆☆ (Low: 1-2GB, CPU only)
+- Quality: ★★★☆☆ (70-85% accuracy)
+- Speed: ★★★★★ (1000-5000 docs/sec)
+- Resource: ★☆☆☆☆ (Low: 1-2GB, CPU only)
 
 **Best For**: Large-scale processing, resource-constrained environments, real-time applications, structured data, privacy-sensitive systems (no external APIs).
 
@@ -218,9 +218,9 @@ rrf_k = 60
 ```
 
 **Performance**:
-- Quality: ⭐⭐⭐⭐☆ (85-95% accuracy)
-- Speed: ⭐⭐⭐☆☆ (200-1000 docs/sec)
-- Resource: ⭐⭐⭐☆☆ (Medium: 3-4GB, moderate GPU)
+- Quality: ★★★★☆ (85-95% accuracy)
+- Speed: ★★★☆☆ (200-1000 docs/sec)
+- Resource: ★★★☆☆ (Medium: 3-4GB, moderate GPU)
 
 **Best For**: Production systems, diverse query workloads, mixed document types, applications requiring both quality and efficiency.
 
@@ -323,7 +323,7 @@ cargo run --example your_example -- my_config.toml
 
 ---
 
-## 🚀 LazyGraphRAG & E2GraphRAG: Ultra-Efficient Approaches
+## LazyGraphRAG & E2GraphRAG: Ultra-Efficient Approaches
 
 **New in 2025**: Revolutionary approaches achieving **0.1% of traditional indexing cost** while maintaining 90%+ quality.
 
@@ -347,11 +347,11 @@ These cutting-edge implementations eliminate expensive LLM-based entity extracti
 **Philosophy**: Zero LLM for indexing, concept graph from co-occurrence, iterative deepening for queries.
 
 **Key Features**:
-- 🚫 **No LLM Calls During Indexing**: Uses noun phrase extraction
-- 💰 **1000x Cheaper Indexing**: $0.10 vs $100 per 1M tokens
-- ⚡ **100x Faster Indexing**: 1000 docs/sec vs 10 docs/sec
-- 🔍 **700x Cheaper Queries**: $0.0014 vs $1.00 per query
-- 🎯 **92% Quality**: Acceptable trade-off for massive cost savings
+- **No LLM Calls During Indexing**: Uses noun phrase extraction
+- **1000x Cheaper Indexing**: $0.10 vs $100 per 1M tokens
+- **100x Faster Indexing**: 1000 docs/sec vs 10 docs/sec
+- **700x Cheaper Queries**: $0.0014 vs $1.00 per query
+- **92% Quality**: Acceptable trade-off for massive cost savings
 
 **Technology Stack**:
 - **Concept Extraction**: Regex-based noun phrases (no LLM)
@@ -376,8 +376,8 @@ use_bidirectional_index = true
 ```
 
 **Performance**:
-- Quality: ⭐⭐⭐⭐☆ (92% accuracy) | Speed: ⭐⭐⭐⭐⭐ (1000 docs/sec)
-- Cost: ⭐⭐⭐⭐⭐ (0.1% of traditional) | Resource: ⭐☆☆☆☆ (200MB RAM)
+- Quality: ★★★★☆ (92% accuracy) | Speed: ★★★★★ (1000 docs/sec)
+- Cost: ★★★★★ (0.1% of traditional) | Resource: ★☆☆☆☆ (200MB RAM)
 
 **Example**:
 ```rust
@@ -398,8 +398,8 @@ println!("Found {} chunks", results.chunk_count());
 **Philosophy**: Pattern-based entity extraction, no LLM required, deterministic output.
 
 **Key Features**:
-- ⚡ **100x Faster Entity Extraction**: 5ms vs 500ms per chunk
-- 💰 **2000x Cheaper**: $0.05 per 1M tokens
+- **100x Faster Entity Extraction**: 5ms vs 500ms per chunk
+- **2000x Cheaper**: $0.05 per 1M tokens
 - ✅ **Deterministic**: Fully reproducible results
 
 **Configuration**:
@@ -433,29 +433,29 @@ use_noun_phrase_extraction = true
 
 ---
 
-## 🔄 The 7-Stage Pipeline
+## The 7-Stage Pipeline
 
 GraphRAG-rs processes documents through **7 interconnected stages**, transforming raw text into intelligent, queryable knowledge. Let's explore each stage with a real example using *The Adventures of Tom Sawyer*.
 
 ```mermaid
 flowchart TB
-    Input[📄 Raw Document<br/>434,401 characters] --> Stage1
+    Input[Raw Document<br/>434,401 characters] --> Stage1
 
     subgraph Pipeline ["GraphRAG 7-Stage Pipeline"]
-        Stage1[📝 Stage 1: Text Chunking<br/>Break into 492 chunks]
-        Stage2[🧮 Stage 2: Embeddings<br/>Generate 384-dim vectors]
-        Stage3[👤 Stage 3: Entity Extraction<br/>Find 429 entities]
-        Stage4[🕸️ Stage 4: Graph Construction<br/>Build knowledge graph]
-        Stage5[🔍 Stage 5: Dual-Level Retrieval<br/>Smart search]
-        Stage6[❓ Stage 6: Query Processing<br/>Understand question]
-        Stage7[📝 Stage 7: Answer Generation<br/>Compose response]
+        Stage1[Stage 1: Text Chunking<br/>Break into 492 chunks]
+        Stage2[Stage 2: Embeddings<br/>Generate 384-dim vectors]
+        Stage3[Stage 3: Entity Extraction<br/>Find 429 entities]
+        Stage4[Stage 4: Graph Construction<br/>Build knowledge graph]
+        Stage5[Stage 5: Dual-Level Retrieval<br/>Smart search]
+        Stage6[Stage 6: Query Processing<br/>Understand question]
+        Stage7[Stage 7: Answer Generation<br/>Compose response]
 
         Stage1 --> Stage2
         Stage2 --> Stage3
         Stage3 --> Stage4
         Stage4 --> Stage5
 
-        Query[❓ User Query] --> Stage6
+        Query[User Query] --> Stage6
         Stage6 --> Stage5
         Stage5 --> Stage7
     end
@@ -473,7 +473,7 @@ flowchart TB
 
 ---
 
-### 📝 Stage 1: Text Chunking
+### Stage 1: Text Chunking
 
 **What it does**: Divides long documents into overlapping, semantically meaningful segments.
 
@@ -524,7 +524,7 @@ Chunk B: "...treasure under the cross marked on the old tree..."
 
 ---
 
-### 🧮 Stage 2: Embeddings Generation
+### Stage 2: Embeddings Generation
 
 **What it does**: Converts text chunks into high-dimensional numerical vectors that capture semantic meaning.
 
@@ -571,13 +571,13 @@ let embedding = embedder.generate_embedding_async(
 
 ---
 
-### 👤 Stage 3: Entity Extraction
+### Stage 3: Entity Extraction
 
 **What it does**: Identifies and extracts named entities (people, places, concepts, events) and their relationships from each chunk.
 
 **Why**: Entities are the **nodes** of our knowledge graph. Without them, we'd just have disconnected chunks of text.
 
-#### ⚡ Dynamic Pipeline Configuration
+#### Dynamic Pipeline Configuration
 
 **GraphRAG-rs now adapts Stage 3 based on your TOML configuration**. The system automatically chooses the optimal extraction method:
 
@@ -597,8 +597,8 @@ chat_model = "llama3.1:8b"    # ← LLM model for extraction
 
 | Config Setting | Pipeline Behavior | Performance | Quality |
 |----------------|-------------------|-------------|---------|
-| `use_gleaning = false` | **Pattern-Based** (regex + capitalization) | <10ms/chunk | ⭐⭐⭐ Good |
-| `use_gleaning = true` + `ollama.enabled = true` | **LLM-Based** (gleaning with Ollama) | 200-500ms/chunk | ⭐⭐⭐⭐⭐ Excellent |
+| `use_gleaning = false` | **Pattern-Based** (regex + capitalization) | <10ms/chunk | ★★★ Good |
+| `use_gleaning = true` + `ollama.enabled = true` | **LLM-Based** (gleaning with Ollama) | 200-500ms/chunk | ★★★★★ Excellent |
 | `use_gleaning = true` + `ollama.enabled = false` | ❌ Error | - | N/A |
 
 **Logged Output**:
@@ -684,7 +684,7 @@ Round 4: "Final check for concepts"   → Found 2 subtle concepts
 Total: 125 entities, 8 relationships
 
 [INFO] ✅ Extraction complete after 4 rounds
-[INFO] 📊 Final gleaning results: 125 entities, 8 relationships
+[INFO] Final gleaning results: 125 entities, 8 relationships
 ```
 
 **Module**: `src/entity/gleaning_extractor.rs`
@@ -741,7 +741,7 @@ chat_model = "llama3.1:8b"    # ← LLM for extraction
 
 ---
 
-### 🕸️ Stage 4: Knowledge Graph Construction
+### Stage 4: Knowledge Graph Construction
 
 **What it does**: Connects extracted entities into a unified, queryable graph structure with typed relationships.
 
@@ -832,7 +832,7 @@ Community 2: Philosophical concepts (189 entities)
 
 ---
 
-### 🔍 Stage 5: Dual-Level Retrieval (LightRAG)
+### Stage 5: Dual-Level Retrieval (LightRAG)
 
 **What it does**: Searches the knowledge graph at **two levels simultaneously** - specific entities (low-level) and broad concepts (high-level).
 
@@ -894,7 +894,7 @@ Entity: "Tom Sawyer"
 
 ---
 
-### ❓ Stage 6: Query Processing
+### Stage 6: Query Processing
 
 **What it does**: Analyzes the user's question to determine **intent, entities, and optimal search strategy**.
 
@@ -978,7 +978,7 @@ pub async fn execute_query() -> Result<QueryResult> {
 
 ---
 
-### 📝 Stage 7: Answer Generation
+### Stage 7: Answer Generation
 
 **What it does**: Synthesizes retrieved entities, relationships, and chunks into a coherent, natural language answer.
 
@@ -1054,7 +1054,7 @@ return response;
 
 ---
 
-## 📊 Complete Pipeline Performance
+## Complete Pipeline Performance
 
 ### Real Benchmark: Tom Sawyer (434KB)
 
@@ -1087,7 +1087,7 @@ With **PageRank + LightRAG optimizations**:
 
 ---
 
-## 🔧 Alternative Techniques for Each Stage
+## Alternative Techniques for Each Stage
 
 GraphRAG-rs is **highly modular** with **pluggable implementations** for each pipeline stage. Choose the best technique based on your requirements using the `core::traits` abstraction layer.
 
@@ -1143,28 +1143,28 @@ GraphRAG Core now supports **11 embedding backends** via unified configuration:
 
 | Provider | Performance | Quality | GPU | Platform | Module |
 |----------|-------------|---------|-----|----------|--------|
-| **HuggingFace Hub** | First: ~2s<br>Cached: 50-100ms | ⭐⭐⭐⭐ | ❌ CPU | All | `graphrag-core/src/embeddings/huggingface.rs` |
-| **Ollama** (nomic-embed-text) | 100-200ms | ⭐⭐⭐⭐⭐ | ✅ CUDA/Metal | Server | `src/ollama/embeddings.rs` |
-| **ONNX Runtime Web** | 3-8ms (GPU) | ⭐⭐⭐⭐ | ✅ WebGPU | WASM | `graphrag-wasm/src/onnx_embedder.rs` |
-| **Hash-based (TF-IDF)** | <1ms | ⭐⭐⭐ | ❌ CPU-only | Testing | `src/embeddings/hash_embedder.rs` |
+| **HuggingFace Hub** | First: ~2s<br>Cached: 50-100ms | ★★★★ | ❌ CPU | All | `graphrag-core/src/embeddings/huggingface.rs` |
+| **Ollama** (nomic-embed-text) | 100-200ms | ★★★★★ | ✅ CUDA/Metal | Server | `src/ollama/embeddings.rs` |
+| **ONNX Runtime Web** | 3-8ms (GPU) | ★★★★ | ✅ WebGPU | WASM | `graphrag-wasm/src/onnx_embedder.rs` |
+| **Hash-based (TF-IDF)** | <1ms | ★★★ | ❌ CPU-only | Testing | `src/embeddings/hash_embedder.rs` |
 
 #### API Providers (Production)
 
 | Provider | Cost/1M tokens | Quality | Best For | Module |
 |----------|---------------|---------|----------|--------|
-| **OpenAI** | $0.13 | ⭐⭐⭐⭐⭐ | Best quality | `graphrag-core/src/embeddings/api_providers.rs` |
-| **Voyage AI** | Medium | ⭐⭐⭐⭐⭐ | Domain-specific (code, finance, law) | `graphrag-core/src/embeddings/api_providers.rs` |
-| **Cohere** | $0.10 | ⭐⭐⭐⭐ | Multilingual (100+ langs) | `graphrag-core/src/embeddings/api_providers.rs` |
-| **Jina AI** | $0.02 | ⭐⭐⭐⭐ | Cost-optimized | `graphrag-core/src/embeddings/api_providers.rs` |
-| **Mistral AI** | $0.10 | ⭐⭐⭐⭐ | RAG-optimized | `graphrag-core/src/embeddings/api_providers.rs` |
-| **Together AI** | $0.008 | ⭐⭐⭐⭐ | Cheapest | `graphrag-core/src/embeddings/api_providers.rs` |
+| **OpenAI** | $0.13 | ★★★★★ | Best quality | `graphrag-core/src/embeddings/api_providers.rs` |
+| **Voyage AI** | Medium | ★★★★★ | Domain-specific (code, finance, law) | `graphrag-core/src/embeddings/api_providers.rs` |
+| **Cohere** | $0.10 | ★★★★ | Multilingual (100+ langs) | `graphrag-core/src/embeddings/api_providers.rs` |
+| **Jina AI** | $0.02 | ★★★★ | Cost-optimized | `graphrag-core/src/embeddings/api_providers.rs` |
+| **Mistral AI** | $0.10 | ★★★★ | RAG-optimized | `graphrag-core/src/embeddings/api_providers.rs` |
+| **Together AI** | $0.008 | ★★★★ | Cheapest | `graphrag-core/src/embeddings/api_providers.rs` |
 
 #### Planned
 
 | Provider | Status | Notes |
 |----------|--------|-------|
-| **Candle** | 📅 Planned | 100% Rust, CPU-only |
-| **Burn + wgpu** | 🚧 70% | GPU acceleration, 100% Rust |
+| **Candle** | Planned | 100% Rust, CPU-only |
+| **Burn + wgpu** | 70% | GPU acceleration, 100% Rust |
 
 **Models Available**:
 
@@ -1234,20 +1234,20 @@ cache_dir = "~/.cache/huggingface"  # For HuggingFace
 # OPENAI_API_KEY, VOYAGE_API_KEY, COHERE_API_KEY, JINA_API_KEY, MISTRAL_API_KEY, TOGETHER_API_KEY
 ```
 
-**See**: [graphrag-core/EMBEDDINGS_CONFIG.md](graphrag-core/EMBEDDINGS_CONFIG.md) for complete configuration guide.
+**See**: [config/JSON5_CONFIG_GUIDE.md](config/JSON5_CONFIG_GUIDE.md) for the complete configuration reference.
 
 ---
 
-### Stage 3: Entity Extraction - Config-Driven Selection ⚡
+### Stage 3: Entity Extraction - Config-Driven Selection 
 
-**🎯 The system automatically chooses the extraction method based on your configuration:**
+**The system automatically chooses the extraction method based on your configuration:**
 
 | Method | Accuracy | Speed | Enabled When | Module |
 |--------|----------|-------|--------------|--------|
-| **LLM Gleaning (Multi-Pass)** | ⭐⭐⭐⭐⭐ | 200-500ms | `use_gleaning = true` + `ollama.enabled = true` | `src/entity/gleaning_extractor.rs` |
-| **Pattern-Based (Keywords)** | ⭐⭐⭐ | **<10ms** | `use_gleaning = false` | `src/entity/mod.rs` |
-| **NER Hybrid** | ⭐⭐⭐⭐ | 50-100ms | Future | `src/entity/mod.rs` |
-| **Semantic Merging** | ⭐⭐⭐⭐ | Medium | `semantic_merging = true` | `src/entity/semantic_merging.rs` |
+| **LLM Gleaning (Multi-Pass)** | ★★★★★ | 200-500ms | `use_gleaning = true` + `ollama.enabled = true` | `src/entity/gleaning_extractor.rs` |
+| **Pattern-Based (Keywords)** | ★★★ | **<10ms** | `use_gleaning = false` | `src/entity/mod.rs` |
+| **NER Hybrid** | ★★★★ | 50-100ms | Future | `src/entity/mod.rs` |
+| **Semantic Merging** | ★★★★ | Medium | `semantic_merging = true` | `src/entity/semantic_merging.rs` |
 
 **Entity Types (Fully Customizable)**:
 ```toml
@@ -1467,10 +1467,10 @@ confidence_threshold = 0.6
 
 | Backend | Throughput | Quality | Platform | Module |
 |---------|------------|---------|----------|--------|
-| **Ollama (llama3.1:8b)** | 15-30 tok/s | ⭐⭐⭐⭐⭐ | Server | `src/ollama/async_generation.rs` |
-| **WebLLM (Phi-3)** | 40-62 tok/s (GPU) | ⭐⭐⭐⭐ | WASM | `graphrag-wasm/src/webllm.rs` |
-| **MockLLM** | Instant | ⭐⭐ | Testing | `src/generation/async_mock_llm.rs` |
-| **OpenAI-Compatible API** | Varies | ⭐⭐⭐⭐⭐ | Server | Future |
+| **Ollama (llama3.1:8b)** | 15-30 tok/s | ★★★★★ | Server | `src/ollama/async_generation.rs` |
+| **WebLLM (Phi-3)** | 40-62 tok/s (GPU) | ★★★★ | WASM | `graphrag-wasm/src/webllm.rs` |
+| **MockLLM** | Instant | ★★ | Testing | `src/generation/async_mock_llm.rs` |
+| **OpenAI-Compatible API** | Varies | ★★★★★ | Server | Future |
 
 **Caching Layer** (6x cost reduction):
 ```rust
@@ -1512,7 +1512,7 @@ cache_ttl_seconds = 3600
 
 ---
 
-## 🎛️ Configuration Matrix: Choose Your Stack
+## Configuration Matrix: Choose Your Stack
 
 ### Use Case: Production Server
 
@@ -1597,11 +1597,11 @@ backend = "mock"                       # Instant responses
 
 ---
 
-## ⚙️ How to Customize Parameters and Tools
+## How to Customize Parameters and Tools
 
 GraphRAG-rs offers **3 progressive levels of customization** - from simple TOML files to programmatic trait implementations.
 
-### Level 1: TOML Configuration Files (Easiest) 📄
+### Level 1: TOML Configuration Files (Easiest) 
 
 **Modify 60+ parameters** without touching code using TOML configuration.
 
@@ -1915,7 +1915,7 @@ fusion_weights = { vector = 0.5, bm25 = 0.2, pagerank = 0.3 }
 
 ---
 
-### Level 2: Runtime API Configuration (Intermediate) 🔧
+### Level 2: Runtime API Configuration (Intermediate) 
 
 **Modify parameters programmatically** using the Builder API.
 
@@ -1979,7 +1979,7 @@ let answer = graphrag.ask_with_params(
 
 ---
 
-### Level 3: Custom Trait Implementations (Advanced) 🚀
+### Level 3: Custom Trait Implementations (Advanced) 
 
 **Replace entire pipeline stages** with custom implementations.
 
@@ -2127,7 +2127,7 @@ cargo run --bin benchmark_configs config1.toml config2.toml
 
 ---
 
-## 🏗️ Three Deployment Architectures
+## Three Deployment Architectures
 
 GraphRAG-rs uniquely supports **three distinct deployment modes** - choose based on your requirements:
 
@@ -2169,7 +2169,7 @@ Binary Size: 5.2 MB (optimized release)
 - Query: 500ms-2s (end-to-end)
 - Throughput: 20 queries/sec
 
-### 2. WASM-Only (60% Complete 🚧)
+### 2. WASM-Only (60% Complete )
 
 **Architecture**:
 ```
@@ -2208,7 +2208,7 @@ WASM Size: ~2MB (gzipped)
 - LLM: 40-62 tok/s (GPU)
 - Storage: 50% browser quota (~5-10GB)
 
-### 3. Hybrid (Planned 📅)
+### 3. Hybrid (Planned )
 
 **Architecture**:
 ```
@@ -2239,7 +2239,7 @@ WASM Size: ~2MB (gzipped)
 
 ---
 
-## 🎛️ Optional Components & Features
+## Optional Components & Features
 
 GraphRAG-rs is **modular** - enable only what you need via feature flags:
 
@@ -2340,7 +2340,7 @@ caching = ["moka"]
 
 ---
 
-## 📈 Monitoring & Metrics
+## Monitoring & Metrics
 
 GraphRAG-rs includes **comprehensive performance tracking** across the entire pipeline.
 
@@ -2396,14 +2396,14 @@ Query Performance Breakdown:
 
 ---
 
-## 🔗 Learn More
+## Learn More
 
 ### Documentation
 
-- 📖 **[ARCHITECTURE.md](ARCHITECTURE.md)** - Deep technical dive into implementation
-- 💡 **[examples/](examples/)** - Hands-on code examples
-- 🏗️ **[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)** - Development roadmap
-- 📊 **[diagram.md](diagram.md)** - Visual architecture diagrams
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Deep technical dive into implementation
+- **[examples/](examples/)** - Hands-on code examples
+- **[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)** - Development roadmap
+- **[diagram.md](diagram.md)** - Visual architecture diagrams
 
 ### Practical Examples
 
@@ -2453,7 +2453,7 @@ GraphRAG-rs implements cutting-edge research:
 
 ---
 
-## 🚀 Quick Start: See It In Action
+## Quick Start: See It In Action
 
 ### 1. One-Liner (Simplest)
 
@@ -2496,19 +2496,19 @@ curl -X POST http://localhost:8080/api/query \
   -d '{"query": "What did Tom find in the cave?"}'
 ```
 
-### 4. WASM Browser (Coming Soon)
+### 4. WASM Browser (100% client-side)
 
 ```bash
-cd graphrag-leptos
+cd graphrag-wasm
 trunk serve --open
 
 # Visit http://localhost:8080
-# Upload document → Query → Get answers (100% client-side!)
+# Upload document → Build graph → Query → Get answers (100% client-side!)
 ```
 
 ---
 
-## 🎯 Configuration-Driven Behavior: Complete Examples
+## Configuration-Driven Behavior: Complete Examples
 
 ### Example 1: Fast Pattern-Based Pipeline (No LLM)
 
@@ -2553,7 +2553,7 @@ Pipeline Performance:
   TOTAL:              0.097s (~100ms)
 ```
 
-**Results**: ✅ Ultra-fast, ✅ No dependencies, ✅ Offline-capable, ⚠️ Good quality (not excellent)
+**Results**: ✅ Ultra-fast, ✅ No dependencies, ✅ Offline-capable, Good quality (not excellent)
 
 ---
 
@@ -2614,15 +2614,15 @@ enable_lightrag = true
 Processing Symposium.txt (189 KB, 455 chunks):
 
 Chunk 1/455:
-  🔍 Round 1: Extract entities → Found 8 entities (PERSON: 2, CONCEPT: 4, ARGUMENT: 2)
-  🔍 Round 2: "Did you miss any entities?" → Found 2 more (CONCEPT: 2)
-  🔍 Round 3: "Find relationships" → Found 3 relationships
-  🔍 Round 4: "Final check" → Found 1 subtle concept
+  Round 1: Extract entities → Found 8 entities (PERSON: 2, CONCEPT: 4, ARGUMENT: 2)
+  Round 2: "Did you miss any entities?" → Found 2 more (CONCEPT: 2)
+  Round 3: "Find relationships" → Found 3 relationships
+  Round 4: "Final check" → Found 1 subtle concept
   ✅ Extraction complete: 11 entities, 3 relationships
 
 ... (processing all chunks) ...
 
-[INFO] 📊 Final Results:
+[INFO] Final Results:
   Entities:      317 (PERSON: 89, CONCEPT: 156, ARGUMENT: 45, MYTHOLOGICAL_REFERENCE: 27)
   Relationships: 455
   Communities:   12 (speaker groups, concept clusters)
@@ -2644,7 +2644,7 @@ Answer: "According to Socrates in the Symposium, love (Eros) is the
          and the divine..."
 ```
 
-**Results**: ⭐⭐⭐⭐⭐ Excellent quality, ✅ Contextual understanding, ✅ Custom entity types, ⚠️ Requires Ollama/GPU
+**Results**: ★★★★★ Excellent quality, ✅ Contextual understanding, ✅ Custom entity types, Requires Ollama/GPU
 
 ---
 
@@ -2696,7 +2696,7 @@ Answer: "Tom and Huck discovered the treasure in McDougal's Cave after
          witnessing Injun Joe hide it there..."
 ```
 
-**Results**: ⭐⭐⭐⭐ Very good quality, ⚡ Balanced performance, ✅ Fallback safety
+**Results**: ★★★★ Very good quality, Balanced performance, ✅ Fallback safety
 
 ---
 
@@ -2704,18 +2704,18 @@ Answer: "Tom and Huck discovered the treasure in McDougal's Cave after
 
 | Config | Entity Extraction | Embeddings | Query Time | Quality | Best For |
 |--------|-------------------|------------|------------|---------|----------|
-| **Fast** | Pattern (10ms) | Hash | 100ms | ⭐⭐⭐ Good | Testing, offline |
-| **Symposium** | LLM 4-round (1.2s) | Ollama | 263ms | ⭐⭐⭐⭐⭐ Excellent | Philosophy, analysis |
-| **Tom Sawyer** | LLM 2-round (600ms) | Ollama | 66ms | ⭐⭐⭐⭐ Very good | Fiction, balanced |
+| **Fast** | Pattern (10ms) | Hash | 100ms | ★★★ Good | Testing, offline |
+| **Symposium** | LLM 4-round (1.2s) | Ollama | 263ms | ★★★★★ Excellent | Philosophy, analysis |
+| **Tom Sawyer** | LLM 2-round (600ms) | Ollama | 66ms | ★★★★ Very good | Fiction, balanced |
 
 **Key Insight**: The same codebase adapts automatically - you control behavior through configuration!
 
 ---
 
-## 💡 Key Takeaways
+## Key Takeaways
 
 1. **7 Stages**: Text → Chunks → Vectors → Entities → Graph → Retrieval → Query → Answer
-2. **3 Architectures**: Server-Only ✅ | WASM-Only 🚧 | Hybrid 📅
+2. **3 Architectures**: Server-Only ✅ | WASM-Only | Hybrid 
 3. **Configuration-Driven**: Same code, different behavior via TOML settings
 4. **Dynamic Selection**: Pipeline adapts based on `use_gleaning`, `ollama.enabled`, `retrieval.strategy`
 5. **State-of-the-Art**: LightRAG (6000x reduction) + PageRank (27x speedup) + ROGRAG (+15% accuracy)

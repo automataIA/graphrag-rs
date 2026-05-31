@@ -34,7 +34,7 @@ impl VectorStore for MemoryVectorStore {
     ) -> Result<()> {
         self.vectors
             .write()
-            .unwrap()
+            .expect("rwlock poisoned")
             .insert(id.to_string(), (embedding, metadata));
         Ok(())
     }
@@ -43,7 +43,7 @@ impl VectorStore for MemoryVectorStore {
         &self,
         vectors: Vec<(&str, Vec<f32>, HashMap<String, String>)>,
     ) -> Result<()> {
-        let mut guard = self.vectors.write().unwrap();
+        let mut guard = self.vectors.write().expect("rwlock poisoned");
         for (id, emb, meta) in vectors {
             guard.insert(id.to_string(), (emb, meta));
         }
@@ -51,7 +51,7 @@ impl VectorStore for MemoryVectorStore {
     }
 
     async fn search(&self, query_embedding: &[f32], top_k: usize) -> Result<Vec<SearchResult>> {
-        let guard = self.vectors.read().unwrap();
+        let guard = self.vectors.read().expect("rwlock poisoned");
         let mut scored: Vec<SearchResult> = guard
             .iter()
             .map(|(id, (emb, meta))| {
@@ -75,7 +75,7 @@ impl VectorStore for MemoryVectorStore {
     }
 
     async fn delete(&self, id: &str) -> Result<()> {
-        self.vectors.write().unwrap().remove(id);
+        self.vectors.write().expect("rwlock poisoned").remove(id);
         Ok(())
     }
 }

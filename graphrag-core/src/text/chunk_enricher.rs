@@ -44,6 +44,7 @@ impl ChunkEnricher {
 
     /// Enrich multiple chunks with metadata
     pub fn enrich_chunks(&mut self, chunks: &mut [TextChunk], document: &Document) -> Result<()> {
+        #[cfg(feature = "tracing")]
         tracing::debug!(
             "Enriching {} chunks for document: {}",
             chunks.len(),
@@ -53,21 +54,24 @@ impl ChunkEnricher {
         // 1. Parse document structure once
         let structure = self.layout_parser.parse(&document.content);
 
+        #[cfg(feature = "tracing")]
         tracing::debug!(
             "Detected {} headings in document structure",
             structure.headings.len()
         );
 
         // 2. Enrich each chunk
-        let total_chunks = chunks.len();
+        let _total_chunks = chunks.len();
         for (idx, chunk) in chunks.iter_mut().enumerate() {
             if idx % 10 == 0 {
-                tracing::debug!("Processing chunk {}/{}", idx + 1, total_chunks);
+                #[cfg(feature = "tracing")]
+                tracing::debug!("Processing chunk {}/{}", idx + 1, _total_chunks);
             }
 
             self.enrich_single_chunk(chunk, &structure, document)?;
         }
 
+        #[cfg(feature = "tracing")]
         tracing::debug!("Enrichment complete!");
         Ok(())
     }
@@ -193,29 +197,37 @@ impl EnrichmentStatistics {
     /// Print statistics summary
     #[allow(dead_code)]
     pub fn print_summary(&self) {
+        #[cfg(feature = "tracing")]
         tracing::info!("\nChunk Enrichment Statistics:");
+        #[cfg(feature = "tracing")]
         tracing::info!("  Total chunks: {}", self.total_chunks);
+        #[cfg(feature = "tracing")]
         tracing::info!(
             "  Chunks with structure: {} ({:.1}%)",
             self.chunks_with_structure,
             self.chunks_with_structure as f32 / self.total_chunks as f32 * 100.0
         );
+        #[cfg(feature = "tracing")]
         tracing::info!(
             "  Chunks with semantics: {} ({:.1}%)",
             self.chunks_with_semantics,
             self.chunks_with_semantics as f32 / self.total_chunks as f32 * 100.0
         );
+        #[cfg(feature = "tracing")]
         tracing::info!(
             "  Chunks with keywords: {} ({:.1}%)",
             self.chunks_with_keywords,
             self.chunks_with_keywords as f32 / self.total_chunks as f32 * 100.0
         );
+        #[cfg(feature = "tracing")]
         tracing::info!(
             "  Chunks with summary: {} ({:.1}%)",
             self.chunks_with_summary,
             self.chunks_with_summary as f32 / self.total_chunks as f32 * 100.0
         );
+        #[cfg(feature = "tracing")]
         tracing::info!("  Total keywords: {}", self.total_keywords);
+        #[cfg(feature = "tracing")]
         tracing::info!("  Average completeness: {:.2}", self.avg_completeness);
     }
 }

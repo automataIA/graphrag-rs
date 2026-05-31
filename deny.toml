@@ -1,0 +1,35 @@
+# cargo-deny configuration — https://embarkstudios.github.io/cargo-deny/
+# Run locally with: cargo deny check
+
+[advisories]
+# Fail on any security advisory in the RustSec database.
+version = 2
+yanked = "warn"
+
+[licenses]
+version = 2
+# Allow the permissive licenses common across the Rust ecosystem.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "MPL-2.0",
+    "CC0-1.0",
+]
+confidence-threshold = 0.8
+
+[bans]
+# Warn (don't fail) on duplicate versions of the same crate.
+multiple-versions = "warn"
+wildcards = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "warn"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

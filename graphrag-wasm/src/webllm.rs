@@ -140,14 +140,32 @@ impl WebLLM {
             return Err(WebLLMError::NotLoaded);
         }
 
-        // Get CreateMLCEngine function
-        let create_engine_fn = js_sys::Reflect::get(&webllm, &JsValue::from_str("CreateMLCEngine"))
-            .map_err(|_| WebLLMError::NotLoaded)?;
+        // Prefer the worker-hosted engine if the dedicated Worker is available
+        // on the window (spawned by index.html). Falls back to the main-thread
+        // engine if the worker spawn failed.
+        let worker = js_sys::Reflect::get(&window, &JsValue::from_str("webllmWorker")).ok();
+        let use_worker = worker
+            .as_ref()
+            .map(|w| !w.is_undefined() && !w.is_null())
+            .unwrap_or(false);
 
-        // Call CreateMLCEngine(model_id)
-        let engine_promise = js_sys::Function::from(create_engine_fn)
-            .call1(&webllm, &JsValue::from_str(model_id))
-            .map_err(|e| WebLLMError::InitializationFailed(format!("{:?}", e)))?;
+        let engine_promise = if use_worker {
+            let create_worker_fn = js_sys::Reflect::get(
+                &webllm,
+                &JsValue::from_str("CreateWebWorkerMLCEngine"),
+            )
+            .map_err(|_| WebLLMError::NotLoaded)?;
+            js_sys::Function::from(create_worker_fn)
+                .call2(&webllm, &worker.unwrap(), &JsValue::from_str(model_id))
+                .map_err(|e| WebLLMError::InitializationFailed(format!("{:?}", e)))?
+        } else {
+            let create_engine_fn =
+                js_sys::Reflect::get(&webllm, &JsValue::from_str("CreateMLCEngine"))
+                    .map_err(|_| WebLLMError::NotLoaded)?;
+            js_sys::Function::from(create_engine_fn)
+                .call1(&webllm, &JsValue::from_str(model_id))
+                .map_err(|e| WebLLMError::InitializationFailed(format!("{:?}", e)))?
+        };
 
         // Wait for engine to initialize
         let engine = JsFuture::from(js_sys::Promise::from(engine_promise))
@@ -204,14 +222,34 @@ impl WebLLM {
         )
         .map_err(|_| WebLLMError::InitializationFailed("Failed to set callback".to_string()))?;
 
-        // Get CreateMLCEngine function
-        let create_engine_fn = js_sys::Reflect::get(&webllm, &JsValue::from_str("CreateMLCEngine"))
-            .map_err(|_| WebLLMError::NotLoaded)?;
+        // Prefer worker-hosted engine when window.webllmWorker exists.
+        let worker = js_sys::Reflect::get(&window, &JsValue::from_str("webllmWorker")).ok();
+        let use_worker = worker
+            .as_ref()
+            .map(|w| !w.is_undefined() && !w.is_null())
+            .unwrap_or(false);
 
-        // Call CreateMLCEngine(model_id, config)
-        let engine_promise = js_sys::Function::from(create_engine_fn)
-            .call2(&webllm, &JsValue::from_str(model_id), &config.into())
-            .map_err(|e| WebLLMError::InitializationFailed(format!("{:?}", e)))?;
+        let engine_promise = if use_worker {
+            let create_worker_fn = js_sys::Reflect::get(
+                &webllm,
+                &JsValue::from_str("CreateWebWorkerMLCEngine"),
+            )
+            .map_err(|_| WebLLMError::NotLoaded)?;
+            // CreateWebWorkerMLCEngine(worker, modelId, engineConfig)
+            let args = js_sys::Array::new();
+            args.push(&worker.unwrap());
+            args.push(&JsValue::from_str(model_id));
+            args.push(&config.into());
+            js_sys::Reflect::apply(&create_worker_fn.into(), &webllm, &args)
+                .map_err(|e| WebLLMError::InitializationFailed(format!("{:?}", e)))?
+        } else {
+            let create_engine_fn =
+                js_sys::Reflect::get(&webllm, &JsValue::from_str("CreateMLCEngine"))
+                    .map_err(|_| WebLLMError::NotLoaded)?;
+            js_sys::Function::from(create_engine_fn)
+                .call2(&webllm, &JsValue::from_str(model_id), &config.into())
+                .map_err(|e| WebLLMError::InitializationFailed(format!("{:?}", e)))?
+        };
 
         let engine = JsFuture::from(js_sys::Promise::from(engine_promise))
             .await

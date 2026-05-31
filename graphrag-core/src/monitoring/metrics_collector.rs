@@ -52,19 +52,19 @@ impl MetricsCollector {
 
     /// Get the current value of a gauge
     pub fn get_gauge(&self, name: &str) -> Option<f64> {
-        self.gauges.get(name).map(|gauge| *gauge.read().unwrap())
+        self.gauges.get(name).map(|gauge| *gauge.read().expect("rwlock poisoned"))
     }
 
     /// Get histogram statistics
     pub fn get_histogram_stats(&self, name: &str) -> Option<HistogramStats> {
         self.histograms.get(name).map(|hist| {
-            let values = hist.read().unwrap();
+            let values = hist.read().expect("rwlock poisoned");
             if values.is_empty() {
                 return HistogramStats::default();
             }
 
             let mut sorted = values.clone();
-            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
             let count = sorted.len();
             let sum: f64 = sorted.iter().sum();
@@ -99,7 +99,7 @@ impl MetricsCollector {
     pub fn get_all_gauges(&self) -> HashMap<String, f64> {
         self.gauges
             .iter()
-            .map(|entry| (entry.key().clone(), *entry.value().read().unwrap()))
+            .map(|entry| (entry.key().clone(), *entry.value().read().expect("rwlock poisoned")))
             .collect()
     }
 
@@ -160,7 +160,7 @@ impl AsyncMetricsCollector for MetricsCollector {
             .entry(key)
             .or_insert_with(|| Arc::new(std::sync::RwLock::new(0.0)));
 
-        *gauge.write().unwrap() = value;
+        *gauge.write().expect("rwlock poisoned") = value;
     }
 
     async fn histogram(&self, name: &str, value: f64, tags: Option<&[(&str, &str)]>) {
@@ -174,7 +174,7 @@ impl AsyncMetricsCollector for MetricsCollector {
             .entry(key)
             .or_insert_with(|| Arc::new(std::sync::RwLock::new(Vec::new())));
 
-        hist.write().unwrap().push(value);
+        hist.write().expect("rwlock poisoned").push(value);
     }
 
     async fn timer(&self, name: &str) -> AsyncTimer {

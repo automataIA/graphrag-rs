@@ -406,7 +406,7 @@ impl PerformanceTracker {
         self.total_operations
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-        let mut total_duration = self.total_duration.lock().unwrap();
+        let mut total_duration = self.total_duration.lock().expect("lock poisoned");
         *total_duration += duration;
     }
 
@@ -422,7 +422,7 @@ impl PerformanceTracker {
             return Duration::from_secs(0);
         }
 
-        let total_duration = *self.total_duration.lock().unwrap();
+        let total_duration = *self.total_duration.lock().expect("lock poisoned");
         total_duration / total_ops as u32
     }
 

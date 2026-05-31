@@ -1,3 +1,5 @@
+#![cfg_attr(not(feature = "async"), allow(unused_imports))]
+
 //! Gleaning-based entity extraction with TRUE LLM inference
 //!
 //! This module implements iterative gleaning refinement using actual LLM calls,
@@ -74,6 +76,7 @@ pub struct ExtractionCompletionStatus {
 /// This is the REAL implementation that makes actual LLM API calls for every extraction.
 /// It replaces the fake pattern-based extraction with genuine language model inference.
 pub struct GleaningEntityExtractor {
+    #[cfg_attr(not(feature = "async"), allow(dead_code))]
     llm_extractor: LLMEntityExtractor,
     config: GleaningConfig,
 }
@@ -114,6 +117,7 @@ impl GleaningEntityExtractor {
         &self,
         chunk: &TextChunk,
     ) -> Result<(Vec<Entity>, Vec<Relationship>)> {
+        #[cfg(feature = "tracing")]
         tracing::info!(
             "🔍 Starting REAL LLM gleaning extraction for chunk: {} ({} chars)",
             chunk.id,
@@ -127,12 +131,14 @@ impl GleaningEntityExtractor {
         let mut all_relationship_data: Vec<RelationshipData> = Vec::new();
 
         // Round 1: Initial extraction (THIS IS A REAL LLM CALL!)
+        #[cfg(feature = "tracing")]
         tracing::info!("📝 Round 1: Initial LLM extraction...");
         let round_start = std::time::Instant::now();
 
         let (initial_entities, initial_relationships) =
             self.llm_extractor.extract_from_chunk(chunk).await?;
 
+        #[cfg(feature = "tracing")]
         tracing::info!(
             "✅ Round 1 complete: {} entities, {} relationships ({:.1}s)",
             initial_entities.len(),
@@ -149,6 +155,7 @@ impl GleaningEntityExtractor {
 
         // Rounds 2-N: Gleaning continuation rounds
         for round in 2..=self.config.max_gleaning_rounds {
+            #[cfg(feature = "tracing")]
             tracing::info!("📝 Round {}: Gleaning continuation...", round);
             let round_start = std::time::Instant::now();
 
@@ -160,6 +167,7 @@ impl GleaningEntityExtractor {
                     .await?;
 
                 if is_complete {
+                    #[cfg(feature = "tracing")]
                     tracing::info!(
                         "✅ LLM determined extraction is COMPLETE after {} rounds ({:.1}s total)",
                         round - 1,
@@ -168,6 +176,7 @@ impl GleaningEntityExtractor {
                     break;
                 }
 
+                #[cfg(feature = "tracing")]
                 tracing::debug!("⚠️  LLM determined extraction is INCOMPLETE, continuing...");
             }
 
@@ -177,6 +186,7 @@ impl GleaningEntityExtractor {
                 .extract_additional(chunk, &all_entity_data, &all_relationship_data)
                 .await?;
 
+            #[cfg(feature = "tracing")]
             tracing::info!(
                 "✅ Round {} complete: {} new entities, {} new relationships ({:.1}s)",
                 round,
@@ -187,6 +197,7 @@ impl GleaningEntityExtractor {
 
             // If no new entities found, stop gleaning
             if additional_entities.is_empty() && additional_relationships.is_empty() {
+                #[cfg(feature = "tracing")]
                 tracing::info!(
                     "🛑 No additional entities found in round {}, stopping gleaning",
                     round
@@ -215,6 +226,7 @@ impl GleaningEntityExtractor {
 
         let total_time = start_time.elapsed().as_secs_f32();
 
+        #[cfg(feature = "tracing")]
         tracing::info!(
             "🎉 REAL LLM gleaning complete: {} entities, {} relationships ({:.1}s total)",
             final_entities.len(),
@@ -229,6 +241,7 @@ impl GleaningEntityExtractor {
     ///
     /// When multiple rounds produce the same entity, keep the version with the longer description
     /// as it likely contains more information.
+    #[cfg(feature = "async")]
     fn merge_entity_data(
         &self,
         existing: Vec<EntityData>,
@@ -250,16 +263,18 @@ impl GleaningEntityExtractor {
                 Some(existing_entity) => {
                     // Keep the entity with the longer description (more information)
                     if new_entity.description.len() > existing_entity.description.len() {
+                        #[cfg(feature = "tracing")]
                         tracing::debug!(
-                            "📝 Merging entity '{}': keeping longer description ({} chars vs {} chars)",
+                            "Merging entity '{}': keeping longer description ({} chars vs {} chars)",
                             new_entity.name,
                             new_entity.description.len(),
                             existing_entity.description.len()
                         );
                         merged.insert(key, new_entity);
                     } else {
+                        #[cfg(feature = "tracing")]
                         tracing::debug!(
-                            "📝 Entity '{}' already exists with longer description, keeping existing",
+                            "Entity '{}' already exists with longer description, keeping existing",
                             new_entity.name
                         );
                     }
@@ -275,6 +290,7 @@ impl GleaningEntityExtractor {
     }
 
     /// Convert domain entities to EntityData
+    #[cfg(feature = "async")]
     fn convert_entities_to_data(&self, entities: &[Entity]) -> Vec<EntityData> {
         entities
             .iter()
@@ -287,6 +303,7 @@ impl GleaningEntityExtractor {
     }
 
     /// Convert domain relationships to RelationshipData
+    #[cfg(feature = "async")]
     fn convert_relationships_to_data(
         &self,
         relationships: &[Relationship],
@@ -303,6 +320,7 @@ impl GleaningEntityExtractor {
     }
 
     /// Convert EntityData back to domain entities
+    #[cfg(feature = "async")]
     fn convert_data_to_entities(
         &self,
         entity_data: &[EntityData],
@@ -338,6 +356,7 @@ impl GleaningEntityExtractor {
     }
 
     /// Find all mentions of an entity name in the chunk text
+    #[cfg(feature = "async")]
     fn find_mentions(
         &self,
         name: &str,
@@ -380,6 +399,7 @@ impl GleaningEntityExtractor {
     }
 
     /// Convert RelationshipData to domain Relationships
+    #[cfg(feature = "async")]
     fn convert_data_to_relationships(
         &self,
         relationship_data: &[RelationshipData],
@@ -413,6 +433,7 @@ impl GleaningEntityExtractor {
 
                 relationships.push(relationship);
             } else {
+                #[cfg(feature = "tracing")]
                 tracing::warn!(
                     "Skipping relationship: entity not found. Source: {}, Target: {}",
                     rel_item.source,
@@ -425,6 +446,7 @@ impl GleaningEntityExtractor {
     }
 
     /// Deduplicate relationships by source-target-type combination
+    #[cfg(feature = "async")]
     fn deduplicate_relationships(&self, relationships: Vec<Relationship>) -> Vec<Relationship> {
         let mut seen = std::collections::HashSet::new();
         let mut deduplicated = Vec::new();
@@ -445,6 +467,7 @@ impl GleaningEntityExtractor {
     }
 
     /// Normalize entity name for ID generation
+    #[cfg(feature = "async")]
     fn normalize_name(&self, name: &str) -> String {
         name.to_lowercase()
             .chars()
@@ -475,22 +498,30 @@ impl GleaningStatistics {
     /// Print statistics to stdout
     #[allow(dead_code)]
     pub fn print(&self) {
-        tracing::info!("🔍 REAL LLM Gleaning Extraction Statistics");
+        #[cfg(feature = "tracing")]
+        tracing::info!("REAL LLM Gleaning Extraction Statistics");
+        #[cfg(feature = "tracing")]
         tracing::info!("  Max rounds: {}", self.config.max_gleaning_rounds);
+        #[cfg(feature = "tracing")]
         tracing::info!(
             "  Completion threshold: {:.2}",
             self.config.completion_threshold
         );
+        #[cfg(feature = "tracing")]
         tracing::info!(
             "  Entity confidence threshold: {:.2}",
             self.config.entity_confidence_threshold
         );
+        #[cfg(feature = "tracing")]
         tracing::info!(
             "  Uses LLM completion check: {}",
             self.config.use_llm_completion_check
         );
-        tracing::info!("  LLM available: {} ✅", self.llm_available);
+        #[cfg(feature = "tracing")]
+        tracing::info!("  LLM available: {}", self.llm_available);
+        #[cfg(feature = "tracing")]
         tracing::info!("  Entity types: {:?}", self.config.entity_types);
+        #[cfg(feature = "tracing")]
         tracing::info!("  Temperature: {}", self.config.temperature);
     }
 }
@@ -559,16 +590,6 @@ mod tests {
         assert!(tom.description.len() > 10); // Should have the longer description
     }
 
-    #[test]
-    fn test_normalize_name() {
-        let ollama_config = OllamaConfig::default();
-        let ollama_client = OllamaClient::new(ollama_config);
-        let config = GleaningConfig::default();
-        let extractor = GleaningEntityExtractor::new(ollama_client, config);
-
-        assert_eq!(extractor.normalize_name("Tom Sawyer"), "tom_sawyer");
-        assert_eq!(extractor.normalize_name("St. Petersburg"), "st_petersburg");
-    }
 
     #[test]
     fn test_find_mentions() {

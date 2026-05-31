@@ -710,7 +710,7 @@ mod tests {
             enable_monitoring: false,
         };
 
-        let registry = config.build_registry().build();
+        let _registry = config.build_registry().build();
 
         // When vector-memory feature is disabled, MemoryVectorStore should NOT be registered
         // (This test verifies the feature flag works correctly)

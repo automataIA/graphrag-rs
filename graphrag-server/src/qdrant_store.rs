@@ -160,12 +160,13 @@ impl QdrantStore {
             .map_err(|e| QdrantError::OperationError(e.to_string()))?;
 
         use std::collections::HashMap;
+        let payload_obj = payload.as_object().ok_or_else(|| {
+            QdrantError::OperationError("metadata serialised to non-object JSON".to_string())
+        })?;
         let point = PointStruct::new(
             id.to_string(),
             embedding,
-            payload
-                .as_object()
-                .unwrap()
+            payload_obj
                 .clone()
                 .into_iter()
                 .map(|(k, v)| (k, QdrantValue::from(v)))
@@ -189,20 +190,23 @@ impl QdrantStore {
         let points: Vec<PointStruct> = documents
             .into_iter()
             .map(|(id, embedding, metadata)| {
-                let payload = serde_json::to_value(&metadata).unwrap();
-                PointStruct::new(
+                let payload = serde_json::to_value(&metadata)
+                    .map_err(|e| QdrantError::OperationError(format!("metadata to_value: {e}")))?;
+                let obj = payload.as_object().ok_or_else(|| {
+                    QdrantError::OperationError(
+                        "metadata serialised to non-object JSON".to_string(),
+                    )
+                })?;
+                Ok::<_, QdrantError>(PointStruct::new(
                     id,
                     embedding,
-                    payload
-                        .as_object()
-                        .unwrap()
-                        .clone()
+                    obj.clone()
                         .into_iter()
                         .map(|(k, v)| (k, QdrantValue::from(v)))
                         .collect::<HashMap<String, QdrantValue>>(),
-                )
+                ))
             })
-            .collect();
+            .collect::<Result<_, _>>()?;
 
         self.client
             .upsert_points(UpsertPointsBuilder::new(&self.collection_name, points))
@@ -245,29 +249,34 @@ impl QdrantStore {
             .result
             .into_iter()
             .map(|point| {
-                let payload_value = serde_json::to_value(&point.payload).unwrap();
-                let metadata: DocumentMetadata = serde_json::from_value(payload_value).unwrap();
+                let payload_value = serde_json::to_value(&point.payload).map_err(|e| {
+                    QdrantError::OperationError(format!("payload to_value: {e}"))
+                })?;
+                let metadata: DocumentMetadata =
+                    serde_json::from_value(payload_value).map_err(|e| {
+                        QdrantError::OperationError(format!("payload from_value: {e}"))
+                    })?;
 
                 // Extract ID from PointId enum
-                let id_str = match point.id.unwrap() {
-                    qdrant_client::qdrant::PointId {
+                let id_str = match point.id {
+                    Some(qdrant_client::qdrant::PointId {
                         point_id_options:
                             Some(qdrant_client::qdrant::point_id::PointIdOptions::Uuid(s)),
-                    } => s,
-                    qdrant_client::qdrant::PointId {
+                    }) => s,
+                    Some(qdrant_client::qdrant::PointId {
                         point_id_options:
                             Some(qdrant_client::qdrant::point_id::PointIdOptions::Num(n)),
-                    } => n.to_string(),
+                    }) => n.to_string(),
                     _ => String::from("unknown"),
                 };
 
-                SearchResult {
+                Ok::<_, QdrantError>(SearchResult {
                     id: id_str,
                     score: point.score,
                     metadata,
-                }
+                })
             })
-            .collect();
+            .collect::<Result<_, _>>()?;
 
         Ok(search_results)
     }

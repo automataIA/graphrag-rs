@@ -338,7 +338,7 @@ GraphRAG uses a configurable pipeline with different methods for each phase:
 │  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │   │
 │  │  │   Algorithmic   │  │    Semantic     │  │     Hybrid      │  │   │
 │  │  │ (pattern-based) │  │  (LLM-based)    │  │ (both + fusion) │  │   │
-│  │  │    ⚡ Fast      │  │  🎯 Accurate    │  │  ⚖️ Balanced    │  │   │
+│  │  │    Fast      │  │  Accurate    │  │  Balanced    │  │   │
 │  │  └─────────────────┘  └─────────────────┘  └─────────────────┘  │   │
 │  └─────────────────────────────────────────────────────────────────┘   │
 │           │                                                             │
@@ -348,7 +348,7 @@ GraphRAG uses a configurable pipeline with different methods for each phase:
 │  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │   │
 │  │  │  Co-occurrence  │  │    LLM-based    │  │    Gleaning     │  │   │
 │  │  │ entity proximity│  │ GraphRAG method │  │ multi-round LLM │  │   │
-│  │  │    ⚡ Fast      │  │  🎯 Semantic    │  │  🔄 Iterative   │  │   │
+│  │  │    Fast      │  │  Semantic    │  │  Iterative   │  │   │
 │  │  └─────────────────┘  └─────────────────┘  └─────────────────┘  │   │
 │  │  Optional: config.graph.extract_relationships = true/false       │   │
 │  └─────────────────────────────────────────────────────────────────┘   │
@@ -407,7 +407,7 @@ GraphRAG uses a configurable pipeline with different methods for each phase:
 - **Embedding is NOT part of `build_graph()`** - generated lazily during queries
 - **Relationship extraction is optional** - controlled by `config.graph.extract_relationships`
 - **Gleaning extracts entities AND relationships together** in multi-round LLM calls
-- **See [PIPELINE_ARCHITECTURE.md](PIPELINE_ARCHITECTURE.md) for full parameter reference**
+- **See [HOW_IT_WORKS.md](../HOW_IT_WORKS.md) for the full pipeline + parameter reference**
 
 ## Module Structure
 
@@ -441,12 +441,11 @@ cargo test --features starter retrieval::
 
 ## Documentation
 
-- **[QUICKSTART.md](QUICKSTART.md)** - 5-minute getting started guide
-- **[PIPELINE_ARCHITECTURE.md](PIPELINE_ARCHITECTURE.md)** - Pipeline phases and methods
+- **[HOW_IT_WORKS.md](../HOW_IT_WORKS.md)** - 7-stage pipeline, approaches, embeddings, entity extraction, Ollama
+- **[config/JSON5_CONFIG_GUIDE.md](../config/JSON5_CONFIG_GUIDE.md)** - Full JSON5/TOML configuration reference
 - **[templates/README.md](templates/README.md)** - Sectoral template guide
-- **[EMBEDDINGS_CONFIG.md](EMBEDDINGS_CONFIG.md)** - Embedding configuration
-- **[ENTITY_EXTRACTION.md](ENTITY_EXTRACTION.md)** - LLM-based extraction guide
-- **[OLLAMA_INTEGRATION.md](OLLAMA_INTEGRATION.md)** - Ollama setup guide
+- **[CHANGELOG.md](../CHANGELOG.md)** - Feature history and recent updates
+- **[docs.rs/graphrag-core](https://docs.rs/graphrag-core)** - Full API reference
 
 ## Cross-Platform Support
 
@@ -461,4 +460,4 @@ MIT License - see [../LICENSE](../LICENSE) for details.
 
 ---
 
-**Part of the GraphRAG-rs project** | [Main README](../README.md) | [Quick Start](QUICKSTART.md)
+**Part of the GraphRAG-rs project** | [Main README](../README.md) | [How It Works](../HOW_IT_WORKS.md)

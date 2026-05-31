@@ -110,6 +110,10 @@ fn main() -> graphrag_core::Result<()> {
             relation_type: rel_type.to_string(),
             confidence,
             context: Vec::new(),
+            embedding: None,
+            temporal_type: None,
+            temporal_range: None,
+            causal_strength: None,
         };
         println!("  + {} --[{}]--> {}", src, rel_type, tgt);
         graph.add_relationship(rel)?;

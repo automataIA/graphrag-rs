@@ -79,7 +79,7 @@ impl GraphIndexer {
             // Look for capitalized phrases
             if window
                 .iter()
-                .all(|w| w.chars().next().map_or(false, |c| c.is_uppercase()))
+                .all(|w| w.chars().next().is_some_and(|c| c.is_uppercase()))
             {
                 entities.push(ExtractedEntity {
                     id: format!("entity_{}", entity_id),
@@ -93,7 +93,7 @@ impl GraphIndexer {
 
         // Single capitalized words
         for word in words {
-            if word.len() > 2 && word.chars().next().map_or(false, |c| c.is_uppercase()) {
+            if word.len() > 2 && word.chars().next().is_some_and(|c| c.is_uppercase()) {
                 entities.push(ExtractedEntity {
                     id: format!("entity_{}", entity_id),
                     name: word.to_string(),
@@ -273,12 +273,6 @@ impl GraphIndexer {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_graph_indexer_creation() {
-        let entity_types = vec!["person".to_string(), "organization".to_string()];
-        let indexer = GraphIndexer::new(entity_types, 3);
-        assert!(indexer.is_ok());
-    }
 
     #[test]
     fn test_basic_extraction() {

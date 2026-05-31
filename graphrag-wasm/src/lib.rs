@@ -58,11 +58,9 @@ pub use llm_provider::{LlmProviderConfig, LlmProviderType, UnifiedLlmClient};
 // Re-export WebLLM client
 pub use webllm::WebLLMClient;
 
-// Re-export Leptos components for convenience
-pub use components::{
-    ChatMessage, ChatWindow, DocumentManager, GraphEdge, GraphNode, GraphStats, GraphVisualization,
-    MessageRole, QueryInterface,
-};
+// Leptos components live in `components` (chat_shell + force_layout). They are
+// instantiated by the binary `src/main.rs`; nothing is re-exported here since
+// the legacy daisyUI components were removed in 2026-05.
 
 #[wasm_bindgen]
 extern "C" {
@@ -556,7 +554,7 @@ impl GraphRAG {
             // This is a simplified version - in production we'd store the mapping
             community_groups
                 .entry(*community_id)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(format!("node_{}", node_idx.index()));
         }
 

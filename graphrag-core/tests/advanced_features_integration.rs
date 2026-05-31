@@ -257,7 +257,7 @@ async fn test_hierarchical_clustering_build() {
         graph.get_all_relationships().into_iter().cloned().collect();
 
     // Build hierarchy with 2 levels
-    let builder = HierarchyBuilder::new(relationships)
+    let _builder = HierarchyBuilder::new(relationships)
         .with_num_levels(2)
         .with_resolutions(vec![0.5, 1.0])
         .with_min_cluster_size(1);
@@ -292,11 +292,10 @@ async fn test_graph_weight_optimization_setup() {
         use_llm_eval: false, // Disable LLM for test
     };
 
-    let optimizer = GraphWeightOptimizer::with_config(config);
+    let _optimizer = GraphWeightOptimizer::with_config(config);
 
     // Test queries for optimization
-    let test_queries = vec![
-        TestQuery {
+    let test_queries = [TestQuery {
             query: "Who taught Plato?".to_string(),
             expected_answer: "Socrates taught Plato".to_string(),
             weight: 1.0,
@@ -305,8 +304,7 @@ async fn test_graph_weight_optimization_setup() {
             query: "What is the foundation of Western Philosophy?".to_string(),
             expected_answer: "Socrates founded Western Philosophy".to_string(),
             weight: 1.0,
-        },
-    ];
+        }];
 
     // Note: actual optimization requires Ollama for LLM evaluation
     // Here we just test the setup

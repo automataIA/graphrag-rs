@@ -14,8 +14,7 @@ use graphrag_core::{
         GraphConstructionValidator, LLMEvaluation, LLMEvaluationPrompt, PipelineValidationReport,
         RelationshipExtractionValidator,
     },
-    text::TextProcessor,
-    ChunkId, Document, DocumentId, Entity, EntityId, Relationship, Result,
+    text::TextProcessor, Document, DocumentId, Entity, EntityId, Relationship, Result,
 };
 
 fn main() -> Result<()> {
@@ -95,6 +94,9 @@ Relationships define how entities are connected, such as "works_for" or "located
             confidence: 0.95,
             mentions: vec![],
             embedding: None,
+            first_mentioned: None,
+            last_mentioned: None,
+            temporal_validity: None,
         },
         Entity {
             id: EntityId::new("e2".to_string()),
@@ -103,6 +105,9 @@ Relationships define how entities are connected, such as "works_for" or "located
             confidence: 0.85,
             mentions: vec![],
             embedding: None,
+            first_mentioned: None,
+            last_mentioned: None,
+            temporal_validity: None,
         },
         Entity {
             id: EntityId::new("e3".to_string()),
@@ -111,6 +116,9 @@ Relationships define how entities are connected, such as "works_for" or "located
             confidence: 0.9,
             mentions: vec![],
             embedding: None,
+            first_mentioned: None,
+            last_mentioned: None,
+            temporal_validity: None,
         },
         Entity {
             id: EntityId::new("e4".to_string()),
@@ -119,6 +127,9 @@ Relationships define how entities are connected, such as "works_for" or "located
             confidence: 0.9,
             mentions: vec![],
             embedding: None,
+            first_mentioned: None,
+            last_mentioned: None,
+            temporal_validity: None,
         },
     ];
 
@@ -146,6 +157,10 @@ Relationships define how entities are connected, such as "works_for" or "located
             relation_type: "composed_of".to_string(),
             confidence: 0.85,
             context: vec![],
+            embedding: None,
+            temporal_type: None,
+            temporal_range: None,
+            causal_strength: None,
         },
         Relationship {
             source: EntityId::new("e3".to_string()),
@@ -153,6 +168,10 @@ Relationships define how entities are connected, such as "works_for" or "located
             relation_type: "connected_by".to_string(),
             confidence: 0.8,
             context: vec![],
+            embedding: None,
+            temporal_type: None,
+            temporal_range: None,
+            causal_strength: None,
         },
     ];
 
@@ -239,6 +258,9 @@ fn demo_query_evaluation() -> Result<()> {
             confidence: 0.95,
             mentions: vec![],
             embedding: None,
+            first_mentioned: None,
+            last_mentioned: None,
+            temporal_validity: None,
         },
         Entity {
             id: EntityId::new("e2".to_string()),
@@ -247,6 +269,9 @@ fn demo_query_evaluation() -> Result<()> {
             confidence: 0.9,
             mentions: vec![],
             embedding: None,
+            first_mentioned: None,
+            last_mentioned: None,
+            temporal_validity: None,
         },
         Entity {
             id: EntityId::new("e3".to_string()),
@@ -255,6 +280,9 @@ fn demo_query_evaluation() -> Result<()> {
             confidence: 0.85,
             mentions: vec![],
             embedding: None,
+            first_mentioned: None,
+            last_mentioned: None,
+            temporal_validity: None,
         },
     ];
 
@@ -265,6 +293,10 @@ fn demo_query_evaluation() -> Result<()> {
         relation_type: "is_a".to_string(),
         confidence: 0.9,
         context: vec![],
+        embedding: None,
+        temporal_type: None,
+        temporal_range: None,
+        causal_strength: None,
     }];
 
     // Context chunks

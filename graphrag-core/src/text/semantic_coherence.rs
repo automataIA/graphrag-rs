@@ -283,7 +283,7 @@ impl SemanticCoherenceScorer {
             }
 
             // Add best split
-            current_splits.push(best_new_split.unwrap());
+            current_splits.push(best_new_split.expect("Option checked above"));
             current_splits.sort_unstable();
 
             // Check minimum chunk size constraint
@@ -544,7 +544,7 @@ mod tests {
         let score = scorer.score_chunk_coherence(text).await.unwrap();
 
         // Should return a valid score between 0 and 1
-        assert!(score >= 0.0 && score <= 1.0);
+        assert!((0.0..=1.0).contains(&score));
     }
 
     #[tokio::test]
@@ -633,8 +633,8 @@ mod tests {
 
         // Longer text should have slightly lower threshold (more tolerant)
         assert!(threshold_long <= threshold_short);
-        assert!(threshold_short >= 0.5 && threshold_short <= 0.9);
-        assert!(threshold_long >= 0.5 && threshold_long <= 0.9);
+        assert!((0.5..=0.9).contains(&threshold_short));
+        assert!((0.5..=0.9).contains(&threshold_long));
     }
 
     #[tokio::test]

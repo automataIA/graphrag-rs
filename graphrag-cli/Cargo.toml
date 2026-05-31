@@ -5,6 +5,8 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/graphrag-cli"
+readme = "README.md"
 description = "Modern Terminal User Interface (TUI) for GraphRAG operations"
 keywords = ["graphrag", "tui", "cli", "ratatui", "knowledge-graph"]
 categories = ["command-line-utilities", "text-processing"]
@@ -22,7 +24,7 @@ path = "src/main.rs"
 ureq = "2"
 
 # Core GraphRAG library (direct integration, no HTTP server)
-graphrag-core = { version = "0.1", path = "../graphrag-core", features = [
+graphrag-core = { version = "0.2", path = "../graphrag-core", features = [
     "async",
     "pagerank",
     "lightrag",
@@ -77,6 +79,9 @@ uuid = { version = "1.6", features = ["v4", "serde"] }
 
 # Directories
 dirs = "5.0"
+
+# Fast global allocator (binary-only — keep out of library crates)
+mimalloc = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = "1.4"

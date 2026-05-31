@@ -49,7 +49,7 @@ JSON:"#,
         text
     );
 
-    web_sys::console::log_1(&format!("🤖 Extracting entities with WebLLM...").into());
+    web_sys::console::log_1(&"🤖 Extracting entities with WebLLM...".into());
 
     let messages = vec![
         ChatMessage::system("You are a knowledge graph entity extractor. Extract entities and relationships. Return ONLY valid JSON."),
@@ -198,15 +198,15 @@ pub fn extract_entities_simple(text: &str) -> ExtractionResult {
 
     // Extract technical terms
     for term in tech_terms.iter() {
-        if text.to_lowercase().contains(&term.to_lowercase()) {
-            if !seen_names.contains(*term) {
-                entities.push(Entity {
-                    name: term.to_string(),
-                    entity_type: "TECHNOLOGY".to_string(),
-                    description: format!("Technology: {}", term),
-                });
-                seen_names.insert(term.to_string());
-            }
+        if text.to_lowercase().contains(&term.to_lowercase())
+            && !seen_names.contains(*term)
+        {
+            entities.push(Entity {
+                name: term.to_string(),
+                entity_type: "TECHNOLOGY".to_string(),
+                description: format!("Technology: {}", term),
+            });
+            seen_names.insert(term.to_string());
         }
     }
 

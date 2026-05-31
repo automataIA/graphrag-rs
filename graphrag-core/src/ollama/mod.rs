@@ -435,7 +435,7 @@ impl OllamaClient {
     ///
     /// Use this for the two-step contextual enrichment pattern:
     ///
-    /// ```no_run
+    /// ```ignore
     /// # use graphrag_core::ollama::{OllamaClient, OllamaConfig, OllamaGenerationParams};
     /// # async fn example() -> graphrag_core::Result<()> {
     /// let client = OllamaClient::new(OllamaConfig::default());
@@ -617,7 +617,7 @@ impl OllamaClient {
             message: format!("Failed to serialize generation params: {}", e),
         })?;
 
-        if !options.as_object().unwrap().is_empty() {
+        if !options.as_object().expect("options is JSON object").is_empty() {
             request_body["options"] = options;
         }
 

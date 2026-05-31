@@ -319,7 +319,7 @@ impl QueryOptimizer {
         }
 
         if operands.len() == 1 {
-            return Ok(operands.pop().unwrap());
+            return Ok(operands.pop().expect("non-empty"));
         }
 
         // Greedy algorithm: repeatedly pick the two cheapest operands to join
@@ -358,7 +358,7 @@ impl QueryOptimizer {
             operands.push(joined);
         }
 
-        Ok(operands.pop().unwrap())
+        Ok(operands.pop().expect("non-empty"))
     }
 
     /// Estimate cost of an operation

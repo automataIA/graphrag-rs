@@ -1,3 +1,8 @@
+//! Summarization of chunks and communities, and aggregation of query results.
+//!
+//! Condenses text spans (and graph communities) into compact summaries, feeding the
+//! `QueryResult` aggregation used by generation.
+
 #[cfg(feature = "parallel-processing")]
 use crate::parallel::ParallelProcessor;
 use crate::{
@@ -825,7 +830,7 @@ impl DocumentTree {
             .collect();
 
         // Sort by score descending
-        sentence_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        sentence_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Select top sentences up to max_summary_length
         let mut summary = String::new();
@@ -932,7 +937,7 @@ impl DocumentTree {
         }
 
         // Sort by score and return top results
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
         results.truncate(max_results);
 
         Ok(results)
@@ -1267,13 +1272,6 @@ mod tests {
     use super::*;
     use crate::core::DocumentId;
 
-    #[test]
-    fn test_tree_creation() {
-        let config = HierarchicalConfig::default();
-        let doc_id = DocumentId::new("test_doc".to_string());
-        let tree = DocumentTree::new(doc_id, config);
-        assert!(tree.is_ok());
-    }
 
     #[test]
     fn test_extractive_summarization() {

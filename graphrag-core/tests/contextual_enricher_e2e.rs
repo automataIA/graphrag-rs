@@ -105,8 +105,7 @@ including music, astronomy, and the seasons."
             let end = content
                 .char_indices()
                 .map(|(pos, _)| pos)
-                .filter(|&p| p <= end)
-                .last()
+                .rfind(|&p| p <= end)
                 .unwrap_or(end);
 
             let chunk_text = content[start..end].to_string();
@@ -400,8 +399,7 @@ including music, astronomy, and the seasons."
             let end = content
                 .char_indices()
                 .map(|(p, _)| p)
-                .filter(|&p| p <= raw_end)
-                .last()
+                .rfind(|&p| p <= raw_end)
                 .unwrap_or(raw_end);
 
             let text = content[start..end].to_string();
@@ -700,7 +698,7 @@ including music, astronomy, and the seasons."
             100,
             2100,
         );
-        let ctx_multi_small = enricher.calculate_num_ctx(&doc, &[small_chunk.clone()]);
+        let ctx_multi_small = enricher.calculate_num_ctx(&doc, std::slice::from_ref(&small_chunk));
         let ctx_multi_large = enricher.calculate_num_ctx(&doc, &[large_chunk]);
         assert!(
             ctx_multi_large > ctx_multi_small,

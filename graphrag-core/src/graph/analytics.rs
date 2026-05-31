@@ -292,7 +292,7 @@ impl GraphAnalytics {
                 .min_by(|a, b| {
                     let dist_a = *distances.get(*a).unwrap_or(&f32::INFINITY);
                     let dist_b = *distances.get(*b).unwrap_or(&f32::INFINITY);
-                    dist_a.partial_cmp(&dist_b).unwrap()
+                    dist_a.partial_cmp(&dist_b).unwrap_or(std::cmp::Ordering::Equal)
                 })?
                 .clone();
 
@@ -418,7 +418,7 @@ impl GraphAnalytics {
             })
             .collect();
 
-        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scores.truncate(top_k);
         scores
     }
@@ -541,6 +541,6 @@ mod tests {
         let graph = create_test_graph();
         let coeff = graph.clustering_coefficient();
 
-        assert!(coeff >= 0.0 && coeff <= 1.0);
+        assert!((0.0..=1.0).contains(&coeff));
     }
 }

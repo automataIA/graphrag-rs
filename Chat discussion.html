@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Chat — graphrag.rs</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Theme: Nordic Minimal */
+    --bg:#eceff4; --surface:#ffffff; --surface2:#d8dee9;
+    --border:#b6bfcc; --borderSoft:#d8dee9;
+    --ink:#2e3440; --inkDim:#4c566a; --inkSoft:#7b8392;
+    --accent:#5e81ac; --accentSoft:#d8e1ee; --accentInk:#3b5878;
+    --hi:#ebcb8b; --danger:#bf616a; --chipBg:#e5e9f0;
+    --serif: "Newsreader", "Iowan Old Style", Georgia, serif;
+    --sans: "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+    /* Edge curvature: 9px */
+    --r-sm:9px; --r-md:9px; --r-pill:999px;
+    /* Density: regular */
+    --gap:14px;
+    --rail-w:280px;
+    --rail-right-w:340px;
+    --pad:22px;
+  }
+
+  /* Background FX: Grain — fine SVG turbulence, low opacity, multiply */
+  .bg-fx {
+    position: fixed; inset: 0; pointer-events: none; z-index: 999;
+    background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.22;
+    mix-blend-mode: multiply;
+  }
+  html, body { margin:0; padding:0; height:100%; background:var(--bg); color:var(--ink); font:14px/1.55 var(--sans); }
+  *{box-sizing:border-box;}
+  ::selection{background:color-mix(in srgb,var(--accent) 28%, transparent);}
+
+  /* ───── shell ───── */
+  .app {
+    display:grid;
+    grid-template-columns: var(--rail-w) 1fr var(--rail-right-w);
+    height:100vh;
+    background:
+      radial-gradient(1200px 600px at 20% -10%, color-mix(in srgb,var(--accentSoft) 40%, transparent) 0%, transparent 60%),
+      radial-gradient(900px 500px at 105% 100%, color-mix(in srgb,var(--chipBg) 60%, transparent) 0%, transparent 60%),
+      var(--bg);
+  }
+  .rail { display:flex; flex-direction:column; gap:var(--gap); padding:var(--pad); min-height:0; }
+  .rail-left { border-right:1px solid var(--border); }
+  .rail-right { border-left:1px solid var(--border); overflow-y:auto; }
+  .rail-section{ display:flex; flex-direction:column; gap:10px; }
+  .rail-foot{ margin-top:auto; }
+  .rail-h{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .rail-h-eyebrow{ font:500 10px/1 var(--mono); text-transform:uppercase; letter-spacing:0.12em; color:var(--inkSoft); }
+  .rail-cmd{
+    appearance:none; border:1px solid var(--border); background:var(--surface);
+    color:var(--inkDim); cursor:default; width:22px; height:22px; border-radius:var(--r-sm);
+    font:500 12px/1 var(--mono); display:inline-flex; align-items:center; justify-content:center;
+  }
+  .rail-cmd:hover{ color:var(--ink); border-color:var(--inkDim); }
+
+  /* ───── brand ───── */
+  .brand{ display:flex; align-items:baseline; gap:4px; font-family:var(--serif); font-size:28px; font-weight:500; line-height:1; letter-spacing:-0.02em; }
+  .brand-mark{ color:var(--accent); font-size:26px; line-height:1; margin-right:4px; transform:translateY(2px);}
+  .brand-name{ color:var(--ink); }
+  .brand-sub{ color:var(--inkSoft); font-family:var(--mono); font-size:14px; font-weight:400; }
+  .status-row{ display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+
+  .chip{
+    display:inline-flex; align-items:center; gap:6px;
+    padding:3px 9px; font:500 11px/1 var(--sans); color:var(--inkDim);
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--r-pill);
+  }
+  .chip-mono{ font-family:var(--mono); font-size:10.5px; }
+  .chip-on{ color:var(--accentInk); background:var(--accentSoft); border-color:color-mix(in srgb,var(--accent) 30%, transparent); }
+  .dot{ width:6px; height:6px; border-radius:50%; background:var(--inkSoft); display:inline-block; }
+  .dot-on{ background:var(--accent); }
+  .dot-pulse{ background:var(--accent); animation:pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1} 50%{opacity:.35} }
+  .dotsep{ color:var(--inkSoft); margin:0 6px; }
+
+  /* ───── doc list ───── */
+  .doc-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:2px; }
+  .doc-item{
+    display:flex; align-items:center; gap:10px;
+    padding:8px 10px; border:1px solid transparent;
+    background:transparent; border-radius:var(--r-sm); cursor:default; position:relative;
+  }
+  .doc-item:hover{ background:var(--surface); border-color:var(--borderSoft); }
+  .doc-item.is-active{ background:var(--surface); border-color:var(--border); }
+  .doc-glyph{
+    width:28px; height:28px; display:grid; place-items:center;
+    font:600 13px/1 var(--mono); color:var(--surface);
+    background:var(--ink); border-radius:var(--r-sm); flex-shrink:0;
+  }
+  .doc-glyph[data-c="hi"]{ background:var(--hi); }
+  .doc-glyph[data-c="accent"]{ background:var(--accent); }
+  .doc-meta{ min-width:0; flex:1; }
+  .doc-title{ font-family:var(--serif); font-size:15px; font-weight:500; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .doc-sub{ font:400 11px/1.2 var(--mono); color:var(--inkSoft); display:flex; align-items:center; gap:4px; margin-top:2px; }
+  .doc-active-bar{ position:absolute; left:-22px; top:6px; bottom:6px; width:2px; background:var(--accent); }
+
+  .seg{ display:flex; border:1px solid var(--border); border-radius:var(--r-sm); overflow:hidden; background:var(--surface); }
+  .seg-btn{ flex:1; appearance:none; border:0; background:transparent; padding:7px 10px; font:500 12px/1 var(--sans); color:var(--inkDim); cursor:default; }
+  .seg-btn.is-on{ background:var(--ink); color:var(--surface); }
+
+  .build-btn{
+    appearance:none; border:1px solid var(--accent);
+    background:var(--accent); color:var(--surface);
+    padding:11px 14px; font:500 13px/1 var(--sans); border-radius:var(--r-sm);
+    cursor:default; display:flex; align-items:center; justify-content:space-between;
+    gap:10px; width:100%;
+  }
+  .build-btn .kbd{ background:rgba(255,255,255,0.12); border-color:rgba(255,255,255,0.18); color:rgba(255,255,255,0.85); }
+  .foot-meta{ display:flex; flex-wrap:wrap; gap:4px; }
+  .kbd{
+    display:inline-block; padding:1px 5px; min-width:16px; text-align:center;
+    font:500 10px/1.4 var(--mono); color:var(--inkDim);
+    background:var(--surface); border:1px solid var(--border); border-bottom-width:2px; border-radius:var(--r-sm);
+  }
+
+  /* ───── stage ───── */
+  .stage{ display:flex; flex-direction:column; min-width:0; min-height:0; }
+  .stage-head{
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+    padding:18px var(--pad); border-bottom:1px solid var(--border);
+    background:color-mix(in srgb, var(--surface) 75%, transparent);
+    backdrop-filter:blur(8px);
+  }
+  .stage-head-l{ display:flex; flex-direction:column; gap:2px; }
+  .stage-title{ font-family:var(--serif); font-size:22px; font-weight:500; line-height:1.1; display:flex; align-items:baseline; gap:10px; }
+  .stage-title-sub{ font:italic 400 14px/1 var(--serif); color:var(--inkSoft); }
+  .stage-head-r{ display:flex; align-items:center; gap:6px; }
+  .stage-scroll{ flex:1; overflow-y:auto; padding:26px var(--pad) 24px; display:flex; flex-direction:column; gap:22px; min-height:0; }
+  .stage-scroll::-webkit-scrollbar{ width:10px; }
+  .stage-scroll::-webkit-scrollbar-thumb{ background:var(--border); border-radius:5px; border:2px solid var(--bg); }
+
+  /* ───── thread ───── */
+  .thread{ display:flex; flex-direction:column; gap:34px; max-width:760px; width:100%; margin:0 auto; }
+  .turn{ display:flex; flex-direction:column; gap:14px; }
+  .turn + .turn{ padding-top:28px; border-top:1px solid var(--borderSoft); }
+
+  .role{
+    display:flex; align-items:center; gap:10px;
+    font:500 10px/1 var(--mono); text-transform:uppercase; letter-spacing:0.16em;
+    color:var(--inkSoft);
+  }
+  .role-mark{
+    width:18px; height:18px; display:grid; place-items:center;
+    font:500 10px/1 var(--mono); color:var(--surface);
+    background:var(--ink); border-radius:var(--r-sm);
+  }
+  .role-mark.is-ai{ background:var(--accent); }
+
+  .bubble-q{
+    background:var(--surface2); border:1px solid var(--border);
+    padding:14px 18px; border-radius:var(--r-md);
+    align-self:flex-start; max-width:680px;
+  }
+  .bubble-q p{
+    margin:0; font-family:var(--serif); font-size:18px; line-height:1.45; font-weight:500;
+    color:var(--ink);
+  }
+
+  .answer{
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--r-md); padding:18px 22px 14px;
+    position:relative;
+  }
+  .answer::before{
+    content:""; position:absolute; left:0; top:18px; bottom:18px;
+    width:2px; background:var(--accent);
+  }
+  .answer-eyebrow{
+    display:block;
+    font:500 10px/1 var(--mono); text-transform:uppercase; letter-spacing:0.16em;
+    color:var(--inkSoft); margin-bottom:10px;
+  }
+  .answer p{
+    margin:0 0 12px;
+    font-family:var(--serif); font-size:16.5px; line-height:1.65; color:var(--ink);
+    text-wrap:pretty;
+  }
+  .answer p:last-of-type{ margin-bottom:0; }
+  .answer h4{
+    margin:14px 0 8px;
+    font-family:var(--serif); font-weight:500; font-size:15px; color:var(--ink); letter-spacing:-0.005em;
+  }
+  blockquote{
+    margin:6px 0 12px; padding:10px 14px;
+    background:var(--surface2); border-left:2px solid var(--inkSoft);
+    border-radius:0 var(--r-sm) var(--r-sm) 0;
+    font:italic 400 15px/1.55 var(--serif); color:var(--ink);
+  }
+
+  /* citations */
+  .cite{
+    appearance:none; cursor:default;
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:18px; height:18px; padding:0 5px; margin-left:3px;
+    border:1px solid color-mix(in srgb,var(--accent) 35%, transparent);
+    background:var(--accentSoft); color:var(--accentInk);
+    font:500 10.5px/1 var(--mono); border-radius:var(--r-pill);
+    vertical-align:1px;
+    transition:transform .12s, background .12s, color .12s, border-color .12s;
+  }
+  .cite + .cite{ margin-left:2px; }
+  .cite:hover, .cite.is-active{
+    background:var(--accent); color:var(--surface); border-color:var(--accent);
+    transform:translateY(-1px);
+  }
+
+  .answer-foot{
+    display:flex; gap:6px; margin-top:14px; padding-top:12px;
+    border-top:1px solid var(--borderSoft);
+  }
+  .ghost-btn{
+    appearance:none; background:transparent; border:1px solid var(--borderSoft);
+    color:var(--inkDim); padding:5px 10px;
+    font:500 11px/1 var(--mono); border-radius:var(--r-pill); cursor:default;
+  }
+  .ghost-btn:hover{ color:var(--ink); border-color:var(--border); background:var(--surface2); }
+
+  /* ───── composer ───── */
+  .composer-wrap{
+    border-top:1px solid var(--border);
+    padding:16px var(--pad) 18px;
+    background:linear-gradient(to top, var(--bg) 0%, var(--bg) 65%, color-mix(in srgb,var(--bg) 80%, transparent) 100%);
+  }
+  .composer{
+    max-width:760px; margin:0 auto;
+    display:flex; align-items:center;
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--r-sm);
+  }
+  .composer:focus-within{ border-color:var(--accent); }
+  .composer .prompt{ color:var(--accent); font-family:var(--mono); font-size:18px; padding:0 10px 0 14px; }
+  .composer input{
+    flex:1; appearance:none; border:0; background:transparent;
+    padding:14px 4px; font:400 16px/1.4 var(--sans); color:var(--ink); outline:none;
+  }
+  .composer input::placeholder{ color:var(--inkSoft); }
+  .composer .go{
+    border:0; border-left:1px solid var(--border); background:transparent;
+    padding:0 16px; align-self:stretch;
+    font:500 12px/1 var(--mono); color:var(--inkDim);
+    display:flex; align-items:center; gap:8px; cursor:default;
+  }
+  .composer .go:hover{ color:var(--ink); background:var(--surface2); }
+  .composer-hint{
+    max-width:760px; margin:6px auto 0;
+    display:flex; justify-content:space-between;
+    font:400 11px/1 var(--mono); color:var(--inkSoft);
+  }
+
+  /* ───── right rail ───── */
+  .pipeline{ display:flex; flex-direction:column; gap:10px; }
+  .stages{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }
+  .pls{
+    display:flex; gap:10px; align-items:flex-start;
+    padding:8px 10px; background:var(--surface); border:1px solid var(--borderSoft);
+    border-radius:var(--r-sm);
+  }
+  .pls.is-done{ border-color:var(--border); }
+  .pls-no{ font:500 10px/1.2 var(--mono); color:var(--accentInk); padding-top:2px; min-width:20px; }
+  .pls-body{ flex:1; display:flex; flex-direction:column; gap:4px; min-width:0; }
+  .pls-row{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+  .pls-label{ font:500 12px/1 var(--sans); color:var(--ink); }
+  .pls-pct{ font:400 10px/1 var(--mono); color:var(--inkSoft); }
+  .pls-bar{ height:2px; background:var(--surface2); border-radius:1px; overflow:hidden; }
+  .pls-fill{ height:100%; background:var(--accentInk); }
+  .pls-hint{ font:400 10px/1.2 var(--mono); color:var(--inkSoft); }
+
+  /* graph panel */
+  .graph-panel{ display:flex; flex-direction:column; gap:8px; margin-top:6px; }
+  .graph-frame{
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--r-sm); aspect-ratio: 320/240; overflow:hidden;
+  }
+  .graph-legend{
+    display:flex; flex-wrap:wrap; gap:8px 12px;
+    font:400 10px/1 var(--mono); color:var(--inkSoft);
+  }
+  .graph-legend span{ display:inline-flex; align-items:center; gap:5px; }
+  .graph-legend i{ width:7px; height:7px; border-radius:50%; display:inline-block; }
+  .lg-concept{ background:var(--accent); }
+  .lg-person{ background:var(--ink); }
+  .lg-location{ background:var(--hi); }
+  .lg-deity{ background:var(--danger); }
+  .lg-event{ background:var(--accentInk); }
+
+  .ministat-row{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:6px; }
+  .ministat{ padding:8px 10px; background:var(--surface); border:1px solid var(--borderSoft); border-radius:var(--r-sm); display:flex; flex-direction:column; gap:2px; }
+  .ministat-v{ font:500 18px/1 var(--serif); color:var(--ink); }
+  .ministat-k{ font:500 10px/1 var(--mono); color:var(--inkSoft); text-transform:uppercase; letter-spacing:0.08em; }
+
+  /* refs cards in right rail */
+  .ref-block{ display:flex; flex-direction:column; gap:8px; margin-top:6px; }
+  .ref-card{
+    background:var(--surface); border:1px solid var(--borderSoft);
+    border-radius:var(--r-sm); padding:10px 12px;
+    display:flex; flex-direction:column; gap:6px;
+    transition:border-color .12s, background .12s;
+  }
+  .ref-card.is-hovered{ border-color:var(--accent); }
+  .ref-head{ display:flex; align-items:baseline; gap:8px; }
+  .ref-num{
+    font:500 10px/1 var(--mono); color:var(--accentInk);
+    background:var(--accentSoft); padding:3px 6px; border-radius:var(--r-pill);
+    border:1px solid color-mix(in srgb,var(--accent) 25%, transparent);
+  }
+  .ref-card.is-hovered .ref-num{ background:var(--accent); color:var(--surface); border-color:var(--accent); }
+  .ref-doc{
+    font-family:var(--serif); font-style:italic; font-size:13.5px; color:var(--ink);
+    flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .ref-loc{ font:400 10.5px/1 var(--mono); color:var(--inkSoft); }
+  .ref-heading{ font-family:var(--serif); font-size:14px; color:var(--ink); font-weight:500; line-height:1.25; }
+  .ref-text{
+    font-family:var(--serif); font-size:13px; line-height:1.5; color:var(--inkDim);
+    margin:0;
+    display:-webkit-box; -webkit-line-clamp:3; line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;
+  }
+
+  /* responsive (placed last so it overrides base .rail rules) */
+  @media (max-width:1180px){
+    .app{ grid-template-columns: var(--rail-w) 1fr; }
+    .rail-right{ display:none; }
+  }
+  @media (max-width:800px){
+    .app{ grid-template-columns: 1fr; }
+    .rail-left{ display:none; }
+  }
+</style>
+</head>
+<body>
+<div class="bg-fx"></div>
+<div class="app">
+
+  <!-- ───── left rail: doc library ───── -->
+  <aside class="rail rail-left" data-screen-label="Library">
+    <div class="rail-section">
+      <div class="rail-h">
+        <span class="rail-h-eyebrow">Workspace</span>
+        <button class="rail-cmd" title="⌘K"><span style="font-family:Geist Mono,monospace;font-size:10px;">⌘K</span></button>
+      </div>
+      <h1 class="brand">
+        <span class="brand-mark">◐</span><span class="brand-name">graphrag</span><span class="brand-sub">.rs</span>
+      </h1>
+      <div class="status-row">
+        <span class="chip chip-mono chip-on"><span class="dot dot-on"></span> indexed</span>
+        <span class="chip chip-mono">wasm · webgpu</span>
+      </div>
+    </div>
+
+    <div class="rail-section">
+      <div class="rail-h">
+        <span class="rail-h-eyebrow">Sources · 1</span>
+        <button class="rail-cmd" title="Add document">+</button>
+      </div>
+      <ul class="doc-list">
+        <li class="doc-item is-active">
+          <div class="doc-glyph" data-c="hi">S</div>
+          <div class="doc-meta">
+            <div class="doc-title">Symposium</div>
+            <div class="doc-sub"><span>Plato</span><span class="dotsep">·</span><span>51k tok</span></div>
+          </div>
+          <span class="doc-active-bar"></span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="rail-section">
+      <div class="rail-h"><span class="rail-h-eyebrow">View</span></div>
+      <div class="seg">
+        <button class="seg-btn is-on">Flat</button>
+        <button class="seg-btn">Hierarchy</button>
+      </div>
+    </div>
+
+    <div class="rail-section rail-foot">
+      <button class="build-btn">Rebuild graph <span class="kbd">⏎</span></button>
+      <div class="foot-meta">
+        <span class="chip chip-mono">all-MiniLM-L6</span>
+        <span class="chip chip-mono">Qwen3-1.7B</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ───── center: chat stage ───── -->
+  <main class="stage" data-screen-label="Chat thread">
+    <header class="stage-head">
+      <div class="stage-head-l">
+        <span class="rail-h-eyebrow">Source</span>
+        <h2 class="stage-title">Symposium <span class="stage-title-sub">Plato, tr. Jowett</span></h2>
+      </div>
+      <div class="stage-head-r">
+        <span class="chip chip-mono"><span class="dot dot-on"></span> client-side</span>
+        <span class="chip chip-mono">IndexedDB</span>
+        <span class="chip chip-mono">press <span class="kbd">⌘K</span></span>
+      </div>
+    </header>
+
+    <div class="stage-scroll">
+      <div class="thread">
+
+        <!-- Turn 1 -->
+        <article class="turn">
+          <div class="role"><span class="role-mark">You</span>You · 4:12 pm</div>
+          <div class="bubble-q"><p>What does Diotima actually teach Socrates about love?</p></div>
+
+          <div class="role"><span class="role-mark is-ai">AI</span>Synthesis · Qwen3-1.7B · grounded in 4 sources</div>
+          <div class="answer">
+            <span class="answer-eyebrow">hybrid retrieval · k=5 · 318ms</span>
+            <p>Diotima begins by overturning the picture of Eros as a god, telling Socrates that love is instead <em>a great spirit, an intermediary between the mortal and the divine</em>.<button class="cite" data-ref="1">1</button> She frames love as a kind of in-betweenness — born of Poverty and Resource, never sated, never destitute, always in pursuit of what it lacks.<button class="cite" data-ref="2">2</button></p>
+
+            <h4>The ladder of beauty</h4>
+            <p>Her central teaching is the famous ascent: the lover begins with the beauty of one body, then sees the beauty common to all bodies, then the beauty of souls, of laws, and finally of knowledge itself.<button class="cite" data-ref="3">3</button> At the top of the ladder waits Beauty itself, &ldquo;eternal and unchanging,&rdquo; an object the philosopher comes to love above any single instance of it.<button class="cite" data-ref="3">3</button><button class="cite" data-ref="4">4</button></p>
+
+            <p>For Diotima, love is finally the longing for immortality through creation — physical in the body, spiritual in the production of wisdom and virtue.<button class="cite" data-ref="2">2</button></p>
+
+            <div class="answer-foot">
+              <button class="ghost-btn">copy</button>
+              <button class="ghost-btn">view subgraph</button>
+              <button class="ghost-btn">why this answer?</button>
+            </div>
+          </div>
+        </article>
+
+        <!-- Turn 2 -->
+        <article class="turn">
+          <div class="role"><span class="role-mark">You</span>You · 4:14 pm</div>
+          <div class="bubble-q"><p>And how is that different from what Pausanias says about love earlier in the dialogue?</p></div>
+
+          <div class="role"><span class="role-mark is-ai">AI</span>Synthesis · Qwen3-1.7B · grounded in 3 sources</div>
+          <div class="answer">
+            <span class="answer-eyebrow">hybrid retrieval · k=5 · 287ms</span>
+            <p>Pausanias divides love along the lines of its patron goddesses: <em>&ldquo;there are two goddesses, and therefore two loves — the elder, who has no mother, the daughter of Uranus, whom we call heavenly; and the younger, daughter of Zeus and Dione, whom we call common.&rdquo;</em><button class="cite" data-ref="5">5</button> The &ldquo;common&rdquo; Aphrodite governs an indiscriminate, bodily love, while the &ldquo;heavenly&rdquo; one moves toward the soul.<button class="cite" data-ref="5">5</button></p>
+
+            <p>Diotima keeps the moral hierarchy but discards the dual-goddess scaffolding entirely. Love is one thing — a single restless spirit — and what differs is the <em>object</em> the lover is climbing toward at any given rung of the ascent.<button class="cite" data-ref="1">1</button><button class="cite" data-ref="3">3</button> Where Pausanias sorts lovers, Diotima sorts loves; the same person can begin in the bodily and climb to the contemplative.<button class="cite" data-ref="3">3</button></p>
+
+            <div class="answer-foot">
+              <button class="ghost-btn">copy</button>
+              <button class="ghost-btn">view subgraph</button>
+            </div>
+          </div>
+        </article>
+
+        <!-- Turn 3 -->
+        <article class="turn">
+          <div class="role"><span class="role-mark">You</span>You · 4:17 pm</div>
+          <div class="bubble-q"><p>Quote the line where Alcibiades compares Socrates to a Silenus statue.</p></div>
+
+          <div class="role"><span class="role-mark is-ai">AI</span>Synthesis · Qwen3-1.7B · grounded in 1 source</div>
+          <div class="answer">
+            <span class="answer-eyebrow">hybrid retrieval · k=3 · 204ms</span>
+            <p>Alcibiades introduces the comparison just after bursting into the party drunk and being asked to give his own praise of love — he turns the speech on Socrates instead:</p>
+            <blockquote>&ldquo;I say that he is exactly like the busts of Silenus, which are set up in the statuaries' shops, holding pipes and flutes in their mouths; and they are made to open in the middle.&rdquo;<button class="cite" data-ref="6">6</button></blockquote>
+            <p>The figure is meant to be both joke and confession — the outer Silenus is ugly and grotesque, but split it open and you find &ldquo;images of the gods&rdquo; inside.<button class="cite" data-ref="6">6</button></p>
+
+            <div class="answer-foot">
+              <button class="ghost-btn">copy</button>
+              <button class="ghost-btn">expand chunk</button>
+            </div>
+          </div>
+        </article>
+
+      </div>
+    </div>
+
+    <div class="composer-wrap">
+      <form class="composer" onsubmit="event.preventDefault();">
+        <span class="prompt" aria-hidden>›</span>
+        <input type="text" placeholder="Ask another question about the indexed sources…" />
+        <button class="go" type="submit">retrieve <span class="kbd">⏎</span></button>
+      </form>
+      <div class="composer-hint">
+        <span>retrieval: hybrid · vec + bm25 + pr · k=5</span>
+        <span>⌘K for commands</span>
+      </div>
+    </div>
+  </main>
+
+  <!-- ───── right rail: graph + pipeline + references ───── -->
+  <aside class="rail rail-right" data-screen-label="Graph, pipeline & references">
+    <div class="rail-section">
+      <div class="rail-h">
+        <span class="rail-h-eyebrow">Graph · subgraph for this thread</span>
+        <span class="chip chip-mono">16 · 21</span>
+      </div>
+      <div class="graph-panel">
+        <div class="graph-frame">
+          <svg viewBox="0 0 320 240" preserveAspectRatio="xMidYMid meet" aria-label="Knowledge graph — Symposium" style="width:100%;height:100%;display:block;">
+            <defs>
+              <pattern id="paper-grid" width="24" height="24" patternUnits="userSpaceOnUse">
+                <path d="M 24 0 L 0 0 0 24" fill="none" stroke="var(--borderSoft)" stroke-width="0.5" opacity="0.5"/>
+              </pattern>
+            </defs>
+            <rect x="0" y="0" width="320" height="240" fill="url(#paper-grid)"/>
+            <g class="g-edges">
+              <line x1="241.60" y1="120.00" x2="217.70" y2="165.01" stroke="var(--accent)" stroke-width="1.4" opacity="0.9"/>
+              <line x1="241.60" y1="120.00" x2="197.41" y2="136.85" stroke="var(--accent)" stroke-width="1.4" opacity="0.9"/>
+              <line x1="241.60" y1="120.00" x2="160.00" y2="183.65" stroke="var(--accent)" stroke-width="1.4" opacity="0.9"/>
+              <line x1="241.60" y1="120.00" x2="102.30" y2="165.01" stroke="var(--accent)" stroke-width="1.4" opacity="0.9"/>
+              <line x1="217.70" y1="165.01" x2="197.41" y2="136.85" stroke="var(--accent)" stroke-width="1.4" opacity="0.9"/>
+              <line x1="217.70" y1="165.01" x2="122.59" y2="136.85" stroke="var(--accent)" stroke-width="1.4" opacity="0.9"/>
+              <line x1="102.30" y1="74.99" x2="197.41" y2="136.85" stroke="var(--accent)" stroke-width="1.4" opacity="0.9"/>
+              <line x1="160.00" y1="56.35" x2="137.05" y2="204.23" stroke="var(--border)" stroke-width="0.7" opacity="0.18"/>
+              <line x1="160.00" y1="56.35" x2="197.41" y2="136.85" stroke="var(--accent)" stroke-width="1.4" opacity="0.9"/>
+              <line x1="78.40" y1="120.00" x2="197.41" y2="136.85" stroke="var(--accent)" stroke-width="1.4" opacity="0.9"/>
+              <line x1="102.30" y1="165.01" x2="197.41" y2="136.85" stroke="var(--accent)" stroke-width="1.4" opacity="0.9"/>
+              <line x1="137.05" y1="204.23" x2="197.41" y2="136.85" stroke="var(--accent)" stroke-width="1.4" opacity="0.9"/>
+              <line x1="197.41" y1="136.85" x2="122.59" y2="136.85" stroke="var(--accent)" stroke-width="1.4" opacity="0.9"/>
+              <line x1="122.59" y1="136.85" x2="160.00" y2="86.30" stroke="var(--accent)" stroke-width="1.4" opacity="0.9"/>
+              <line x1="160.00" y1="183.65" x2="50.20" y2="129.00" stroke="var(--border)" stroke-width="0.7" opacity="0.18"/>
+              <line x1="217.70" y1="165.01" x2="242.04" y2="62.38" stroke="var(--accent)" stroke-width="1.4" opacity="0.9"/>
+              <line x1="241.60" y1="120.00" x2="50.20" y2="129.00" stroke="var(--accent)" stroke-width="1.4" opacity="0.9"/>
+              <line x1="255.61" y1="163.06" x2="50.20" y2="129.00" stroke="var(--border)" stroke-width="0.7" opacity="0.18"/>
+              <line x1="255.61" y1="163.06" x2="102.30" y2="165.01" stroke="var(--border)" stroke-width="0.7" opacity="0.18"/>
+              <line x1="115.10" y1="41.33" x2="137.05" y2="204.23" stroke="var(--border)" stroke-width="0.7" opacity="0.18"/>
+              <line x1="217.70" y1="74.99" x2="255.61" y2="163.06" stroke="var(--border)" stroke-width="0.7" opacity="0.18"/>
+            </g>
+            <g class="g-nodes">
+              <g opacity="1"><circle cx="241.60" cy="120.00" r="11.98" fill="var(--accentSoft)"/><circle cx="241.60" cy="120.00" r="7.98" fill="var(--ink)" stroke="var(--surface)" stroke-width="1.5"/><text x="241.60" y="108.02" text-anchor="middle" style="font:600 10px/1 'Geist', system-ui, sans-serif; fill: var(--ink);">Socrates</text></g>
+              <g opacity="1"><circle cx="217.70" cy="165.01" r="10.46" fill="var(--accentSoft)"/><circle cx="217.70" cy="165.01" r="6.46" fill="var(--ink)" stroke="var(--surface)" stroke-width="1.5"/><text x="217.70" y="154.54" text-anchor="middle" style="font:600 10px/1 'Geist', system-ui, sans-serif; fill: var(--ink);">Diotima</text></g>
+              <g opacity="0.35"><circle cx="160.00" cy="183.65" r="6.27" fill="var(--ink)" stroke="var(--surface)" stroke-width="1"/><text x="160.00" y="173.38" text-anchor="middle" style="font:500 10px/1 'Geist', system-ui, sans-serif; fill: var(--ink);">Alcibiades</text></g>
+              <g opacity="0.35"><circle cx="102.30" cy="74.99" r="5.79" fill="var(--ink)" stroke="var(--surface)" stroke-width="1"/><text x="102.30" y="65.20" text-anchor="middle" style="font:500 10px/1 'Geist', system-ui, sans-serif; fill: var(--ink);">Phaedrus</text></g>
+              <g opacity="0.35"><circle cx="160.00" cy="56.35" r="5.62" fill="var(--ink)" stroke="var(--surface)" stroke-width="1"/></g>
+              <g opacity="0.35"><circle cx="78.40" cy="120.00" r="5.85" fill="var(--ink)" stroke="var(--surface)" stroke-width="1"/><text x="78.40" y="110.15" text-anchor="middle" style="font:500 10px/1 'Geist', system-ui, sans-serif; fill: var(--ink);">Aristophanes</text></g>
+              <g opacity="0.35"><circle cx="102.30" cy="165.01" r="6.02" fill="var(--ink)" stroke="var(--surface)" stroke-width="1"/><text x="102.30" y="154.99" text-anchor="middle" style="font:500 10px/1 'Geist', system-ui, sans-serif; fill: var(--ink);">Agathon</text></g>
+              <g opacity="0.35"><circle cx="217.70" cy="74.99" r="5.15" fill="var(--ink)" stroke="var(--surface)" stroke-width="1"/></g>
+              <g opacity="1"><circle cx="197.41" cy="136.85" r="13.49" fill="var(--accentSoft)"/><circle cx="197.41" cy="136.85" r="9.49" fill="var(--accent)" stroke="var(--surface)" stroke-width="1.5"/><text x="197.41" y="123.36" text-anchor="middle" style="font:600 10px/1 'Geist', system-ui, sans-serif; fill: var(--ink);">Eros</text></g>
+              <g opacity="1"><circle cx="122.59" cy="136.85" r="11.30" fill="var(--accentSoft)"/><circle cx="122.59" cy="136.85" r="7.30" fill="var(--accent)" stroke="var(--surface)" stroke-width="1.5"/><text x="122.59" y="125.54" text-anchor="middle" style="font:600 10px/1 'Geist', system-ui, sans-serif; fill: var(--ink);">Beauty</text></g>
+              <g opacity="0.35"><circle cx="160.00" cy="86.30" r="6.02" fill="var(--accent)" stroke="var(--surface)" stroke-width="1"/><text x="160.00" y="76.29" text-anchor="middle" style="font:500 10px/1 'Geist', system-ui, sans-serif; fill: var(--ink);">Wisdom</text></g>
+              <g opacity="0.35"><circle cx="50.20" cy="129.00" r="5.06" fill="var(--hi)" stroke="var(--surface)" stroke-width="1"/></g>
+              <g opacity="0.35"><circle cx="242.04" cy="62.38" r="4.39" fill="var(--hi)" stroke="var(--surface)" stroke-width="1"/></g>
+              <g opacity="0.35"><circle cx="137.05" cy="204.23" r="5.23" fill="var(--danger)" stroke="var(--surface)" stroke-width="1"/></g>
+              <g opacity="0.35"><circle cx="115.10" cy="41.33" r="5.01" fill="var(--danger)" stroke="var(--surface)" stroke-width="1"/></g>
+              <g opacity="0.35"><circle cx="255.61" cy="163.06" r="5.74" fill="var(--accentInk)" stroke="var(--surface)" stroke-width="1"/><text x="255.61" y="153.32" text-anchor="middle" style="font:500 10px/1 'Geist', system-ui, sans-serif; fill: var(--ink);">Symposium</text></g>
+            </g>
+          </svg>
+        </div>
+        <div class="graph-legend">
+          <span><i class="lg-concept"></i>concept</span>
+          <span><i class="lg-person"></i>person</span>
+          <span><i class="lg-location"></i>location</span>
+          <span><i class="lg-deity"></i>deity</span>
+          <span><i class="lg-event"></i>event</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="rail-section">
+      <div class="rail-h">
+        <span class="rail-h-eyebrow">Pipeline</span>
+        <span class="chip chip-mono chip-on">ready</span>
+      </div>
+      <ul class="stages">
+        <li class="pls is-done">
+          <span class="pls-no">01</span>
+          <div class="pls-body">
+            <div class="pls-row"><span class="pls-label">Chunk</span><span class="pls-pct">100%</span></div>
+            <div class="pls-bar"><div class="pls-fill" style="width:100%"></div></div>
+            <div class="pls-hint">10 chunks · ~512 tok</div>
+          </div>
+        </li>
+        <li class="pls is-done">
+          <span class="pls-no">02</span>
+          <div class="pls-body">
+            <div class="pls-row"><span class="pls-label">Embed</span><span class="pls-pct">100%</span></div>
+            <div class="pls-bar"><div class="pls-fill" style="width:100%"></div></div>
+            <div class="pls-hint">all-MiniLM-L6 · 384d</div>
+          </div>
+        </li>
+        <li class="pls is-done">
+          <span class="pls-no">03</span>
+          <div class="pls-body">
+            <div class="pls-row"><span class="pls-label">Extract entities</span><span class="pls-pct">100%</span></div>
+            <div class="pls-bar"><div class="pls-fill" style="width:100%"></div></div>
+            <div class="pls-hint">16 entities · 4 types</div>
+          </div>
+        </li>
+        <li class="pls is-done">
+          <span class="pls-no">04</span>
+          <div class="pls-body">
+            <div class="pls-row"><span class="pls-label">Link &amp; rank</span><span class="pls-pct">100%</span></div>
+            <div class="pls-bar"><div class="pls-fill" style="width:100%"></div></div>
+            <div class="pls-hint">21 edges · PageRank</div>
+          </div>
+        </li>
+      </ul>
+      <div class="ministat-row">
+        <div class="ministat"><div class="ministat-v">16</div><div class="ministat-k">entities</div></div>
+        <div class="ministat"><div class="ministat-v">21</div><div class="ministat-k">edges</div></div>
+        <div class="ministat"><div class="ministat-v">10</div><div class="ministat-k">chunks</div></div>
+      </div>
+    </div>
+
+    <div class="rail-section">
+      <div class="rail-h">
+        <span class="rail-h-eyebrow">References · this thread</span>
+        <span class="chip chip-mono">6</span>
+      </div>
+      <div class="ref-block" id="refList">
+        <div class="ref-card" data-num="1">
+          <div class="ref-head">
+            <span class="ref-num">1</span>
+            <span class="ref-doc">Symposium</span>
+            <span class="ref-loc">§84</span>
+          </div>
+          <div class="ref-heading">Diotima: Love is neither mortal nor immortal</div>
+          <p class="ref-text">He is a great spirit, and like all spirits he is intermediate between the divine and the mortal. He interprets between gods and men, conveying and taking across to the gods the prayers and sacrifices of men…</p>
+        </div>
+        <div class="ref-card" data-num="2">
+          <div class="ref-head">
+            <span class="ref-num">2</span>
+            <span class="ref-doc">Symposium</span>
+            <span class="ref-loc">§71</span>
+          </div>
+          <div class="ref-heading">Socrates introduces Diotima</div>
+          <p class="ref-text">I will rehearse a tale of love which I heard from Diotima of Mantinea, a woman wise in this and in many other kinds of knowledge. She was the same who deferred the plague of Athens ten years by sacrifices…</p>
+        </div>
+        <div class="ref-card" data-num="3">
+          <div class="ref-head">
+            <span class="ref-num">3</span>
+            <span class="ref-doc">Symposium</span>
+            <span class="ref-loc">§96</span>
+          </div>
+          <div class="ref-heading">The ascent to beauty itself</div>
+          <p class="ref-text">He who would proceed aright in this matter should begin in youth to visit beautiful forms; and first, if he be guided by his instructor aright, to love one such form only — out of that he should create fair thoughts…</p>
+        </div>
+        <div class="ref-card" data-num="4">
+          <div class="ref-head">
+            <span class="ref-num">4</span>
+            <span class="ref-doc">Symposium</span>
+            <span class="ref-loc">§58</span>
+          </div>
+          <div class="ref-heading">Agathon's encomium</div>
+          <p class="ref-text">Love is the fairest and best in himself, and the cause of what is fairest and best in all other things. He is the youngest of the gods, and forever young; for he is always with the young…</p>
+        </div>
+        <div class="ref-card" data-num="5">
+          <div class="ref-head">
+            <span class="ref-num">5</span>
+            <span class="ref-doc">Symposium</span>
+            <span class="ref-loc">§27</span>
+          </div>
+          <div class="ref-heading">Pausanias: two kinds of Love</div>
+          <p class="ref-text">There are two goddesses, and therefore two loves — the elder, who has no mother, the daughter of Uranus, whom we call heavenly; and the younger, daughter of Zeus and Dione, whom we call common.</p>
+        </div>
+        <div class="ref-card" data-num="6">
+          <div class="ref-head">
+            <span class="ref-num">6</span>
+            <span class="ref-doc">Symposium</span>
+            <span class="ref-loc">§124</span>
+          </div>
+          <div class="ref-heading">Alcibiades on Socrates</div>
+          <p class="ref-text">I will praise Socrates in a figure which will appear to him to be a caricature, and yet I speak, not to make fun of him, but only for the truth's sake. I say that he is exactly like the busts of Silenus…</p>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<script>
+  const cites = document.querySelectorAll('.cite');
+  const refs  = document.querySelectorAll('.ref-card');
+  const byNum = {};
+  refs.forEach(r => byNum[r.dataset.num] = r);
+
+  function setActive(num, on) {
+    cites.forEach(c => { if (c.dataset.ref === num) c.classList.toggle('is-active', on); });
+    if (byNum[num]) byNum[num].classList.toggle('is-hovered', on);
+  }
+  cites.forEach(c => {
+    c.addEventListener('mouseenter', () => setActive(c.dataset.ref, true));
+    c.addEventListener('mouseleave', () => setActive(c.dataset.ref, false));
+    c.addEventListener('click', () => {
+      const el = byNum[c.dataset.ref]; if (!el) return;
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      el.classList.add('is-hovered');
+      setTimeout(() => el.classList.remove('is-hovered'), 1400);
+    });
+  });
+  refs.forEach(r => {
+    r.addEventListener('mouseenter', () => setActive(r.dataset.num, true));
+    r.addEventListener('mouseleave', () => setActive(r.dataset.num, false));
+  });
+</script>
+</body>
+</html>

@@ -264,9 +264,12 @@ impl RustCodeChunkingStrategy {
 ///
 /// **Performance Target**: +40% semantic coherence, -60% entity fragmentation
 pub struct BoundaryAwareChunkingStrategy {
+    #[cfg_attr(not(feature = "async"), allow(dead_code))]
     boundary_detector: crate::text::BoundaryDetector,
+    #[cfg_attr(not(feature = "async"), allow(dead_code))]
     coherence_scorer: std::sync::Arc<crate::text::SemanticCoherenceScorer>,
     max_chunk_chars: usize,
+    #[cfg_attr(not(feature = "async"), allow(dead_code))]
     min_chunk_chars: usize,
     document_id: DocumentId,
 }
@@ -317,6 +320,7 @@ impl BoundaryAwareChunkingStrategy {
     }
 
     /// Chunk text asynchronously (helper for async contexts)
+    #[cfg(feature = "async")]
     async fn chunk_async(&self, text: &str) -> Vec<TextChunk> {
         // 1. Detect all semantic boundaries
         let boundaries = self.boundary_detector.detect_boundaries(text);
@@ -358,6 +362,7 @@ impl BoundaryAwareChunkingStrategy {
     }
 
     /// Create TextChunk objects from scored chunks
+    #[cfg(feature = "async")]
     fn create_text_chunks_from_scored(
         &self,
         scored_chunks: &[crate::text::ScoredChunk],
@@ -391,6 +396,7 @@ impl BoundaryAwareChunkingStrategy {
     }
 
     /// Create TextChunk objects from boundary positions (fallback)
+    #[cfg(feature = "async")]
     fn create_text_chunks_from_boundaries(
         &self,
         text: &str,
@@ -431,6 +437,7 @@ impl BoundaryAwareChunkingStrategy {
     }
 
     /// Enforce size constraints on chunks
+    #[cfg(feature = "async")]
     fn enforce_size_constraints(&self, mut chunks: Vec<TextChunk>) -> Vec<TextChunk> {
         let mut result = Vec::new();
 
@@ -459,6 +466,7 @@ impl BoundaryAwareChunkingStrategy {
     }
 
     /// Split a large chunk at sentence boundaries
+    #[cfg(feature = "async")]
     fn split_large_chunk(&self, chunk: TextChunk) -> Vec<TextChunk> {
         // Simple split at sentence boundaries
         let sentences: Vec<&str> = chunk
@@ -519,12 +527,69 @@ impl BoundaryAwareChunkingStrategy {
 }
 
 impl ChunkingStrategy for BoundaryAwareChunkingStrategy {
+    #[cfg(feature = "async")]
     fn chunk(&self, text: &str) -> Vec<TextChunk> {
         // Create a Tokio runtime to execute async code synchronously
         // This allows us to use async coherence scoring in a sync context
         let runtime = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
 
         runtime.block_on(self.chunk_async(text))
+    }
+
+    #[cfg(not(feature = "async"))]
+    fn chunk(&self, text: &str) -> Vec<TextChunk> {
+        // Sync fallback: simple sentence-based chunking without coherence scoring
+        let sentences: Vec<&str> = text
+            .split(['.', '!', '?'])
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        let mut chunks = Vec::new();
+        let mut current = String::new();
+        let mut start_offset = 0;
+
+        for sentence in &sentences {
+            if current.len() + sentence.len() > self.max_chunk_chars && !current.is_empty() {
+                let chunk_id = ChunkId::new(format!(
+                    "{}_{}",
+                    self.document_id,
+                    CHUNK_COUNTER.fetch_add(1, Ordering::SeqCst)
+                ));
+                let end = start_offset + current.len();
+                chunks.push(TextChunk::new(
+                    chunk_id,
+                    self.document_id.clone(),
+                    current.clone(),
+                    start_offset,
+                    end,
+                ));
+                start_offset = end;
+                current.clear();
+            }
+            if !current.is_empty() {
+                current.push(' ');
+            }
+            current.push_str(sentence);
+        }
+
+        if !current.is_empty() {
+            let chunk_id = ChunkId::new(format!(
+                "{}_{}",
+                self.document_id,
+                CHUNK_COUNTER.fetch_add(1, Ordering::SeqCst)
+            ));
+            let end = start_offset + current.len();
+            chunks.push(TextChunk::new(
+                chunk_id,
+                self.document_id.clone(),
+                current,
+                start_offset,
+                end,
+            ));
+        }
+
+        chunks
     }
 }
 
@@ -549,10 +614,10 @@ mod tests {
 
     #[test]
     fn test_semantic_chunking_strategy() {
-        let document_id = DocumentId::new("test_doc".to_string());
+        let _document_id = DocumentId::new("test_doc".to_string());
         // Note: In a real test, you would create a proper SemanticChunker
         // For now, we'll use a mock approach
-        let config = crate::text::semantic_chunking::SemanticChunkerConfig::default();
+        let _config = crate::text::semantic_chunking::SemanticChunkerConfig::default();
         // We can't easily create a mock embedding generator here, so skip the test
         // let embedding_gen = crate::vector::EmbeddingGenerator::mock();
         // let chunker = SemanticChunker::new(config, embedding_gen);

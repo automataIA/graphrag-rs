@@ -109,7 +109,7 @@ impl StringSimilarityLinker {
                         .partial_cmp(&entities[b].confidence)
                         .unwrap_or(std::cmp::Ordering::Equal)
                 })
-                .unwrap();
+                .expect("non-empty cluster");
 
             let canonical_id = &entities[*canonical_idx].id;
 
@@ -609,6 +609,6 @@ mod tests {
         let links = linker.link_entities(&graph).unwrap();
 
         // Should link similar location names
-        assert!(links.len() > 0, "Expected some entities to be linked");
+        assert!(!links.is_empty(), "Expected some entities to be linked");
     }
 }

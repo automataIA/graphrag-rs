@@ -1,3 +1,5 @@
+#![cfg_attr(not(feature = "async"), allow(unused_imports))]
+
 //! Contextual Chunk Enrichment via LLM (Anthropic Contextual Retrieval pattern)
 //!
 //! Before embedding, an LLM augments each chunk with 2-3 sentences of context
@@ -76,7 +78,7 @@ impl Default for ContextualEnricherConfig {
 ///
 /// ## Example
 ///
-/// ```rust,no_run
+/// ```ignore
 /// use graphrag_core::text::contextual_enricher::{ContextualEnricher, ContextualEnricherConfig};
 /// use graphrag_core::ollama::OllamaConfig;
 ///
@@ -96,6 +98,7 @@ impl Default for ContextualEnricherConfig {
 /// # }
 /// ```
 pub struct ContextualEnricher {
+    #[cfg_attr(not(feature = "async"), allow(dead_code))]
     client: OllamaClient,
     config: ContextualEnricherConfig,
 }
@@ -152,7 +155,7 @@ impl ContextualEnricher {
         let rounded = ((with_margin + 1023) / 1024) * 1024;
 
         // Clamp: minimum 4096 (sensible floor), maximum 131072 (128k, typical GPU limit)
-        rounded.max(4096).min(131_072)
+        rounded.clamp(4096, 131_072)
     }
 
     /// Build the contextual enrichment prompt using the KV-cache-friendly structure
@@ -160,6 +163,7 @@ impl ContextualEnricher {
     /// The document text is the **static prefix** — it will be KV-cached after the
     /// first request and reused for all subsequent chunks from the same document.
     /// Only the chunk content changes between requests.
+    #[cfg(feature = "async")]
     fn build_prompt(document_text: &str, chunk_text: &str) -> String {
         format!(
             "<document>\n{document}\n</document>\n\n\

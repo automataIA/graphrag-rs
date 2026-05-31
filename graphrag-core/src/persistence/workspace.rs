@@ -189,7 +189,7 @@ impl WorkspaceManager {
         }
 
         // Sort by modification time (newest first)
-        workspaces.sort_by(|a, b| b.metadata.modified_at.cmp(&a.metadata.modified_at));
+        workspaces.sort_by_key(|w| std::cmp::Reverse(w.metadata.modified_at));
 
         Ok(workspaces)
     }
@@ -205,7 +205,7 @@ impl WorkspaceManager {
 
         // Save to JSON (always available as fallback)
         let json_path = workspace_path.join("graph.json");
-        graph.save_to_json(json_path.to_str().unwrap())?;
+        graph.save_to_json(json_path.to_str().expect("valid UTF-8 path"))?;
 
         // Save to Parquet (if feature enabled)
         #[cfg(feature = "persistent-storage")]
@@ -255,7 +255,7 @@ impl WorkspaceManager {
         if json_path.exists() {
             #[cfg(feature = "tracing")]
             tracing::info!("Loading graph from JSON fallback: {}", workspace_name);
-            return KnowledgeGraph::load_from_json(json_path.to_str().unwrap());
+            return KnowledgeGraph::load_from_json(json_path.to_str().expect("valid UTF-8 path"));
         }
 
         Err(GraphRAGError::Config {

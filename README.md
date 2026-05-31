@@ -4,15 +4,46 @@
 
 A high-performance, modular Rust implementation of GraphRAG (Graph-based Retrieval Augmented Generation) with **three deployment architectures**: Server-Only, WASM-Only (100% client-side), and Hybrid. Build knowledge graphs from documents and query them with natural language, with GPU acceleration support via WebGPU.
 
-[![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/rust-1.85+-orange.svg)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![WASM](https://img.shields.io/badge/WASM-ready-green.svg)](https://webassembly.org/)
 [![WebGPU](https://img.shields.io/badge/WebGPU-supported-blue.svg)](https://gpuweb.github.io/gpuweb/)
+[![Docs](https://img.shields.io/badge/docs-site-purple.svg)](https://automataia.github.io/graphrag-rs/)
 
-## 🔧 Prerequisites
+## 30-Second Quick Start
+
+**CLI (no config file needed):**
+
+```bash
+cargo install --path graphrag-cli           # one-time install
+graphrag index ./mydoc.txt                  # builds ./graphrag-data
+graphrag ask "What is the main topic?"      # answers from the graph
+```
+
+Add `--ollama` to either command for LLM-quality entity extraction
+(requires `ollama serve` running locally).
+
+**Library (Rust):**
+
+```rust
+use graphrag::GraphRAG;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let mut g = GraphRAG::quick_start("Plato's Symposium full text here...").await?;
+    println!("{}", g.ask("Who is Diotima?").await?);
+    Ok(())
+}
+```
+
+Both flows use sensible defaults — hash-fallback embeddings, pattern-based
+entity extraction, persistent workspace. Opt into Ollama / GLiNER / custom
+chunking with the builder when you need more.
+
+## Prerequisites
 
 ### System Requirements
-- **Rust 1.70+** with `wasm32-unknown-unknown` target
+- **Rust 1.85+** with `wasm32-unknown-unknown` target
 - **Node.js 18+** (for WASM builds)
 - **Git** for cloning
 
@@ -54,7 +85,7 @@ rustup target add wasm32-unknown-unknown
 - **Docker** for Qdrant vector database: `docker-compose up -d`
 - **Trunk** for WASM builds: `cargo install trunk wasm-bindgen-cli`
 
-## 🚀 Deployment Options
+## Deployment Options
 
 GraphRAG-rs supports **three deployment architectures** - choose based on your needs:
 
@@ -105,7 +136,7 @@ trunk serve --open
 - ✅ Natural language answer synthesis
 - ✅ Demo available: Plato's Symposium (2691 entities)
 
-### Option 3: Hybrid (Recommended) 🎯 Planned
+### Option 3: Hybrid (Recommended) Planned
 Use WASM client for real-time UI with optional server for heavy processing.
 
 **Best for**: Enterprise apps, multi-device sync, best UX with scalability
@@ -114,11 +145,11 @@ Use WASM client for real-time UI with optional server for heavy processing.
 
 See [graphrag-server/README.md](graphrag-server/README.md) for server documentation.
 
-## 🎯 State-of-the-Art Quality Improvements
+## State-of-the-Art Quality Improvements
 
 GraphRAG-rs implements **5 cutting-edge research papers** (2019-2025) for superior retrieval quality:
 
-### Research-Based Features ✨
+### Research-Based Features 
 
 | Feature | Impact | Paper | Status |
 |---------|--------|-------|--------|
@@ -128,9 +159,9 @@ GraphRAG-rs implements **5 cutting-edge research papers** (2019-2025) for superi
 | **HippoRAG Personalized PageRank** | 10-30x cheaper | NeurIPS 2024 | ✅ Production |
 | **Semantic Chunking** | Better boundaries | LangChain 2024 | ✅ Production |
 
-**Combined Result**: **+20% accuracy** with **99% cost savings**! 🚀
+**Combined Result**: **+20% accuracy** with **99% cost savings**! 
 
-### New: Advanced Reasoning & Optimization (2025-2026) 🔬
+### New: Advanced Reasoning & Optimization (2025-2026) 
 
 Building on state-of-the-art foundations, GraphRAG-rs now implements **7 cutting-edge techniques** from recent research:
 
@@ -150,7 +181,7 @@ Building on state-of-the-art foundations, GraphRAG-rs now implements **7 cutting
 - **Hierarchical Clustering**: Organizes relationships into multi-level hierarchies using Leiden algorithm with LLM-generated summaries
 - **Weight Optimization**: Learns optimal relationship weights through heuristic optimization for improved retrieval quality
 
-📚 **Full Documentation**: See [graphrag-core/ADVANCED_FEATURES.md](graphrag-core/ADVANCED_FEATURES.md) for implementation details, benchmarks, and research papers.
+**Full Documentation**: See [HOW_IT_WORKS.md](HOW_IT_WORKS.md) for the pipeline deep-dive, and [docs.rs/graphrag-core](https://docs.rs/graphrag-core) for the API reference.
 
 ### Enable Advanced Features
 
@@ -205,15 +236,15 @@ max_iterations = 20             # Maximum optimization iterations
 use_llm_eval = true             # Use LLM for quality evaluation
 ```
 
-📖 **Quick Start Example**: See [graphrag-core/config-examples/quick-start.toml](graphrag-core/config-examples/quick-start.toml) for a minimal configuration.
+**Quick Start Example**: See [graphrag-core/config-examples/quick-start.toml](graphrag-core/config-examples/quick-start.toml) for a minimal configuration.
 
-📚 **Documentation**: See [HOW_IT_WORKS.md](HOW_IT_WORKS.md) for full details on the pipeline.
+**Documentation**: See [HOW_IT_WORKS.md](HOW_IT_WORKS.md) for full details on the pipeline.
 
 ## Installation
 
 ### Prerequisites
 
-- Rust 1.70 or later
+- Rust 1.85 or later
 - (Optional) Ollama for local LLM support - [Install Ollama](https://ollama.ai)
 
 ### From Source
@@ -287,7 +318,7 @@ graphrag-core = { version = "0.1", features = ["full"] }      # Production
 graphrag-core = { version = "0.1", features = ["research"] }  # Advanced
 ```
 
-📚 **Full Guide**: See [graphrag-core/QUICKSTART.md](graphrag-core/QUICKSTART.md) for detailed quick start documentation.
+**Full Guide**: See [HOW_IT_WORKS.md](HOW_IT_WORKS.md) and [graphrag-core/README.md](graphrag-core/README.md) for detailed getting-started documentation.
 
 ## Basic Usage
 
@@ -339,15 +370,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-## 📚 Understanding GraphRAG
+## Understanding GraphRAG
 
 New to GraphRAG? Start here:
 
-- 📖 **[How It Works](HOW_IT_WORKS.md)** - Complete 7-stage pipeline explanation with diagrams and examples
-- 🏗️ **[Pipeline Architecture](graphrag-core/PIPELINE_ARCHITECTURE.md)** - Technical deep dive into implementation details
-- 💡 **[Examples](examples/)** - Hands-on code examples from basic to advanced
-- 📊 **[Multi-Document Pipeline](examples/MULTI_DOCUMENT_PIPELINE.md)** - Production-ready example with benchmarks
-- ⚙️ **[Pipeline Architecture](graphrag-core/PIPELINE_ARCHITECTURE.md)** - Detailed 7-phase configuration & performance guide
+- **[How It Works](HOW_IT_WORKS.md)** - Complete 7-stage pipeline explanation with diagrams and examples
+- **[Config Guide](config/JSON5_CONFIG_GUIDE.md)** - Full JSON5/TOML configuration reference
+- **[Examples](examples/)** - Hands-on code examples from basic to advanced
+- **[Changelog](CHANGELOG.md)** - Feature history and recent updates
+- **[API reference](https://docs.rs/graphrag-core)** - `graphrag-core` on docs.rs
 
 ### Complete 7-Stage Pipeline Schema
 
@@ -376,7 +407,7 @@ QUERY (ask())
 | **6. Retrieval** | Find context | `strategy` (hybrid), `top_k` (10) |
 | **7. Generation** | Answer query | `chat_model` (gpt-4o), `temperature` (0.0) |
 
-See **[PIPELINE_ARCHITECTURE.md](graphrag-core/PIPELINE_ARCHITECTURE.md)** for detailed configuration and performance tuning.
+See **[HOW_IT_WORKS.md](HOW_IT_WORKS.md)** and **[config/JSON5_CONFIG_GUIDE.md](config/JSON5_CONFIG_GUIDE.md)** for detailed configuration and performance tuning.
 
 ### 4. CLI Usage
 
@@ -504,17 +535,17 @@ export MISTRAL_API_KEY="..."
 export TOGETHER_API_KEY="..."
 ```
 
-See [graphrag-core/EMBEDDINGS_CONFIG.md](graphrag-core/EMBEDDINGS_CONFIG.md) for detailed configuration guide.
+See [HOW_IT_WORKS.md](HOW_IT_WORKS.md) (embeddings section) and [config/JSON5_CONFIG_GUIDE.md](config/JSON5_CONFIG_GUIDE.md) for detailed configuration.
 
-## ✨ Core Features
+## Core Features
 
-### 🏗️ Modular Architecture
+### Modular Architecture
 - **Workspace Design**: Separate crates for core, WASM, Leptos, and server
 - **Pluggable Backends**: Qdrant, LanceDB, pgvector, or in-memory storage
 - **Feature Flags**: Compile only what you need (WASM, CUDA, Metal, WebGPU)
 - **Trait-Based**: 12+ core abstractions for maximum flexibility
 
-### 🔧 Trait-Based Chunking Architecture
+### Trait-Based Chunking Architecture
 - **ChunkingStrategy Trait**: Minimal interface for extensible chunking (1 method: `fn chunk(&self, text: &str) -> Vec<TextChunk>`)
 - **HierarchicalChunkingStrategy**: LangChain-style with boundary preservation (respects paragraphs/sentences)
 - **Tree-sitter AST Chunking**: cAST approach preserving syntactic boundaries for code
@@ -559,7 +590,7 @@ cargo run --example symposium_trait_based_chunking --package graphrag-core --fea
 
 **See**: [graphrag-core/examples/symposium_trait_based_chunking.rs](graphrag-core/examples/symposium_trait_based_chunking.rs) and [README_symposium_trait_based_chunking.md](graphrag-core/examples/README_symposium_trait_based_chunking.md) for complete documentation.
 
-### 🎯 Storage Options
+### Storage Options
 
 #### Native Production
 - **Qdrant**: High-performance vector DB with JSON payload for entities/relationships
@@ -572,12 +603,12 @@ cargo run --example symposium_trait_based_chunking --package graphrag-core --fea
 - **IndexedDB**: Browser-native persistent storage for graph data
 - **Cache API**: PWA-standard storage for ML models (1.6GB)
 
-### 🧠 ML Inference
+### ML Inference
 
 #### Embeddings
 - **ONNX Runtime Web (GPU)**: 25-40x speedup, 3-8ms inference, WebGPU + CPU fallback, ✅ production-ready
-- **Burn + wgpu (GPU)**: 20-40x speedup, 100% Rust, 🚧 70% complete (architecture done)
-- **Candle (CPU)**: 100% Rust, BERT/MiniLM models, 50-100ms, 📅 planned
+- **Burn + wgpu (GPU)**: 20-40x speedup, 100% Rust, 70% complete (architecture done)
+- **Candle (CPU)**: 100% Rust, BERT/MiniLM models, 50-100ms, planned
 - **Ollama**: Server-side embeddings with GPU acceleration
 
 #### LLM Chatbot
@@ -585,7 +616,7 @@ cargo run --example symposium_trait_based_chunking --package graphrag-core --fea
 - **Candle**: 2-5 tok/s CPU-only, 100% Rust, good for demos
 - **Ollama**: Server-side LLM with unlimited GPU power
 
-### 🚀 Performance
+### Performance
 - **ONNX Runtime Web**: 25-40x speedup for embeddings, 3-8ms inference ✅ production-ready
 - **WebGPU Acceleration**: GPU inference in browser with automatic CPU fallback
 - **WebLLM**: 40-62 tok/s LLM inference with WebGPU ✅ production-ready
@@ -594,7 +625,7 @@ cargo run --example symposium_trait_based_chunking --package graphrag-core --fea
 - **Parallel Processing**: Async/await throughout, concurrent document processing
 - **Intelligent Caching**: LLM response cache with 80%+ hit rates
 
-### 🎨 Developer Experience
+### Developer Experience
 - **Progressive API**: 4 complexity levels (Simple → Easy → Builder → Advanced)
 - **Auto-Detection**: Smart LLM/backend discovery
 - **Enhanced Errors**: Actionable error messages with solutions
@@ -715,7 +746,7 @@ GraphRAG-rs implements cutting-edge 2024 research in retrieval-augmented generat
 - **ROGRAG Decomposition**: Advanced query decomposition with 60%→75% accuracy boost, temporal and causal reasoning
 - **Ollama Advanced Integration**: Complete local LLM support with streaming, custom parameters, automatic caching, and metrics tracking
 
-### Ollama Integration (NEW! ✨)
+### Ollama Integration (NEW! )
 
 Complete local LLM and embedding support with production-grade features:
 
@@ -750,7 +781,7 @@ let registry = config.build_registry().build();
 // All services configured and ready!
 ```
 
-See [graphrag-core/OLLAMA_INTEGRATION.md](graphrag-core/OLLAMA_INTEGRATION.md) for complete guide.
+See [HOW_IT_WORKS.md](HOW_IT_WORKS.md) for the LLM/Ollama pipeline and [config/JSON5_CONFIG_GUIDE.md](config/JSON5_CONFIG_GUIDE.md) for the `ollama` config block.
 
 ### Architecture & Quality
 - **Modular Workspace**: 4 publishable crates (core, wasm, leptos, server)
@@ -762,37 +793,36 @@ See [graphrag-core/OLLAMA_INTEGRATION.md](graphrag-core/OLLAMA_INTEGRATION.md) f
 - **Feature Gates**: Compile only what you need for minimal binary size
 - **Memory-Safe**: Leverages Rust's ownership system for zero-cost abstractions
 
-## 🏗️ Workspace Architecture
+## Workspace Architecture
 
 GraphRAG-rs uses a modular workspace design for maximum reusability:
 
 ```
-graphrag-rs/                     # Main workspace (50,000+ lines)
+graphrag-rs/                     # 5-crate Cargo workspace (~140k lines)
 ├── graphrag-core/               # ✅ Portable core library (native + WASM)
 │   ├── All core functionality   # LightRAG, PageRank, caching, incremental
 │   └── Feature-gated deps       # Compile only what you need
-├── graphrag-wasm/               # ✅ WASM bindings and browser integrations
-│   ├── ONNX Runtime Web         # GPU embeddings (3-8ms)
-│   ├── WebLLM integration       # GPU LLM (40-62 tok/s)
-│   └── IndexedDB + Cache API    # Browser storage
-├── graphrag-leptos/             # 🚧 Leptos UI components (in development)
-│   └── Chat, search, viz        # Ready-to-use components
-├── graphrag-server/             # ✅ Production REST API server
+├── graphrag-cli/                # ✅ TUI (ratatui) + CLI binary (in-process core)
+│   └── index / ask / setup      # Zero-config turnkey commands
+├── graphrag-wasm/               # ✅ WASM bindings, browser-native chat shell
+│   ├── ONNX Runtime Web         # GPU embeddings (off-main-thread)
+│   ├── WebLLM integration       # In-browser LLM synthesis
+│   └── IndexedDB + Cache API    # Browser storage / persistence
+├── graphrag-server/             # ✅ Production REST API (Actix + Apistos)
 │   ├── JSON configuration       # Dynamic config via REST API
 │   ├── Qdrant integration       # Vector database
 │   ├── Ollama embeddings        # Real semantic search
 │   └── Docker Compose           # One-command deployment
-└── src/                         # Main library and binaries
-    ├── lib.rs                   # GraphRAG main API
-    ├── bin/                     # CLI tools
-    └── 25+ modules              # Modular architecture
+└── graphrag/                    # ✅ Meta-crate re-exporting graphrag-core
+    └── hello-world API          # `use graphrag::GraphRAG;`
 ```
 
 ### Dependency Graph
 ```
-graphrag-leptos → graphrag-wasm → graphrag-core
+graphrag-cli    → graphrag-core
+graphrag-wasm   → graphrag-core
 graphrag-server → graphrag-core
-main crate      → graphrag-core
+graphrag (meta) → graphrag-core
 ```
 
 ### Feature Flags
@@ -800,7 +830,7 @@ main crate      → graphrag-core
 [features]
 # Storage backends
 memory-storage = []                           # In-memory (development)
-persistent-storage = ["lancedb", "arrow"]     # LanceDB embedded vector DB ⚠️ Mutually exclusive with neural-embeddings
+persistent-storage = ["lancedb", "arrow"]     # LanceDB embedded vector DB Mutually exclusive with neural-embeddings
 redis-storage = ["redis"]                     # Redis for distributed caching
 
 # Processing features
@@ -814,7 +844,7 @@ rograg = []                                  # Query decomposition
 # LLM integrations
 ollama = []                                  # Ollama local models with streaming
 dashmap = ["dep:dashmap"]                    # Response caching (used with ollama)
-neural-embeddings = ["candle-core"]          # Candle ML framework ⚠️ Mutually exclusive with persistent-storage
+neural-embeddings = ["candle-core"]          # Candle ML framework Mutually exclusive with persistent-storage
 function-calling = []                        # Function calling support
 
 # Platform-specific (GPU acceleration)
@@ -829,7 +859,7 @@ code-chunking = ["tree-sitter", "tree-sitter-rust"]  # Tree-sitter AST-based chu
 web-api = []                                 # REST API server
 ```
 
-**⚠️ Important: Feature Compatibility**
+**Important: Feature Compatibility**
 
 - `persistent-storage` and `neural-embeddings` are **mutually exclusive** due to dependency conflicts
 - Choose based on your use case:
@@ -997,7 +1027,7 @@ A: Yes, with 214 passing tests, zero warnings, and production-grade structured l
 **Q: Can I use commercial LLMs?**
 A: OpenAI support is planned. Currently works with Ollama's local models.
 
-## 🗺️ Roadmap & Implementation Status
+## Roadmap & Implementation Status
 
 ### ✅ Phase 1: Core Implementation (COMPLETE)
 
@@ -1026,7 +1056,7 @@ A: OpenAI support is planned. Currently works with Ollama's local models.
 - [x] **Health Checks**: Full system monitoring
 - [x] **5.2MB Binary**: Optimized release build
 
-### 🚧 Phase 2: WASM & Web UI (IN PROGRESS - 60% Complete)
+### Phase 2: WASM & Web UI (IN PROGRESS - 60% Complete)
 
 **WASM Infrastructure:**
 - [x] **graphrag-wasm crate**: WASM bindings foundation
@@ -1038,15 +1068,15 @@ A: OpenAI support is planned. Currently works with Ollama's local models.
 - [ ] **Burn + wgpu**: GPU acceleration (architecture 70% complete)
 - [ ] **Integration Tests**: End-to-end WASM testing
 
-**Web UI:**
-- [x] **graphrag-leptos crate**: UI components foundation
-- [ ] **Chat Components**: Interactive query interface
-- [ ] **Search Components**: Vector search visualization
-- [ ] **Graph Visualization**: Knowledge graph display
+**Web UI (graphrag-wasm):**
+- [x] **Browser-native chat shell**: 3-column Nordic-Minimal UI (Leptos)
+- [x] **Citations + subgraph view**: per-query references and SVG graph
+- [x] **Off-main-thread inference**: ONNX Runtime Web + WebLLM workers
+- [ ] **Graph Visualization**: richer interactive knowledge-graph display
 - [ ] **Progress Indicators**: Real-time status updates
 - [ ] **Responsive Design**: Mobile-first layout
 
-### 📅 Phase 3: Advanced Features (PLANNED)
+### Phase 3: Advanced Features (PLANNED)
 
 **Performance & Scale:**
 - [ ] Distributed caching with Redis
@@ -1068,7 +1098,7 @@ A: OpenAI support is planned. Currently works with Ollama's local models.
 - [ ] Multi-format export (GraphML, Cypher)
 - [ ] Integration connectors (Notion, Confluence)
 
-### 🏢 Phase 4: Enterprise Features (FUTURE)
+### Phase 4: Enterprise Features (FUTURE)
 
 **Scalability:**
 - [ ] High availability and failover

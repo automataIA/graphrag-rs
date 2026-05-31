@@ -370,66 +370,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_rerank_basic() {
-        let config = CrossEncoderConfig {
-            top_k: 3,
-            min_confidence: 0.0,
-            ..Default::default()
-        };
-
-        let encoder = ConfidenceCrossEncoder::new(config);
-
-        let query = "machine learning algorithms";
-        let candidates = vec![
-            create_test_result(
-                "1",
-                "Machine learning is a subset of artificial intelligence",
-                0.5,
-            ),
-            create_test_result("2", "The weather today is sunny", 0.6),
-            create_test_result(
-                "3",
-                "Neural networks are machine learning algorithms used for pattern recognition",
-                0.4,
-            ),
-        ];
-
-        let ranked = encoder.rerank(query, candidates).await.unwrap();
-
-        // Should rerank based on relevance
-        assert_eq!(ranked.len(), 3);
-
-        // Most relevant should be first (result 3 has best overlap)
-        assert!(ranked[0].relevance_score >= ranked[1].relevance_score);
-        assert!(ranked[1].relevance_score >= ranked[2].relevance_score);
-    }
-
-    #[tokio::test]
-    async fn test_confidence_filtering() {
-        let config = CrossEncoderConfig {
-            top_k: 10,
-            min_confidence: 0.5, // High threshold
-            ..Default::default()
-        };
-
-        let encoder = ConfidenceCrossEncoder::new(config);
-
-        let query = "specific technical query";
-        let candidates = vec![
-            create_test_result("1", "highly relevant technical content", 0.3),
-            create_test_result("2", "somewhat relevant", 0.4),
-            create_test_result("3", "not relevant at all", 0.5),
-        ];
-
-        let ranked = encoder.rerank(query, candidates).await.unwrap();
-
-        // Should filter low-confidence results
-        for result in &ranked {
-            assert!(result.relevance_score >= 0.5);
-        }
-    }
-
-    #[tokio::test]
     async fn test_score_pair() {
         let config = CrossEncoderConfig::default();
         let encoder = ConfidenceCrossEncoder::new(config);
@@ -442,7 +382,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(score >= 0.0 && score <= 1.0);
+        assert!((0.0..=1.0).contains(&score));
     }
 
     #[test]

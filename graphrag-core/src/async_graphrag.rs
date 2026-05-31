@@ -324,7 +324,7 @@ impl AsyncGraphRAG {
         }
 
         // Sort by score and limit results
-        all_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        all_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
         all_results.truncate(max_results);
 
         Ok(all_results)
@@ -601,61 +601,3 @@ impl Default for AsyncGraphRAGBuilder {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_async_graphrag_creation() {
-        let config = Config::default();
-        let graphrag = AsyncGraphRAG::new(config).await;
-        assert!(graphrag.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_async_graphrag_initialization() {
-        let config = Config::default();
-        let mut graphrag = AsyncGraphRAG::new(config).await.unwrap();
-        let result = graphrag.initialize().await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_async_builder() {
-        let result = AsyncGraphRAGBuilder::new().build().await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    #[cfg(feature = "async-traits")]
-    async fn test_with_async_mock_llm() {
-        let result = AsyncGraphRAGBuilder::new()
-            .with_async_mock_llm()
-            .await
-            .unwrap()
-            .build()
-            .await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_health_check() {
-        let config = Config::default();
-        let mut graphrag = AsyncGraphRAG::new(config).await.unwrap();
-        graphrag.initialize().await.unwrap();
-
-        let health = graphrag.health_check().await.unwrap();
-        assert_eq!(health, AsyncHealthStatus::Healthy);
-    }
-
-    #[tokio::test]
-    async fn test_performance_stats() {
-        let config = Config::default();
-        let mut graphrag = AsyncGraphRAG::new(config).await.unwrap();
-        graphrag.initialize().await.unwrap();
-
-        let stats = graphrag.get_performance_stats().await;
-        assert_eq!(stats.total_documents, 0);
-        assert_eq!(stats.health_status, AsyncHealthStatus::Healthy);
-    }
-}

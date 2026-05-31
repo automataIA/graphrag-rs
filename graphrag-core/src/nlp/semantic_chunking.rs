@@ -164,7 +164,7 @@ impl SemanticChunker {
 
                 // Start new chunk with overlap
                 let overlap_sentences = if current_chunk.len() > 1 {
-                    vec![current_chunk.last().unwrap().clone()]
+                    vec![current_chunk.last().expect("non-empty").clone()]
                 } else {
                     Vec::new()
                 };
@@ -193,7 +193,7 @@ impl SemanticChunker {
 
                 // Start new chunk with overlap
                 let overlap_sentences = if current_chunk.len() > 1 {
-                    vec![current_chunk.last().unwrap().clone()]
+                    vec![current_chunk.last().expect("non-empty").clone()]
                 } else {
                     Vec::new()
                 };
@@ -594,8 +594,8 @@ impl ChunkingStats {
         let total_chunks = chunks.len();
         let sizes: Vec<usize> = chunks.iter().map(|c| c.text.len()).collect();
         let avg_chunk_size = sizes.iter().sum::<usize>() as f32 / total_chunks as f32;
-        let min_chunk_size = *sizes.iter().min().unwrap();
-        let max_chunk_size = *sizes.iter().max().unwrap();
+        let min_chunk_size = *sizes.iter().min().expect("non-empty iter");
+        let max_chunk_size = *sizes.iter().max().expect("non-empty iter");
 
         let avg_coherence = chunks.iter().map(|c| c.coherence).sum::<f32>() / total_chunks as f32;
         let avg_sentences_per_chunk =

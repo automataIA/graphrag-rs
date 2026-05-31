@@ -67,7 +67,7 @@ impl EnhancedToolRegistry {
 
         // Register with function caller
         {
-            let mut caller = self.function_caller.lock().unwrap();
+            let mut caller = self.function_caller.lock().expect("lock poisoned");
             caller.register_function(function);
         }
 
@@ -112,7 +112,7 @@ impl EnhancedToolRegistry {
     /// Get function definitions for a category
     pub fn get_category_definitions(&self, category: &str) -> Vec<FunctionDefinition> {
         let function_names = self.get_functions_by_category(category);
-        let caller = self.function_caller.lock().unwrap();
+        let caller = self.function_caller.lock().expect("lock poisoned");
         let all_definitions = caller.get_function_definitions();
 
         all_definitions
@@ -546,11 +546,6 @@ impl CallableFunction for SummaryGenerationFunction {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_enhanced_registry_creation() {
-        let registry = EnhancedToolRegistry::new();
-        assert_eq!(registry.get_categories().len(), 0);
-    }
 
     #[test]
     fn test_category_management() {

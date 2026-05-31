@@ -89,8 +89,7 @@ pub fn parse_markdown(text: &str) -> Vec<Line<'static>> {
         }
 
         // Blockquote: > text
-        if raw_line.starts_with("> ") {
-            let content = &raw_line[2..];
+        if let Some(content) = raw_line.strip_prefix("> ") {
             let style = Style::default()
                 .fg(Color::DarkGray)
                 .add_modifier(Modifier::ITALIC);

@@ -521,11 +521,16 @@ pub struct GlinerSetConfig {
     /// Use GPU (CUDA) for inference
     #[serde(default)]
     pub use_gpu: bool,
+    /// Max concurrent chunk inferences (None → 4)
+    #[serde(default)]
+    pub max_concurrent_chunks: Option<usize>,
 }
 
 fn default_gliner_mode()            -> String      { "span".to_string() }
-fn default_gliner_entity_labels()   -> Vec<String> { vec!["person".into(), "organization".into(), "location".into()] }
-fn default_gliner_relation_labels() -> Vec<String> { vec!["related to".into(), "part of".into()] }
+// Kept in sync with `GlinerConfig::default()` in config/mod.rs (canonical runtime
+// defaults). The drift-guard test `gliner_setconfig_default_matches_runtime` enforces it.
+fn default_gliner_entity_labels()   -> Vec<String> { vec!["person".into(), "organization".into(), "location".into(), "concept".into()] }
+fn default_gliner_relation_labels() -> Vec<String> { vec!["related to".into(), "part of".into(), "causes".into()] }
 fn default_entity_threshold()       -> f32         { 0.4 }
 fn default_relation_threshold()     -> f32         { 0.5 }
 
@@ -541,6 +546,7 @@ impl Default for GlinerSetConfig {
             entity_threshold: default_entity_threshold(),
             relation_threshold: default_relation_threshold(),
             use_gpu: false,
+            max_concurrent_chunks: None,
         }
     }
 }
@@ -1901,6 +1907,7 @@ impl SetConfig {
             entity_threshold:   self.gliner.entity_threshold,
             relation_threshold: self.gliner.relation_threshold,
             use_gpu:            self.gliner.use_gpu,
+            max_concurrent_chunks: self.gliner.max_concurrent_chunks,
         };
 
         // Map auto-save configuration
@@ -1913,5 +1920,61 @@ impl SetConfig {
         };
 
         config
+    }
+}
+
+#[cfg(test)]
+mod drift_guard_tests {
+    //! Guards against silent drift between the serde-facing `*SetConfig` leaf
+    //! structs and their canonical runtime counterparts in `config/mod.rs` /
+    //! `ollama/mod.rs`. These structs are mechanical mirrors kept in sync by hand
+    //! (the "5-point-sync" documented in CLAUDE.md); these tests fail loudly when
+    //! a field's default diverges so the drift is caught at build time.
+    //!
+    //! NOTE: `OllamaConfig` is *intentionally* excluded — its runtime default is
+    //! offline-first (`enabled = false`, `fallback_to_hash = true`) while
+    //! `OllamaSetConfig` is the user-facing "I want Ollama" schema
+    //! (`enabled = true`). That divergence is by design, not drift.
+
+    use super::*;
+    use crate::config::{AutoSaveConfig, GlinerConfig};
+
+    #[test]
+    fn gliner_setconfig_default_matches_runtime() {
+        let set = GlinerSetConfig::default();
+        let runtime = GlinerConfig::default();
+        assert_eq!(set.mode, runtime.mode, "gliner.mode drifted");
+        assert_eq!(
+            set.entity_labels, runtime.entity_labels,
+            "gliner.entity_labels drifted"
+        );
+        assert_eq!(
+            set.relation_labels, runtime.relation_labels,
+            "gliner.relation_labels drifted"
+        );
+        assert_eq!(
+            set.entity_threshold, runtime.entity_threshold,
+            "gliner.entity_threshold drifted"
+        );
+        assert_eq!(
+            set.relation_threshold, runtime.relation_threshold,
+            "gliner.relation_threshold drifted"
+        );
+        assert_eq!(set.use_gpu, runtime.use_gpu, "gliner.use_gpu drifted");
+    }
+
+    #[test]
+    fn autosave_setconfig_default_matches_runtime() {
+        let set = AutoSaveSetConfig::default();
+        let runtime = AutoSaveConfig::default();
+        assert_eq!(set.enabled, runtime.enabled, "auto_save.enabled drifted");
+        assert_eq!(
+            set.interval_seconds, runtime.interval_seconds,
+            "auto_save.interval_seconds drifted"
+        );
+        assert_eq!(
+            set.max_versions, runtime.max_versions,
+            "auto_save.max_versions drifted"
+        );
     }
 }

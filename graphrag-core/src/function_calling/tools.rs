@@ -307,7 +307,7 @@ impl QueryAnalyzer {
             .split_whitespace()
             .filter(|word| {
                 word.len() > 2
-                    && word.chars().next().unwrap().is_uppercase()
+                    && word.chars().next().expect("non-empty string").is_uppercase()
                     && !word.chars().all(|c| c.is_uppercase()) // Skip all-caps words
             })
             .map(|word| {

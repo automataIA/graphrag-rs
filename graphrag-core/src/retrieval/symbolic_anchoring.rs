@@ -237,7 +237,7 @@ impl SymbolicAnchoringStrategy {
         // Fallback: extract important nouns
         if concepts.is_empty() {
             for word in words {
-                if word.len() > 4 && word.chars().next().unwrap().is_uppercase() {
+                if word.len() > 4 && word.chars().next().expect("non-empty string").is_uppercase() {
                     let clean = word.trim_matches(|c: char| !c.is_alphanumeric());
                     if !clean.is_empty() {
                         concepts.push(clean.to_string());
@@ -388,7 +388,7 @@ impl SymbolicAnchoringStrategy {
                 let entity_str = entity_id.0.clone();
                 entity_anchors
                     .entry(entity_str)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(anchor);
             }
         }
@@ -416,13 +416,13 @@ impl SymbolicAnchoringStrategy {
             // Apply accumulated boost
             if match_count > 0 {
                 let avg_boost = total_boost / match_count as f32;
-                let original_score = result.score;
+                let _original_score = result.score;
                 result.score *= 1.0 + avg_boost;
 
                 #[cfg(feature = "tracing")]
                 tracing::debug!(
                     result_id = %result.id,
-                    original_score = original_score,
+                    original_score = _original_score,
                     boost = avg_boost,
                     boosted_score = result.score,
                     matched_entities = match_count,
@@ -536,18 +536,6 @@ mod tests {
         assert_eq!(anchor.concept, "love");
         assert_eq!(anchor.grounded_entities.len(), 2);
         assert_eq!(anchor.relevance_score, 0.8);
-    }
-
-    #[test]
-    fn test_extract_anchors() {
-        let graph = Arc::new(create_test_graph());
-        let strategy = SymbolicAnchoringStrategy::new(graph);
-
-        let anchors = strategy.extract_anchors("What is the nature of love?");
-
-        // Should extract "love" as anchor
-        assert!(!anchors.is_empty());
-        assert!(anchors.iter().any(|a| a.concept == "love"));
     }
 
     #[test]

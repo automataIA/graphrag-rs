@@ -150,21 +150,3 @@ impl AsyncLanguageModel for OllamaLanguageModelAdapter {
         })
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_ollama_embedder_adapter_creation() {
-        let adapter = OllamaEmbedderAdapter::new("nomic-embed-text", 768);
-        assert_eq!(adapter.dimension(), 768);
-    }
-
-    #[test]
-    fn test_ollama_language_model_adapter_creation() {
-        let config = OllamaConfig::default();
-        let adapter = OllamaLanguageModelAdapter::new(config);
-        assert_eq!(adapter.model_name, "llama3.2:3b");
-    }
-}

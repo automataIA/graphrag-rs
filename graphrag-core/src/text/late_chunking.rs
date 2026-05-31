@@ -1,3 +1,5 @@
+#![cfg_attr(not(feature = "async"), allow(unused_imports))]
+
 //! Late Chunking — context-preserving embeddings for RAG
 //!
 //! Standard RAG embeds each chunk in isolation, losing cross-chunk context.
@@ -235,12 +237,14 @@ impl ChunkingStrategy for LateChunkingStrategy {
 /// ```
 #[derive(Debug, Clone)]
 pub struct JinaLateChunkingClient {
+    #[cfg_attr(not(feature = "async"), allow(dead_code))]
     api_key: String,
     /// Model name (default: `"jina-embeddings-v3"`)
     model: String,
 }
 
 impl JinaLateChunkingClient {
+    #[cfg(feature = "async")]
     const ENDPOINT: &'static str = "https://api.jina.ai/v1/embeddings";
 
     /// Create a new client with a Jina API key
@@ -294,13 +298,13 @@ impl JinaLateChunkingClient {
                     message: format!("Failed to parse Jina API response: {e}"),
                 })?;
 
-        let data = json["data"]
+        let response_data = json["data"]
             .as_array()
             .ok_or_else(|| GraphRAGError::Generation {
                 message: "Invalid Jina API response: missing 'data' array".to_string(),
             })?;
 
-        let embeddings = data
+        let embeddings = response_data
             .iter()
             .map(|item| {
                 item["embedding"]

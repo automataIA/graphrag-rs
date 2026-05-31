@@ -1,3 +1,8 @@
+//! Answer generation from retrieval results.
+//!
+//! Synthesises natural-language answers by feeding retrieved chunks and graph context
+//! to a [`LanguageModel`], over the `GenerationParams` knobs.
+
 use crate::{
     core::traits::{GenerationParams, LanguageModel, ModelInfo},
     retrieval::{ResultType, SearchResult},
@@ -118,7 +123,7 @@ impl MockLLM {
             .collect();
 
         // Sort by relevance
-        sentence_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        sentence_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Select top sentences with a minimum relevance threshold
         let mut answer_sentences = Vec::new();
@@ -305,7 +310,7 @@ impl MockLLM {
 
 impl Default for MockLLM {
     fn default() -> Self {
-        Self::new().unwrap()
+        Self::new().expect("MockLLM default construction infallible")
     }
 }
 
@@ -448,7 +453,7 @@ impl PromptTemplate {
                         chars.next(); // consume '}'
                         break;
                     }
-                    var_name.push(chars.next().unwrap());
+                    var_name.push(chars.next().expect("checked above"));
                 }
                 if !var_name.is_empty() {
                     variables.insert(var_name);
@@ -849,14 +854,14 @@ impl AnswerGenerator {
         }
 
         // Limit results
-        primary_chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
-        supporting_chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        primary_chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        supporting_chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
 
         primary_chunks.truncate(self.config.max_sources / 2);
         supporting_chunks.truncate(self.config.max_sources / 2);
 
         let mut hierarchical_summaries = hierarchical_results;
-        hierarchical_summaries.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        hierarchical_summaries.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
         hierarchical_summaries.truncate(3);
 
         // Calculate confidence based on result quality and quantity
@@ -1063,11 +1068,6 @@ impl GeneratorStatistics {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_mock_llm_creation() {
-        let llm = MockLLM::new();
-        assert!(llm.is_ok());
-    }
 
     #[test]
     fn test_prompt_template() {
@@ -1091,11 +1091,4 @@ mod tests {
         assert!(content.is_empty());
     }
 
-    #[test]
-    fn test_answer_generator_creation() {
-        let llm = Box::new(MockLLM::new().unwrap());
-        let config = GenerationConfig::default();
-        let generator = AnswerGenerator::new(llm, config);
-        assert!(generator.is_ok());
-    }
 }

@@ -258,7 +258,7 @@ impl QueryValidator {
             relevance_checker: RelevanceChecker::new(),
         };
 
-        validator.initialize_safety_patterns().unwrap();
+        validator.initialize_safety_patterns().expect("static safety patterns");
         validator.initialize_quality_checks();
         validator
     }
@@ -445,8 +445,25 @@ impl QueryValidator {
         quality_metrics.source_credibility_score =
             self.calculate_source_credibility_score(response);
 
-        // Create validated response
+        let overall_quality = self.overall_quality(&quality_metrics);
+
+        if overall_quality < 0.5 {
+            issues.push(ValidationIssue {
+                issue_type: IssueType::Quality,
+                severity: IssueSeverity::Medium,
+                description: format!(
+                    "Overall response quality below threshold (score: {overall_quality:.2})"
+                ),
+                recommendation: Some(
+                    "Refine prompt or retrieve additional sources to raise quality".to_string(),
+                ),
+            });
+        }
+
+        // Create validated response and fold quality into its confidence
         let mut validated_response = response.clone();
+        validated_response.confidence =
+            (validated_response.confidence * overall_quality).clamp(0.0, 1.0);
 
         // Apply any necessary modifications based on validation results
         if issues
@@ -459,7 +476,45 @@ impl QueryValidator {
             validated_response.is_refusal = true;
         }
 
+        tracing::debug!(
+            overall_quality,
+            coherence = quality_metrics.coherence_score,
+            relevance = quality_metrics.relevance_score,
+            factual = quality_metrics.factual_consistency_score,
+            completeness = quality_metrics.completeness_score,
+            readability = quality_metrics.readability_score,
+            source_credibility = quality_metrics.source_credibility_score,
+            issue_count = issues.len(),
+            "rograg validation summary"
+        );
+
         Ok(validated_response)
+    }
+
+    /// Average of the quality dimensions that were actually computed.
+    fn overall_quality(&self, m: &QualityMetrics) -> f32 {
+        let mut total = 0.0_f32;
+        let mut count = 0_u32;
+        let mut accumulate = |enabled: bool, score: f32| {
+            if enabled {
+                total += score;
+                count += 1;
+            }
+        };
+        accumulate(self.config.enable_coherence_check, m.coherence_score);
+        accumulate(self.config.enable_relevance_check, m.relevance_score);
+        accumulate(
+            self.config.enable_factual_consistency_check,
+            m.factual_consistency_score,
+        );
+        // Completeness/readability/source credibility are always computed.
+        total += m.completeness_score + m.readability_score + m.source_credibility_score;
+        count += 3;
+        if count == 0 {
+            1.0
+        } else {
+            (total / count as f32).clamp(0.0, 1.0)
+        }
     }
 
     /// Check factual consistency

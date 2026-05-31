@@ -68,3 +68,9 @@ redis = { workspace = true }
 # Other
 uuid = { workspace = true }
 chrono = { workspace = true }
+
+# Fast global allocator (binary-only)
+mimalloc = { workspace = true }
+
+# Pretty error reporting at server startup
+color-eyre = "0.6"

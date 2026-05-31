@@ -1,3 +1,10 @@
-# Configure getrandom to use wasm_js backend for WASM targets
+# Native release builds: target the host CPU for best AVX2/AVX-512 codegen.
+# Non-portable: built artefacts won't run on older CPUs. Override with
+# `CARGO_BUILD_RUSTFLAGS=` or `--config build.rustflags=[]` for distribution.
+[build]
+rustflags = ["-C", "target-cpu=native"]
+
+# Configure getrandom to use wasm_js backend for WASM targets.
+# WASM target rustflags fully replace the [build] rustflags above.
 [target.wasm32-unknown-unknown]
 rustflags = ['--cfg', 'getrandom_backend="wasm_js"']

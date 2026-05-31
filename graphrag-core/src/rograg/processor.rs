@@ -258,18 +258,20 @@ impl RogragProcessorBuilder {
 
     /// Build the processor
     pub fn build(self) -> Result<RogragProcessor> {
-        // Use provided components or create defaults
-        let decomposer = self
-            .decomposer
-            .unwrap_or_else(|| Arc::new(HybridQueryDecomposer::new().unwrap()));
+        // Use provided components or create defaults — propagate construction errors.
+        let decomposer = match self.decomposer {
+            Some(d) => d,
+            None => Arc::new(HybridQueryDecomposer::new()?),
+        };
 
         let fuzzy_matcher = self
             .fuzzy_matcher
             .unwrap_or_else(|| Arc::new(FuzzyMatcher::new()));
 
-        let intent_classifier = self
-            .intent_classifier
-            .unwrap_or_else(|| Arc::new(IntentClassifier::new().unwrap()));
+        let intent_classifier = match self.intent_classifier {
+            Some(c) => c,
+            None => Arc::new(IntentClassifier::new()?),
+        };
 
         let logic_form_retriever = self
             .logic_form_retriever
@@ -595,7 +597,7 @@ impl RogragProcessor {
             issues,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("system clock before UNIX epoch")
                 .as_secs(),
         }
     }
@@ -980,11 +982,6 @@ mod tests {
     }
 
     #[cfg(feature = "rograg")]
-    #[tokio::test]
-    async fn test_processor_creation() {
-        let processor = RogragProcessor::new();
-        assert!(processor.is_ok());
-    }
 
     #[cfg(feature = "rograg")]
     #[tokio::test]

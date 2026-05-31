@@ -1,3 +1,9 @@
+//! Entity and relationship extraction.
+//!
+//! Pulls entities and relationships out of text chunks. The active extractor is chosen
+//! at runtime from `Config`: pattern-based regex, multi-round LLM gleaning, single-pass
+//! LLM, or GLiNER joint NER+RE (feature `gliner`).
+
 /// ATOM atomic fact extraction module (Phase 1.3)
 pub mod atomic_fact_extractor;
 /// GLiNER-Relex joint NER + RE extractor (feature-gated: `gliner`)
@@ -69,8 +75,9 @@ impl EntityExtractor {
                 for pattern in patterns {
                     match Regex::new(pattern) {
                         Ok(regex) => allowed_patterns.push(regex),
-                        Err(e) => {
-                            tracing::warn!("Invalid allowed pattern '{pattern}': {e}");
+                        Err(_e) => {
+                            #[cfg(feature = "tracing")]
+                            tracing::warn!("Invalid allowed pattern '{pattern}': {_e}");
                         },
                     }
                 }
@@ -80,8 +87,9 @@ impl EntityExtractor {
                 for pattern in patterns {
                     match Regex::new(pattern) {
                         Ok(regex) => excluded_patterns.push(regex),
-                        Err(e) => {
-                            tracing::warn!("Invalid excluded pattern '{pattern}': {e}");
+                        Err(_e) => {
+                            #[cfg(feature = "tracing")]
+                            tracing::warn!("Invalid excluded pattern '{pattern}': {_e}");
                         },
                     }
                 }
@@ -660,7 +668,7 @@ impl EntityExtractor {
             .any(|&prefix| word_lower.starts_with(prefix));
 
         // Must start with uppercase and be alphabetic
-        let is_proper_format = word.chars().next().unwrap().is_uppercase()
+        let is_proper_format = word.chars().next().expect("non-empty string").is_uppercase()
             && word.chars().all(|c| c.is_alphabetic() || c == '\'');
 
         // Common short words that are rarely names

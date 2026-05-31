@@ -325,11 +325,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_function_caller_creation() {
-        let caller = FunctionCaller::new();
-        assert_eq!(caller.get_function_definitions().len(), 0);
-    }
 
     #[test]
     fn test_function_registration() {

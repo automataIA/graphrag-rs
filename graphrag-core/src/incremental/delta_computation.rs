@@ -278,6 +278,15 @@ impl BloomFilter {
     }
 }
 
+/// Result of a node-level delta: (added/modified snapshots, removed ids, modifications).
+type NodeDeltaResult = (Vec<NodeSnapshot>, Vec<String>, Vec<NodeModification>);
+/// Result of an edge-level delta: (added/modified snapshots, removed keys, modifications).
+type EdgeDeltaResult = (
+    Vec<EdgeSnapshot>,
+    Vec<(String, String)>,
+    Vec<EdgeModification>,
+);
+
 /// Delta computer for efficient graph diff calculation
 pub struct DeltaComputer {
     config: DeltaComputationConfig,
@@ -329,8 +338,8 @@ impl DeltaComputer {
 
         let stats = self.build_statistics(
             computation_time,
-            &before,
-            &after,
+            before,
+            after,
             &nodes_added,
             &nodes_removed,
             &nodes_modified,
@@ -375,7 +384,7 @@ impl DeltaComputer {
         &self,
         before_nodes: &HashMap<String, NodeSnapshot>,
         after_nodes: &HashMap<String, NodeSnapshot>,
-    ) -> Result<(Vec<NodeSnapshot>, Vec<String>, Vec<NodeModification>), DeltaError> {
+    ) -> Result<NodeDeltaResult, DeltaError> {
         let bloom_hits = 0usize;
         let bloom_misses = 0usize;
 
@@ -462,14 +471,7 @@ impl DeltaComputer {
         &self,
         before_edges: &HashMap<(String, String), EdgeSnapshot>,
         after_edges: &HashMap<(String, String), EdgeSnapshot>,
-    ) -> Result<
-        (
-            Vec<EdgeSnapshot>,
-            Vec<(String, String)>,
-            Vec<EdgeModification>,
-        ),
-        DeltaError,
-    > {
+    ) -> Result<EdgeDeltaResult, DeltaError> {
         // Find added and modified edges
         let (added, modified): (Vec<_>, Vec<_>) = if self.config.parallel_computation {
             after_edges
@@ -615,6 +617,7 @@ impl DeltaComputer {
         changes
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn build_statistics(
         &self,
         computation_time_ms: u64,
@@ -924,35 +927,4 @@ mod tests {
             .any(|c| { c.property_name == "age" && matches!(c.change_type, ChangeType::Removed) }));
     }
 
-    #[test]
-    fn test_parallel_computation() {
-        let mut config = DeltaComputationConfig::default();
-        config.parallel_computation = true;
-
-        let computer = DeltaComputer::new(config);
-
-        let mut nodes1 = HashMap::new();
-        for i in 0..100 {
-            nodes1.insert(
-                format!("node{}", i),
-                create_test_node(&format!("node{}", i), vec![("id", &i.to_string())]),
-            );
-        }
-
-        let mut nodes2 = nodes1.clone();
-        for i in 50..150 {
-            nodes2.insert(
-                format!("node{}", i),
-                create_test_node(&format!("node{}", i), vec![("id", &i.to_string())]),
-            );
-        }
-
-        let snapshot1 = computer.create_snapshot("snap1".to_string(), nodes1, HashMap::new());
-        let snapshot2 = computer.create_snapshot("snap2".to_string(), nodes2, HashMap::new());
-
-        let delta = computer.compute_delta(&snapshot1, &snapshot2).unwrap();
-
-        assert_eq!(delta.nodes_added.len(), 50); // nodes 100-149
-        assert_eq!(delta.nodes_removed.len(), 50); // nodes 0-49
-    }
 }

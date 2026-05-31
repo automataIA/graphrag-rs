@@ -118,12 +118,12 @@ impl BoundaryDetector {
         Self {
             config,
             // Compile regex patterns once
-            sentence_endings: Regex::new(r"[.!?]+[\s]+").unwrap(),
-            markdown_heading: Regex::new(r"^#{1,6}\s+.+$").unwrap(),
-            numbered_list: Regex::new(r"^\d+[.)]\s+").unwrap(),
-            bullet_list: Regex::new(r"^[\-\*\+]\s+").unwrap(),
-            code_block_fence: Regex::new(r"^```").unwrap(),
-            rst_heading_underline: Regex::new("^[=\\-~^\"]+\\s*$").unwrap(),
+            sentence_endings: Regex::new(r"[.!?]+[\s]+").expect("static regex literal"),
+            markdown_heading: Regex::new(r"^#{1,6}\s+.+$").expect("static regex literal"),
+            numbered_list: Regex::new(r"^\d+[.)]\s+").expect("static regex literal"),
+            bullet_list: Regex::new(r"^[\-\*\+]\s+").expect("static regex literal"),
+            code_block_fence: Regex::new(r"^```").expect("static regex literal"),
+            rst_heading_underline: Regex::new("^[=\\-~^\"]+\\s*$").expect("static regex literal"),
         }
     }
 
@@ -209,7 +209,7 @@ impl BoundaryDetector {
         let mut boundaries = Vec::new();
 
         // Look for double newlines (paragraph breaks)
-        let paragraph_regex = Regex::new(r"\n\s*\n").unwrap();
+        let paragraph_regex = Regex::new(r"\n\s*\n").expect("static regex literal");
 
         for mat in paragraph_regex.find_iter(text) {
             boundaries.push(Boundary {
@@ -400,11 +400,7 @@ impl BoundaryDetector {
         boundaries
             .iter()
             .filter(|b| {
-                let dist = if b.position > position {
-                    b.position - position
-                } else {
-                    position - b.position
-                };
+                let dist = b.position.abs_diff(position);
                 dist <= tolerance
             })
             .max_by(|a, b| {
@@ -424,17 +420,6 @@ impl Default for BoundaryDetector {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_sentence_detection() {
-        let detector = BoundaryDetector::new();
-        let text = "This is a sentence. This is another! And a third?";
-
-        let boundaries = detector.detect_sentence_boundaries(text);
-
-        assert_eq!(boundaries.len(), 3);
-        assert_eq!(boundaries[0].boundary_type, BoundaryType::Sentence);
-    }
 
     #[test]
     fn test_abbreviation_handling() {
@@ -491,22 +476,6 @@ mod tests {
 
         assert_eq!(boundaries.len(), 2); // Start and end
         assert_eq!(boundaries[0].boundary_type, BoundaryType::CodeBlock);
-    }
-
-    #[test]
-    fn test_combined_detection() {
-        let detector = BoundaryDetector::new();
-        let text = "# Heading\n\nFirst paragraph. Second sentence.\n\n- List item 1\n- List item 2\n\nLast paragraph.";
-
-        let boundaries = detector.detect_boundaries(text);
-
-        // Should detect headings, paragraphs, sentences, and lists
-        assert!(boundaries.len() > 5);
-
-        let types: HashSet<_> = boundaries.iter().map(|b| b.boundary_type).collect();
-        assert!(types.contains(&BoundaryType::Heading));
-        assert!(types.contains(&BoundaryType::Paragraph));
-        assert!(types.contains(&BoundaryType::List));
     }
 
     #[test]

@@ -378,7 +378,7 @@ fn test_edge_cases_with_fixtures() {
         .chunk_and_enrich(&document)
         .expect("Should handle minimal document");
 
-    assert!(chunks.len() >= 1, "Should create at least one chunk");
+    assert!(!chunks.is_empty(), "Should create at least one chunk");
     assert!(
         chunks[0].metadata.chapter.is_some(),
         "Should detect title heading"

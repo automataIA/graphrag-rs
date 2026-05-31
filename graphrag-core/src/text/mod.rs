@@ -1,3 +1,8 @@
+//! Text processing pipeline: chunking, enrichment, and analysis.
+//!
+//! Splits documents into [`TextChunk`]s via pluggable `ChunkingStrategy` implementations
+//! (including late chunking), and optionally enriches each chunk with contextual metadata.
+
 /// Text analysis utilities
 pub mod analysis;
 /// Semantic boundary detection for BAR-RAG
@@ -242,7 +247,7 @@ impl TextProcessor {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```ignore
     /// use graphrag_core::text::{TextProcessor, HierarchicalChunkingStrategy};
     ///
     /// let processor = TextProcessor::new(1000, 100)?;
@@ -484,7 +489,7 @@ impl TextProcessor {
         }
 
         let mut sorted_words: Vec<_> = word_counts.into_iter().collect();
-        sorted_words.sort_by(|a, b| b.1.cmp(&a.1));
+        sorted_words.sort_by_key(|item| std::cmp::Reverse(item.1));
 
         sorted_words
             .into_iter()

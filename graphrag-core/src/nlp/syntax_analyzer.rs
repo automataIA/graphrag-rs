@@ -283,7 +283,7 @@ impl SyntaxAnalyzer {
 
         // Pattern-based tagging
         // Proper noun: capitalized and not at start of sentence
-        if word.chars().next().unwrap().is_uppercase() {
+        if word.chars().next().expect("non-empty string").is_uppercase() {
             return POSTag::ProperNoun;
         }
 
@@ -504,7 +504,7 @@ impl SyntaxAnalyzer {
 
     /// Segment text into sentences
     pub fn segment_sentences(&self, text: &str) -> Vec<String> {
-        let sentence_regex = Regex::new(r"[.!?]+\s+").unwrap();
+        let sentence_regex = Regex::new(r"[.!?]+\s+").expect("static regex literal");
         sentence_regex
             .split(text)
             .map(|s| s.trim().to_string())

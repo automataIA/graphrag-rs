@@ -756,7 +756,7 @@ impl IncrementalGraphManager {
             return Ok(None);
         }
 
-        let before = last_snapshot.as_ref().unwrap();
+        let before = last_snapshot.as_ref().expect("checked above");
         let after = self.create_snapshot();
 
         self.delta_computer

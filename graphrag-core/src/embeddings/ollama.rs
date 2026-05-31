@@ -66,9 +66,7 @@ impl EmbeddingProvider for OllamaEmbeddings {
             .ok_or_else(|| GraphRAGError::Embedding {
                 message: "No embeddings returned from Ollama".to_string(),
             })?
-            .iter()
-            .map(|&x| x as f32)
-            .collect();
+            .to_vec();
         Ok(embedding)
     }
 

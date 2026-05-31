@@ -1,8 +1,8 @@
-# 🎯 JSON5 Configuration System for GraphRAG
+# JSON5 Configuration System for GraphRAG
 
 **Type-safe, validated configuration for GraphRAG pipelines.**
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [Why JSON5?](#why-json5)
 - [Quick Start](#quick-start)
@@ -14,7 +14,7 @@
 
 ---
 
-## 🎨 Why JSON5?
+## Why JSON5?
 
 ### The Critical Advantage: **Comments!**
 
@@ -27,7 +27,7 @@ Unlike standard JSON, JSON5 allows comments to document your configuration choic
   "chunk_size": 800
 }
 ```
-☝️ **No comments allowed** - JSON syntax forbids comments entirely!
+**No comments allowed** - JSON syntax forbids comments entirely!
 
 **✅ JSON5:**
 ```json5
@@ -39,11 +39,11 @@ Unlike standard JSON, JSON5 allows comments to document your configuration choic
   "chunk_size": 800,  // LlamaIndex research: 800-1024 for narratives
 }
 ```
-☝️ **Comments everywhere** - document choices, cite research, explain "why"!
+**Comments everywhere** - document choices, cite research, explain "why"!
 
 ### JSON5 Features
 
-1. **Comments** (`//` and `/* */`) 💬
+1. **Comments** (`//` and `/* */`) 
    - Document WHY you chose parameter values
    - Add research references inline
    - Explain domain-specific choices
@@ -56,13 +56,13 @@ Unlike standard JSON, JSON5 allows comments to document your configuration choic
    }
    ```
 
-3. **Flexible Syntax** 🎯
+3. **Flexible Syntax** 
    - More forgiving than strict JSON
    - Numbers: `+123`, `0xFF`, `Infinity`, `NaN`
    - Multi-line strings
    - Unquoted keys (we use quoted for consistency)
 
-4. **Schema Validation** 🛡️
+4. **Schema Validation** 
    - Real-time autocomplete in VSCode
    - Catch errors before runtime
    - Range and enum validation
@@ -85,7 +85,7 @@ Unlike standard JSON, JSON5 allows comments to document your configuration choic
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Use an Existing Template
 
@@ -171,7 +171,7 @@ fn main() -> Result<()> {
 
 ---
 
-## 🔧 VSCode Setup
+## VSCode Setup
 
 ### Automatic Setup (Already Done!)
 
@@ -233,7 +233,7 @@ If autocomplete doesn't work automatically:
 
 ---
 
-## 📝 Creating Configurations
+## Creating Configurations
 
 ### Option 1: Copy a Template
 
@@ -329,13 +329,13 @@ uv run --with jsonschema --with json5 python scripts/validate_json5_configs.py \
 
 **Output:**
 ```
-🔍 Validating 1 configuration file(s)...
+Validating 1 configuration file(s)...
 
 ✅ my_config.graphrag.json5
 
 ============================================================
-✨ Validation Complete: 1/1 valid
-🎉 All configurations are valid!
+Validation Complete: 1/1 valid
+All configurations are valid!
 ```
 
 **Error output example:**
@@ -368,7 +368,7 @@ fn main() -> Result<()> {
 
 ---
 
-## 📚 Examples
+## Examples
 
 ### Example 1: Minimal Semantic Config
 
@@ -535,7 +535,7 @@ fn main() -> Result<()> {
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Autocomplete Not Working
 
@@ -599,7 +599,7 @@ fn main() -> Result<()> {
 }
 ```
 
-### ⚠️ "Property keys must be doublequoted" Warning
+### "Property keys must be doublequoted" Warning
 
 **Problem**: VSCode shows warnings on unquoted keys (e.g., `mode: {...}`)
 
@@ -612,7 +612,7 @@ fn main() -> Result<()> {
 **Example Warning**:
 ```json5
 {
-  mode: {  // ⚠️ VSCode warning: "Property keys must be doublequoted"
+  mode: {  // VSCode warning: "Property keys must be doublequoted"
     approach: "semantic"
   }
 }
@@ -638,13 +638,13 @@ fn main() -> Result<()> {
   }
 }
 ```
-⚠️ **Trade-off**: Loses the readability advantage of unquoted keys
+**Trade-off**: Loses the readability advantage of unquoted keys
 
 **Our Recommendation**: Ignore the warnings. They're false positives caused by VSCode's JSONC mode not fully supporting JSON5's unquoted key feature. Your configs are valid and will work correctly.
 
 ---
 
-## 🎓 Best Practices
+## Best Practices
 
 ### 1. Always Use `$schema` Reference
 
@@ -731,7 +731,7 @@ Keep configs in version control to track changes over time.
 
 ---
 
-## 🎉 Advantages Summary
+## Advantages Summary
 
 ### Why JSON5 for GraphRAG?
 
@@ -765,7 +765,7 @@ All 13 templates pass JSON Schema validation:
 
 ---
 
-## 📖 Additional Resources
+## Additional Resources
 
 - **JSON Schema**: `config/schema/graphrag-config.schema.json`
 - **Template Examples**: `config/templates/*.graphrag.json5`
@@ -775,7 +775,7 @@ All 13 templates pass JSON Schema validation:
 
 ---
 
-## 🆘 Common Questions
+## Common Questions
 
 **Q: What file extension should I use?**
 A: Use `.graphrag.json5` for automatic schema mapping, or `.json5` for general JSON5 files.
@@ -811,7 +811,7 @@ A: Start with the closest template, then adjust:
 
 ---
 
-**Ready to start?** 🚀
+**Ready to start?** 
 
 ```bash
 cp config/templates/semantic_pipeline.graphrag.json5 my_config.graphrag.json5

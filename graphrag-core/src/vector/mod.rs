@@ -1,3 +1,8 @@
+//! Vector store and similarity search.
+//!
+//! Stores embeddings and answers nearest-neighbour queries via cosine similarity
+//! (with an optional HNSW index behind the `vector-hnsw` feature).
+
 #[cfg(feature = "parallel-processing")]
 use crate::parallel::ParallelProcessor;
 use crate::{GraphRAGError, Result};
@@ -179,7 +184,7 @@ impl VectorIndex {
             }
 
             // Sort by similarity (highest first) and take top_k
-            scored_results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            scored_results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
             scored_results.truncate(top_k);
 
             Ok(scored_results)

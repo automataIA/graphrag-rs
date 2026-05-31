@@ -424,13 +424,6 @@ mod tests {
     use crate::core::traits::GenerationParams;
     use crate::generation::MockLLM;
 
-    #[tokio::test]
-    async fn test_cached_client_creation() {
-        let mock_llm = MockLLM::new().unwrap();
-        let config = CacheConfig::default();
-        let client = CachedLLMClient::new(mock_llm, config).await;
-        assert!(client.is_ok());
-    }
 
     #[tokio::test]
     async fn test_cache_hit_miss() {

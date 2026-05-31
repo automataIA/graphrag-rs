@@ -1,3 +1,5 @@
+#![cfg_attr(not(feature = "async"), allow(unused_imports))]
+
 //! ATOM Atomic Fact Extraction
 //!
 //! This module implements atomic fact extraction following the ATOM methodology
@@ -85,6 +87,7 @@ impl AtomicFact {
 /// Uses LLM to decompose text into self-contained factual statements.
 pub struct AtomicFactExtractor {
     /// Ollama client for LLM-based extraction
+    #[cfg_attr(not(feature = "async"), allow(dead_code))]
     ollama_client: OllamaClient,
     /// Maximum tokens per fact (default: 400)
     max_fact_tokens: usize,
@@ -335,7 +338,7 @@ JSON:"#,
         let lower = name.to_lowercase();
 
         // Check for proper nouns (capitalized)
-        if name.chars().next().map_or(false, |c| c.is_uppercase()) {
+        if name.chars().next().is_some_and(|c| c.is_uppercase()) {
             if lower.ends_with("ia") || lower.ends_with("land") || lower.ends_with("istan") {
                 return "LOCATION".to_string();
             }

@@ -65,6 +65,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         relation_type: "USES".to_string(),
         confidence: 0.85,
         context: vec![ChunkId::new("chunk1".to_string())],
+        embedding: None,
+        temporal_type: None,
+        temporal_range: None,
+        causal_strength: None,
     };
     graph.add_relationship(relationship)?;
 

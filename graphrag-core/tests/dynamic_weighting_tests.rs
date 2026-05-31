@@ -4,7 +4,7 @@
 
 use graphrag_core::{
     core::{Entity, EntityId, KnowledgeGraph, Relationship},
-    graph::temporal::{TemporalRange, TemporalRelationType},
+    graph::temporal::TemporalRelationType,
 };
 
 fn create_test_graph() -> KnowledgeGraph {
@@ -85,14 +85,14 @@ fn test_dynamic_weight_conceptual_boost() {
     let taught_rel = graph
         .get_all_relationships()
         .iter()
+        .copied()
         .find(|r| r.relation_type == "TAUGHT")
-        .unwrap()
-        .clone();
+        .unwrap();
 
     // Query concepts that match the relationship type
     let query_concepts = vec!["taught".to_string(), "teaching".to_string()];
 
-    let weight = graph.dynamic_weight(&taught_rel, None, &query_concepts);
+    let weight = graph.dynamic_weight(taught_rel, None, &query_concepts);
 
     // Should have conceptual boost applied
     assert!(
@@ -122,12 +122,12 @@ fn test_dynamic_weight_temporal_boost() {
     let discussed_rel = graph
         .get_all_relationships()
         .iter()
+        .copied()
         .find(|r| r.relation_type == "DISCUSSED")
-        .unwrap()
-        .clone();
+        .unwrap();
 
     let query_concepts: Vec<String> = vec![];
-    let weight = graph.dynamic_weight(&discussed_rel, None, &query_concepts);
+    let weight = graph.dynamic_weight(discussed_rel, None, &query_concepts);
 
     // Should have temporal boost applied (ancient event gets small boost)
     // Note: Ancient events get lower boost than recent ones
@@ -308,7 +308,7 @@ fn test_dynamic_weight_combined_boosts() {
 
 #[test]
 fn test_cosine_similarity_identical_vectors() {
-    let graph = KnowledgeGraph::new();
+    let _graph = KnowledgeGraph::new();
 
     let v1 = vec![1.0, 0.0, 0.0];
     let v2 = vec![1.0, 0.0, 0.0];
@@ -340,7 +340,7 @@ fn test_cosine_similarity_identical_vectors() {
 
     test_graph.add_relationship(rel.clone()).unwrap();
 
-    let weight = test_graph.dynamic_weight(&rel, Some(&v2), &vec![]);
+    let weight = test_graph.dynamic_weight(&rel, Some(&v2), &[]);
 
     // Identical vectors should give similarity = 1.0
     // weight = 0.5 * (1.0 + 1.0) = 1.0
@@ -382,7 +382,7 @@ fn test_cosine_similarity_orthogonal_vectors() {
 
     test_graph.add_relationship(rel.clone()).unwrap();
 
-    let weight = test_graph.dynamic_weight(&rel, Some(&v2), &vec![]);
+    let weight = test_graph.dynamic_weight(&rel, Some(&v2), &[]);
 
     // Orthogonal vectors should give similarity = 0.0
     // weight = 0.5 * (1.0 + 0.0) = 0.5

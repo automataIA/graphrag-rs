@@ -486,7 +486,7 @@ impl HierarchyBuilder {
                 if let Some(&rel_id) = reverse_mapping.get(node_idx) {
                     temp_communities
                         .entry(community_id)
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(rel_id);
                 }
             }

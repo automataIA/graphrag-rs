@@ -503,7 +503,7 @@ impl GraphWeightOptimizer {
             .filter(|(_, score)| *score > 0)
             .collect();
 
-        entity_scores.sort_by(|a, b| b.1.cmp(&a.1));
+        entity_scores.sort_by_key(|item| std::cmp::Reverse(item.1));
 
         let mut context = String::new();
         context.push_str("Entities:\n");
@@ -696,8 +696,8 @@ impl GraphWeightOptimizer {
             return 0.0;
         }
 
-        let first = self.history.first().unwrap().combined_score;
-        let last = self.history.last().unwrap().combined_score;
+        let first = self.history.first().expect("non-empty").combined_score;
+        let last = self.history.last().expect("non-empty").combined_score;
         last - first
     }
 }
@@ -859,17 +859,17 @@ mod tests {
 
         // Check results are in valid range
         assert!(
-            relevance >= 0.0 && relevance <= 1.0,
+            (0.0..=1.0).contains(&relevance),
             "Relevance out of range: {}",
             relevance
         );
         assert!(
-            faithfulness >= 0.0 && faithfulness <= 1.0,
+            (0.0..=1.0).contains(&faithfulness),
             "Faithfulness out of range: {}",
             faithfulness
         );
         assert!(
-            conciseness >= 0.0 && conciseness <= 1.0,
+            (0.0..=1.0).contains(&conciseness),
             "Conciseness out of range: {}",
             conciseness
         );
@@ -951,7 +951,7 @@ mod tests {
             context.contains("Relationships:"),
             "Context should include relationships"
         );
-        assert!(context.len() > 0, "Context should not be empty");
+        assert!(!context.is_empty(), "Context should not be empty");
     }
 
     #[test]

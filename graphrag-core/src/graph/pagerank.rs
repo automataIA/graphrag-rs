@@ -83,7 +83,7 @@ impl PersonalizedPageRank {
     ) -> Self {
         let n = adjacency_matrix.rows();
         let cache_size =
-            NonZeroUsize::new(config.cache_size).unwrap_or(NonZeroUsize::new(1000).unwrap());
+            NonZeroUsize::new(config.cache_size).unwrap_or(NonZeroUsize::new(1000).expect("non-zero literal"));
 
         // Compute out-degrees for normalization
         let out_degrees = Self::compute_out_degrees(&adjacency_matrix);
@@ -483,11 +483,17 @@ impl PersonalizedPageRank {
     }
 
     fn scores_to_entity_map(&self, scores: &[f64]) -> Result<HashMap<EntityId, f64>> {
-        let mut result = HashMap::new();
+        // Renormalize to a proper probability distribution. Dangling nodes (no
+        // out-edges) leak rank mass on every iteration, so the raw scores can
+        // sum to less than 1.0; rescaling restores sum == 1 while preserving the
+        // relative ordering.
+        let total: f64 = scores.iter().sum();
+        let inv = if total > 0.0 { 1.0 / total } else { 1.0 };
 
+        let mut result = HashMap::new();
         for (index, &score) in scores.iter().enumerate() {
             if let Some(entity_id) = self.reverse_mapping.get(&index) {
-                result.insert(entity_id.clone(), score);
+                result.insert(entity_id.clone(), score * inv);
             }
         }
 

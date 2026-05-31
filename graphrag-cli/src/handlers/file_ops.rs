@@ -66,7 +66,7 @@ impl FileOperations {
     pub fn expand_tilde(path: &Path) -> PathBuf {
         if path.starts_with("~") {
             if let Some(home) = dirs::home_dir() {
-                return home.join(path.strip_prefix("~").unwrap());
+                return home.join(path.strip_prefix("~").expect("prefix checked"));
             }
         }
         path.to_path_buf()

@@ -316,7 +316,7 @@ impl QueryConceptMatcher {
                 ]
                 .iter()
                 .min()
-                .unwrap();
+                .expect("non-empty iter");
             }
         }
 

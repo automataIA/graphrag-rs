@@ -439,7 +439,7 @@ impl Default for EvaluableQueryResultBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ChunkId, EntityId};
+    use crate::EntityId;
 
     #[test]
     fn test_prompt_generation() {

@@ -57,7 +57,7 @@ pub struct ScoredResult {
 impl PageRankRetrievalSystem {
     /// Create a new PageRank-based retrieval system
     pub fn new(max_results: usize) -> Self {
-        let cache_size = NonZeroUsize::new(1000).unwrap();
+        let cache_size = NonZeroUsize::new(1000).expect("non-zero literal");
 
         Self {
             vector_index: None,
@@ -214,7 +214,7 @@ impl PageRankRetrievalSystem {
         }
 
         // Step 5: Sort by combined score and limit results
-        scored_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        scored_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
         scored_results.truncate(max_results);
 
         println!(
@@ -356,7 +356,7 @@ impl PageRankRetrievalSystem {
             }
         }
 
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
         results.truncate(self.max_results);
 
         results
@@ -374,7 +374,7 @@ impl PageRankRetrievalSystem {
 
         println!(
             "✅ Global PageRank scores computed for {} entities",
-            self.global_pagerank.as_ref().unwrap().len()
+            self.global_pagerank.as_ref().expect("checked above").len()
         );
 
         Ok(())
@@ -534,7 +534,7 @@ impl PageRankRetrievalSystem {
         }
 
         // Step 8: Sort by combined score and limit results
-        scored_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        scored_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
         scored_results.truncate(max_results);
 
         #[cfg(feature = "tracing")]

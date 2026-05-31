@@ -147,6 +147,7 @@ package-lock.json
 # WASM Build Artifacts
 # ============================================
 /dist
+.playwright-cli/
 /pkg
 wasm-pack.log
 graphrag-wasm/pkg/
@@ -156,7 +157,8 @@ graphrag-wasm/pkg/
 # ============================================
 /doc
 /docs-build
-book/
+# mdBook generated site only — keep the book/ source tree committed
+book/book/
 
 # ============================================
 # Test and Coverage

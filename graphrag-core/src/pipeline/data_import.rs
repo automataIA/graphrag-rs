@@ -562,9 +562,9 @@ impl DataImporter {
     fn import_rdf(&self, _path: &Path) -> Result<ImportResult, ImportError> {
         #[cfg(not(feature = "rdf-import"))]
         {
-            return Err(ImportError::UnsupportedFormat(
+            Err(ImportError::UnsupportedFormat(
                 "RDF import requires 'rdf-import' feature".to_string(),
-            ));
+            ))
         }
 
         #[cfg(feature = "rdf-import")]
@@ -688,9 +688,9 @@ impl DataImporter {
     fn import_graphml(&self, _path: &Path) -> Result<ImportResult, ImportError> {
         #[cfg(not(feature = "graphml-import"))]
         {
-            return Err(ImportError::UnsupportedFormat(
+            Err(ImportError::UnsupportedFormat(
                 "GraphML import requires 'graphml-import' feature".to_string(),
-            ));
+            ))
         }
 
         #[cfg(feature = "graphml-import")]

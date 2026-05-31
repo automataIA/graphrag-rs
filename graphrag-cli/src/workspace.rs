@@ -124,7 +124,7 @@ impl WorkspaceManager {
         }
 
         // Sort by last accessed (most recent first)
-        workspaces.sort_by(|a, b| b.last_accessed.cmp(&a.last_accessed));
+        workspaces.sort_by_key(|w| std::cmp::Reverse(w.last_accessed));
 
         Ok(workspaces)
     }

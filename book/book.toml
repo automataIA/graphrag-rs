@@ -1,0 +1,25 @@
+[book]
+title = "GraphRAG-RS"
+authors = ["automataIA"]
+language = "en"
+src = "src"
+description = "A modular, portable GraphRAG implementation in Rust — native + WASM."
+
+[build]
+create-missing = false
+
+[output.html]
+git-repository-url = "https://github.com/automataIA/graphrag-rs"
+edit-url-template = "https://github.com/automataIA/graphrag-rs/edit/main/book/{path}"
+default-theme = "rust"
+additional-js = ["mermaid.min.js", "mermaid-init.js"]
+
+[output.html.search]
+enable = true
+
+[output.html.fold]
+enable = true
+level = 1
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"

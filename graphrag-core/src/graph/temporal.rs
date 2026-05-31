@@ -285,8 +285,8 @@ impl TemporalGraph {
             return None;
         }
 
-        let min = self.edges.iter().map(|e| e.timestamp).min().unwrap();
-        let max = self.edges.iter().map(|e| e.timestamp).max().unwrap();
+        let min = self.edges.iter().map(|e| e.timestamp).min().expect("non-empty iter");
+        let max = self.edges.iter().map(|e| e.timestamp).max().expect("non-empty iter");
 
         Some((min, max))
     }
@@ -443,7 +443,7 @@ impl TemporalAnalytics {
             growth_scores.push((node.clone(), growth));
         }
 
-        growth_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        growth_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         growth_scores.truncate(top_k);
 
         growth_scores

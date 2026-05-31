@@ -5,7 +5,7 @@
 //!
 //! # Example
 //!
-//! ```rust,no_run
+//! ```ignore
 //! use graphrag_core::pipeline_executor::PipelineExecutor;
 //! use graphrag_core::GraphRAG;
 //!

@@ -101,6 +101,7 @@ impl SemanticEntityMerger {
             match self.try_llm_merge_decision(llm_client, &prompt).await {
                 Ok(decision) => Ok(decision),
                 Err(_) => {
+                    #[cfg(feature = "tracing")]
                     tracing::warn!("LLM merge decision failed, falling back to heuristics");
                     Ok(self.heuristic_merge_decision(entity_group))
                 },
@@ -408,10 +409,15 @@ impl MergingStatistics {
     /// Print statistics to stdout
     #[allow(dead_code)]
     pub fn print(&self) {
+        #[cfg(feature = "tracing")]
         tracing::info!("Entity Merging Statistics");
+        #[cfg(feature = "tracing")]
         tracing::info!("  Similarity threshold: {:.2}", self.similarity_threshold);
+        #[cfg(feature = "tracing")]
         tracing::info!("  Max description tokens: {}", self.max_description_tokens);
+        #[cfg(feature = "tracing")]
         tracing::info!("  Uses LLM: {}", self.uses_llm);
+        #[cfg(feature = "tracing")]
         tracing::info!("  LLM available: {}", self.llm_available);
     }
 }

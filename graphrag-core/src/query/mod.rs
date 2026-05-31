@@ -1,3 +1,8 @@
+//! Query understanding for hierarchical GraphRAG.
+//!
+//! Analyses, expands, and routes an incoming query — picking the retrieval strategy and
+//! graph level best suited to answer it.
+
 /// Adaptive query routing for hierarchical GraphRAG
 pub mod adaptive_routing;
 /// Advanced query pipeline implementations

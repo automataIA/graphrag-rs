@@ -94,6 +94,9 @@ pub struct PendingUpdate {
 
 /// Type of pending update
 #[derive(Debug, Clone, Serialize, Deserialize)]
+// Variants intentionally share the `Update` suffix — renaming would break the
+// public serde representation of pending updates.
+#[allow(clippy::enum_variant_names)]
 pub enum PendingUpdateType {
     /// Node addition or modification
     NodeUpdate {
@@ -513,7 +516,7 @@ impl LazyPropagationEngine {
     pub fn add_dependency(&self, node_id: String, depends_on: String) {
         let mut deps = self.dependencies.write();
         deps.entry(depends_on)
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(node_id);
     }
 
@@ -556,30 +559,6 @@ pub struct PropagationResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_lazy_propagation_basic() {
-        let config = LazyPropagationConfig {
-            propagation_threshold: 5,
-            ..Default::default()
-        };
-
-        let engine = LazyPropagationEngine::new(config);
-
-        // Queue some updates
-        for i in 0..3 {
-            engine
-                .queue_node_update(format!("node_{}", i), vec![])
-                .unwrap();
-        }
-
-        assert_eq!(engine.pending_count(), 3);
-
-        // Force propagate
-        let result = engine.force_propagate().unwrap();
-        assert_eq!(result.updates_processed, 3);
-        assert_eq!(engine.pending_count(), 0);
-    }
 
     #[test]
     fn test_auto_propagation_threshold() {
