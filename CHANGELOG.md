@@ -29,10 +29,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `lz4_flex` 0.11.5→0.11.6 / 0.12.0→0.12.2 (RUSTSEC-2026-0041) and `tar` 0.4.44→0.4.46
   (RUSTSEC-2026-0067/0068); allowed `0BSD` (`mock_instant`). Added `[graph] all-features = true` to
   `deny.toml` so local `cargo deny check` sees the same graph as CI (prevents local≠CI drift).
-- **CI SIGILL fix:** set `CARGO_BUILD_RUSTFLAGS = ""` in `ci.yml` to override the repo's
+- **CI SIGILL fix:** set `RUSTFLAGS = "-C target-cpu=x86-64-v2"` in `ci.yml` to override the repo's
   `.cargo/config.toml` `-C target-cpu=native`. On GitHub's heterogeneous runners `native` can emit
   instructions the silicon traps (SIGILL crashing rustc/proc-macros, seen building `ollama-rs`).
-  Local dev keeps `target-cpu=native`; only CI uses portable codegen.
+  Verified the rustc invocation: an empty `CARGO_BUILD_RUSTFLAGS` is ignored and doesn't override
+  the config flag — only a non-empty `RUSTFLAGS` (highest precedence) fully replaces it. Local dev
+  keeps `target-cpu=native`; CI uses the portable `x86-64-v2` baseline.
 
 ### Added
 
