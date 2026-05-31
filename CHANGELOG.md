@@ -24,6 +24,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   parsing in the server, not core/cli). Revisit when MSRV moves to ≥1.88.
 - **Formatting:** ran `cargo fmt --all` over the workspace (71 files) to clear the long-standing
   `rustfmt` CI job. Mechanical, no behavior change.
+- **`--all-features` advisory/license coverage:** the `cargo-deny-action` defaults to
+  `--all-features`, so CI also scans the optional `lancedb` tree (lance/datafusion/arrow). Patched
+  `lz4_flex` 0.11.5→0.11.6 / 0.12.0→0.12.2 (RUSTSEC-2026-0041) and `tar` 0.4.44→0.4.46
+  (RUSTSEC-2026-0067/0068); allowed `0BSD` (`mock_instant`). Added `[graph] all-features = true` to
+  `deny.toml` so local `cargo deny check` sees the same graph as CI (prevents local≠CI drift).
+- **CI SIGILL fix:** set `CARGO_BUILD_RUSTFLAGS = ""` in `ci.yml` to override the repo's
+  `.cargo/config.toml` `-C target-cpu=native`. On GitHub's heterogeneous runners `native` can emit
+  instructions the silicon traps (SIGILL crashing rustc/proc-macros, seen building `ollama-rs`).
+  Local dev keeps `target-cpu=native`; only CI uses portable codegen.
 
 ### Added
 

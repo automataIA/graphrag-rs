@@ -1,6 +1,11 @@
 # cargo-deny configuration — https://embarkstudios.github.io/cargo-deny/
 # Run locally with: cargo deny check
 
+[graph]
+# Match the cargo-deny-action default (it passes --all-features), so local runs see
+# the same dep graph as CI — including optional features like `lancedb`.
+all-features = true
+
 [advisories]
 # Fail on any security advisory in the RustSec database.
 version = 2
@@ -44,6 +49,7 @@ allow = [
     "CC0-1.0",
     "BSL-1.0",              # Boost Software License (permissive) — transitive dep
     "CDLA-Permissive-2.0",  # Mozilla CA-cert data bundle via webpki-roots (permissive)
+    "0BSD",                 # BSD Zero Clause (OSI, permissive) — mock_instant via lancedb
 ]
 confidence-threshold = 0.8
 

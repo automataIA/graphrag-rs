@@ -8,6 +8,10 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Override .cargo/config.toml's `target-cpu=native`. GitHub runners are
+  # heterogeneous and `native` can emit instructions (e.g. AVX-512) the actual
+  # silicon traps, crashing rustc/proc-macros with SIGILL. Empty = portable codegen.
+  CARGO_BUILD_RUSTFLAGS: ""
 
 jobs:
   clippy:
