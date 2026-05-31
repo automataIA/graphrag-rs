@@ -249,13 +249,10 @@ impl QdrantStore {
             .result
             .into_iter()
             .map(|point| {
-                let payload_value = serde_json::to_value(&point.payload).map_err(|e| {
-                    QdrantError::OperationError(format!("payload to_value: {e}"))
-                })?;
-                let metadata: DocumentMetadata =
-                    serde_json::from_value(payload_value).map_err(|e| {
-                        QdrantError::OperationError(format!("payload from_value: {e}"))
-                    })?;
+                let payload_value = serde_json::to_value(&point.payload)
+                    .map_err(|e| QdrantError::OperationError(format!("payload to_value: {e}")))?;
+                let metadata: DocumentMetadata = serde_json::from_value(payload_value)
+                    .map_err(|e| QdrantError::OperationError(format!("payload from_value: {e}")))?;
 
                 // Extract ID from PointId enum
                 let id_str = match point.id {

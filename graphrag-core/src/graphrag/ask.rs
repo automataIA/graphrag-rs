@@ -521,5 +521,4 @@ impl GraphRAG {
         let pagerank_system = PageRankRetrievalSystem::new(10);
         pagerank_system.search_with_pagerank(query, graph, Some(5))
     }
-
 }

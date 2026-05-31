@@ -19,9 +19,7 @@ use std::sync::Arc;
 
 use crate::{
     config::GlinerConfig,
-    core::{
-        error::GraphRAGError, Entity, EntityId, EntityMention, Relationship, TextChunk,
-    },
+    core::{error::GraphRAGError, Entity, EntityId, EntityMention, Relationship, TextChunk},
 };
 
 /// Joint NER + RE extractor backed by GLiNER-Relex via ONNX Runtime.
@@ -125,8 +123,12 @@ impl GLiNERExtractor {
         let tokenizer = Self::resolve_tokenizer_path(&self.config);
         let params = Parameters::default();
 
-        let entity_refs: Vec<&str> =
-            self.config.entity_labels.iter().map(|s| s.as_str()).collect();
+        let entity_refs: Vec<&str> = self
+            .config
+            .entity_labels
+            .iter()
+            .map(|s| s.as_str())
+            .collect();
 
         let input = TextInput::from_str(&[chunk.content.as_str()], &entity_refs).map_err(|e| {
             GraphRAGError::EntityExtraction {

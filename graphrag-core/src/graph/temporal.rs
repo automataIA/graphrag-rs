@@ -285,8 +285,18 @@ impl TemporalGraph {
             return None;
         }
 
-        let min = self.edges.iter().map(|e| e.timestamp).min().expect("non-empty iter");
-        let max = self.edges.iter().map(|e| e.timestamp).max().expect("non-empty iter");
+        let min = self
+            .edges
+            .iter()
+            .map(|e| e.timestamp)
+            .min()
+            .expect("non-empty iter");
+        let max = self
+            .edges
+            .iter()
+            .map(|e| e.timestamp)
+            .max()
+            .expect("non-empty iter");
 
         Some((min, max))
     }

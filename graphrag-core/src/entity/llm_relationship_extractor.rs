@@ -610,7 +610,6 @@ JSON:"#,
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[test]
     fn test_prompt_generation() {

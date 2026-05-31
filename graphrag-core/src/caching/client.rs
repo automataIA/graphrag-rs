@@ -424,7 +424,6 @@ mod tests {
     use crate::core::traits::GenerationParams;
     use crate::generation::MockLLM;
 
-
     #[tokio::test]
     async fn test_cache_hit_miss() {
         let mock_llm = MockLLM::new().unwrap();

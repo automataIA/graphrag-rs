@@ -237,7 +237,13 @@ impl SymbolicAnchoringStrategy {
         // Fallback: extract important nouns
         if concepts.is_empty() {
             for word in words {
-                if word.len() > 4 && word.chars().next().expect("non-empty string").is_uppercase() {
+                if word.len() > 4
+                    && word
+                        .chars()
+                        .next()
+                        .expect("non-empty string")
+                        .is_uppercase()
+                {
                     let clean = word.trim_matches(|c: char| !c.is_alphanumeric());
                     if !clean.is_empty() {
                         concepts.push(clean.to_string());
@@ -386,10 +392,7 @@ impl SymbolicAnchoringStrategy {
             for entity_id in &anchor.grounded_entities {
                 // Convert EntityId to string for matching
                 let entity_str = entity_id.0.clone();
-                entity_anchors
-                    .entry(entity_str)
-                    .or_default()
-                    .push(anchor);
+                entity_anchors.entry(entity_str).or_default().push(anchor);
             }
         }
 

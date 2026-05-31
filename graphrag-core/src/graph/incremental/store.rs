@@ -359,7 +359,11 @@ impl IncrementalGraphStore for ProductionGraphStore {
         let update_id = self.apply_change_with_conflict_resolution(change).await?;
 
         // Trigger cache invalidation
-        let changes = vec![self.change_log.get(&update_id).expect("just inserted above").clone()];
+        let changes = vec![self
+            .change_log
+            .get(&update_id)
+            .expect("just inserted above")
+            .clone()];
         let _invalidation_strategies = self.cache_invalidation.invalidate_for_changes(&changes);
 
         // Publish event
@@ -740,4 +744,3 @@ impl ChangeDataExt for ChangeData {
         }
     }
 }
-

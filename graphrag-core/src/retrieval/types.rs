@@ -207,4 +207,3 @@ impl RetrievalStatistics {
         tracing::info!("    Graph weight: {:.2}", self.config.graph_weight);
     }
 }
-

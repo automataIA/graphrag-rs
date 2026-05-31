@@ -854,14 +854,26 @@ impl AnswerGenerator {
         }
 
         // Limit results
-        primary_chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
-        supporting_chunks.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        primary_chunks.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        supporting_chunks.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         primary_chunks.truncate(self.config.max_sources / 2);
         supporting_chunks.truncate(self.config.max_sources / 2);
 
         let mut hierarchical_summaries = hierarchical_results;
-        hierarchical_summaries.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        hierarchical_summaries.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         hierarchical_summaries.truncate(3);
 
         // Calculate confidence based on result quality and quantity
@@ -1068,7 +1080,6 @@ impl GeneratorStatistics {
 mod tests {
     use super::*;
 
-
     #[test]
     fn test_prompt_template() {
         let template = PromptTemplate::new("Hello {name}, how are you?".to_string());
@@ -1090,5 +1101,4 @@ mod tests {
         let content = context.get_combined_content();
         assert!(content.is_empty());
     }
-
 }

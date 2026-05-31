@@ -251,7 +251,6 @@ pub use crate::retrieval::pagerank_retrieval::{PageRankRetrievalSystem, ScoredRe
 #[cfg(feature = "pagerank")]
 pub use crate::retrieval::hipporag_ppr::{Fact, HippoRAGConfig, HippoRAGRetriever};
 
-
 // ================================
 // MAIN GRAPHRAG SYSTEM
 // ================================

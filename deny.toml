@@ -5,6 +5,27 @@
 # Fail on any security advisory in the RustSec database.
 version = 2
 yanked = "warn"
+ignore = [
+    # --- Unmaintained transitive crates (informational, no safe upgrade) ---
+    # Remove each once the upstream that pulls it migrates away.
+    "RUSTSEC-2024-0370", # proc-macro-error — via apistos-gen (graphrag-server)
+    "RUSTSEC-2025-0141", # bincode — transitive
+    "RUSTSEC-2022-0081", # json — gliner feature (json crate)
+    "RUSTSEC-2025-0119", # number_prefix — via indicatif/progress bars
+    "RUSTSEC-2024-0436", # paste — transitive proc-macro helper
+    "RUSTSEC-2025-0134", # rustls-pemfile — transitive TLS stack
+    # --- Vulnerability we accept to keep MSRV 1.85 ---
+    # time 0.3.44 DoS via stack exhaustion on RFC-2822 parsing of untrusted input.
+    # The fix (>=0.3.47) requires rustc 1.88, above our 1.85 MSRV. `time` reaches us
+    # transitively (jsonschema, actix). Reachable only by parsing attacker-controlled
+    # RFC-2822 dates (e.g. HTTP Date headers in the server), not in core/cli. Remove
+    # this and upgrade time once the project MSRV moves to >=1.88.
+    "RUSTSEC-2026-0009", # time
+    # --- Unsound, but unreachable in our usage and blocked upstream ---
+    # lru 0.12 is pinned by ratatui 0.29 (^0.12); the fix is in 0.16.3 (major bump).
+    # The IterMut soundness issue is not hit by our pagerank LRU usage.
+    "RUSTSEC-2026-0002", # lru
+]
 
 [licenses]
 version = 2
@@ -21,6 +42,8 @@ allow = [
     "Zlib",
     "MPL-2.0",
     "CC0-1.0",
+    "BSL-1.0",              # Boost Software License (permissive) — transitive dep
+    "CDLA-Permissive-2.0",  # Mozilla CA-cert data bundle via webpki-roots (permissive)
 ]
 confidence-threshold = 0.8
 

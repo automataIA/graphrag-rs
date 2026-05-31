@@ -292,7 +292,9 @@ impl GraphAnalytics {
                 .min_by(|a, b| {
                     let dist_a = *distances.get(*a).unwrap_or(&f32::INFINITY);
                     let dist_b = *distances.get(*b).unwrap_or(&f32::INFINITY);
-                    dist_a.partial_cmp(&dist_b).unwrap_or(std::cmp::Ordering::Equal)
+                    dist_a
+                        .partial_cmp(&dist_b)
+                        .unwrap_or(std::cmp::Ordering::Equal)
                 })?
                 .clone();
 

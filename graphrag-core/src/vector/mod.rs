@@ -184,7 +184,8 @@ impl VectorIndex {
             }
 
             // Sort by similarity (highest first) and take top_k
-            scored_results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            scored_results
+                .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
             scored_results.truncate(top_k);
 
             Ok(scored_results)

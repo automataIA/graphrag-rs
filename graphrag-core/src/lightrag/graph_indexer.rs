@@ -273,7 +273,6 @@ impl GraphIndexer {
 mod tests {
     use super::*;
 
-
     #[test]
     fn test_basic_extraction() {
         let entity_types = vec!["person".to_string(), "organization".to_string()];

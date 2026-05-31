@@ -14,7 +14,6 @@ use crate::parallel;
 use super::GraphRAG;
 
 impl GraphRAG {
-
     /// Get a reference to the current configuration
     pub fn config(&self) -> &Config {
         &self.config

@@ -261,7 +261,8 @@ impl GraphBuilder {
                 }
 
                 // Sort by similarity and take top connections
-                similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+                similarities
+                    .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
                 similarities.truncate(self.max_connections);
 
                 // Add semantic similarity relationships

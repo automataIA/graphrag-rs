@@ -433,10 +433,17 @@ async fn run_index(
             })
         );
     } else {
-        println!("✅ Indexed `{}` into `{}`", path.display(), workspace.display());
+        println!(
+            "✅ Indexed `{}` into `{}`",
+            path.display(),
+            workspace.display()
+        );
         println!("   {}", summary);
         println!("\nAsk a question:");
-        println!("   graphrag ask \"your question\" --workspace {}", workspace.display());
+        println!(
+            "   graphrag ask \"your question\" --workspace {}",
+            workspace.display()
+        );
     }
     Ok(())
 }
@@ -546,7 +553,11 @@ fn run_validate(config_file: &std::path::Path, format: &str) -> Result<()> {
                 println!("   Approach:  {}", set_config.mode.approach);
                 println!(
                     "   Ollama:    {}",
-                    if config.ollama.enabled { "enabled" } else { "disabled" }
+                    if config.ollama.enabled {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    }
                 );
                 println!("   Chunk size: {}", config.chunk_size);
             }
@@ -584,7 +595,10 @@ async fn handle_workspace_commands(action: WorkspaceCommands) -> Result<()> {
                 println!("Available workspaces:\n");
                 for ws in workspaces {
                     println!("  📁 {} ({})", ws.name, ws.id);
-                    println!("     Created: {}", ws.created_at.format("%Y-%m-%d %H:%M:%S"));
+                    println!(
+                        "     Created: {}",
+                        ws.created_at.format("%Y-%m-%d %H:%M:%S")
+                    );
                     println!(
                         "     Last accessed: {}",
                         ws.last_accessed.format("%Y-%m-%d %H:%M:%S")
@@ -603,38 +617,34 @@ async fn handle_workspace_commands(action: WorkspaceCommands) -> Result<()> {
             println!("   ID:   {}", workspace.id);
             println!("\nUse it with: graphrag tui --workspace {}", workspace.id);
         },
-        WorkspaceCommands::Info { id } => {
-            match workspace_manager.load_metadata(&id).await {
-                Ok(workspace) => {
-                    println!("Workspace Information:\n");
-                    println!("  Name: {}", workspace.name);
-                    println!("  ID:   {}", workspace.id);
-                    println!(
-                        "  Created: {}",
-                        workspace.created_at.format("%Y-%m-%d %H:%M:%S")
-                    );
-                    println!(
-                        "  Last accessed: {}",
-                        workspace.last_accessed.format("%Y-%m-%d %H:%M:%S")
-                    );
-                    if let Some(ref cfg) = workspace.config_path {
-                        println!("  Config: {}", cfg.display());
-                    }
+        WorkspaceCommands::Info { id } => match workspace_manager.load_metadata(&id).await {
+            Ok(workspace) => {
+                println!("Workspace Information:\n");
+                println!("  Name: {}", workspace.name);
+                println!("  ID:   {}", workspace.id);
+                println!(
+                    "  Created: {}",
+                    workspace.created_at.format("%Y-%m-%d %H:%M:%S")
+                );
+                println!(
+                    "  Last accessed: {}",
+                    workspace.last_accessed.format("%Y-%m-%d %H:%M:%S")
+                );
+                if let Some(ref cfg) = workspace.config_path {
+                    println!("  Config: {}", cfg.display());
+                }
 
-                    let history_path = workspace_manager.query_history_path(&id);
-                    if history_path.exists() {
-                        if let Ok(history) =
-                            query_history::QueryHistory::load(&history_path).await
-                        {
-                            println!("\n  Total queries: {}", history.total_queries());
-                        }
+                let history_path = workspace_manager.query_history_path(&id);
+                if history_path.exists() {
+                    if let Ok(history) = query_history::QueryHistory::load(&history_path).await {
+                        println!("\n  Total queries: {}", history.total_queries());
                     }
-                },
-                Err(e) => {
-                    eprintln!("❌ Error loading workspace: {}", e);
-                    eprintln!("\nList available workspaces with: graphrag workspace list");
-                },
-            }
+                }
+            },
+            Err(e) => {
+                eprintln!("❌ Error loading workspace: {}", e);
+                eprintln!("\nList available workspaces with: graphrag workspace list");
+            },
         },
         WorkspaceCommands::Delete { id } => {
             workspace_manager.delete_workspace(&id).await?;
@@ -764,7 +774,10 @@ async fn run_setup_wizard(template: Option<String>, output: PathBuf) -> Result<(
     println!("║                     Next Steps                             ║");
     println!("╠════════════════════════════════════════════════════════════╣");
     println!("║  1. Start the TUI:                                         ║");
-    println!("║     graphrag tui --config {}                         ║", output.display());
+    println!(
+        "║     graphrag tui --config {}                         ║",
+        output.display()
+    );
     println!("║                                                            ║");
     println!("║  2. Load a document in the TUI:                            ║");
     println!("║     /load path/to/your/document.txt                        ║");
@@ -947,7 +960,10 @@ fn setup_tui_logging() -> Result<()> {
     std::fs::create_dir_all(&log_dir)?;
 
     let log_file = log_dir.join("graphrag-cli.log");
-    let file = OpenOptions::new().create(true).append(true).open(log_file)?;
+    let file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_file)?;
 
     let filter = EnvFilter::new("graphrag_cli=warn,graphrag_core=warn");
 

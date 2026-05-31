@@ -247,7 +247,6 @@ fn create_schema(_dimension: usize) -> Arc<()> {
 mod tests {
     use super::*;
 
-
     #[tokio::test]
     async fn test_table_creation() {
         let mut store = LanceDBStore::new("./test_db", "test_table").await.unwrap();

@@ -216,7 +216,11 @@ impl EnrichedRetriever {
         }
 
         // Re-sort after boosting
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         Ok(results)
     }
@@ -285,7 +289,11 @@ impl EnrichedRetriever {
         }
 
         let mut sorted_results: Vec<_> = keyword_scores.into_iter().collect();
-        sorted_results.sort_by(|a, b| b.1 .0.partial_cmp(&a.1 .0).unwrap_or(std::cmp::Ordering::Equal));
+        sorted_results.sort_by(|a, b| {
+            b.1 .0
+                .partial_cmp(&a.1 .0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         sorted_results
             .into_iter()

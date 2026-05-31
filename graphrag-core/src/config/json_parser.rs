@@ -233,8 +233,7 @@ impl Config {
                     .as_f32()
                     .unwrap_or(0.5),
                 use_gpu: parsed["gliner"]["use_gpu"].as_bool().unwrap_or(false),
-                max_concurrent_chunks: parsed["gliner"]["max_concurrent_chunks"]
-                    .as_usize(),
+                max_concurrent_chunks: parsed["gliner"]["max_concurrent_chunks"].as_usize(),
             },
             enhancements: enhancements::EnhancementsConfig {
                 enabled: parsed["enhancements"]["enabled"].as_bool().unwrap_or(true),

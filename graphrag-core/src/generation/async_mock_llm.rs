@@ -262,7 +262,11 @@ impl AsyncMockLLM {
         for word in text.split_whitespace() {
             let clean_word = word.trim_matches(|c: char| !c.is_alphabetic());
             if clean_word.len() > 2
-                && clean_word.chars().next().expect("non-empty string").is_uppercase()
+                && clean_word
+                    .chars()
+                    .next()
+                    .expect("non-empty string")
+                    .is_uppercase()
                 && clean_word.chars().all(|c| c.is_alphabetic())
             {
                 found_names.push(clean_word.to_lowercase());
@@ -570,7 +574,6 @@ impl LLMInterface for AsyncMockLLM {
 #[cfg(test)]
 mod tests {
     use super::*;
-
 
     #[tokio::test]
     async fn test_async_completion() {

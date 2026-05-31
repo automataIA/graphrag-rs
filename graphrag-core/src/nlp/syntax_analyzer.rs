@@ -283,7 +283,12 @@ impl SyntaxAnalyzer {
 
         // Pattern-based tagging
         // Proper noun: capitalized and not at start of sentence
-        if word.chars().next().expect("non-empty string").is_uppercase() {
+        if word
+            .chars()
+            .next()
+            .expect("non-empty string")
+            .is_uppercase()
+        {
             return POSTag::ProperNoun;
         }
 

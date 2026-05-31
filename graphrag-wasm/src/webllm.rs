@@ -150,11 +150,9 @@ impl WebLLM {
             .unwrap_or(false);
 
         let engine_promise = if use_worker {
-            let create_worker_fn = js_sys::Reflect::get(
-                &webllm,
-                &JsValue::from_str("CreateWebWorkerMLCEngine"),
-            )
-            .map_err(|_| WebLLMError::NotLoaded)?;
+            let create_worker_fn =
+                js_sys::Reflect::get(&webllm, &JsValue::from_str("CreateWebWorkerMLCEngine"))
+                    .map_err(|_| WebLLMError::NotLoaded)?;
             js_sys::Function::from(create_worker_fn)
                 .call2(&webllm, &worker.unwrap(), &JsValue::from_str(model_id))
                 .map_err(|e| WebLLMError::InitializationFailed(format!("{:?}", e)))?
@@ -230,11 +228,9 @@ impl WebLLM {
             .unwrap_or(false);
 
         let engine_promise = if use_worker {
-            let create_worker_fn = js_sys::Reflect::get(
-                &webllm,
-                &JsValue::from_str("CreateWebWorkerMLCEngine"),
-            )
-            .map_err(|_| WebLLMError::NotLoaded)?;
+            let create_worker_fn =
+                js_sys::Reflect::get(&webllm, &JsValue::from_str("CreateWebWorkerMLCEngine"))
+                    .map_err(|_| WebLLMError::NotLoaded)?;
             // CreateWebWorkerMLCEngine(worker, modelId, engineConfig)
             let args = js_sys::Array::new();
             args.push(&worker.unwrap());

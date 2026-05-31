@@ -124,7 +124,10 @@ fn App() -> impl IntoView {
     };
 
     let on_file_upload = move |ev: Event| {
-        let input = match ev.target().and_then(|t| t.dyn_into::<HtmlInputElement>().ok()) {
+        let input = match ev
+            .target()
+            .and_then(|t| t.dyn_into::<HtmlInputElement>().ok())
+        {
             Some(i) => i,
             None => return,
         };
@@ -151,7 +154,8 @@ fn App() -> impl IntoView {
                                     });
                                 }
                             }
-                        }) as Box<dyn Fn(Event)>);
+                        })
+                            as Box<dyn Fn(Event)>);
                         reader.set_onload(Some(onload.as_ref().unchecked_ref()));
                         onload.forget();
                         let _ = reader.read_as_text(&file);
@@ -193,7 +197,9 @@ fn App() -> impl IntoView {
         if docs.is_empty() {
             return;
         }
-        set_build_status.set(BuildStatus::Building(BuildStage::Chunking { progress: 0.0 }));
+        set_build_status.set(BuildStatus::Building(BuildStage::Chunking {
+            progress: 0.0,
+        }));
 
         spawn_local(async move {
             web_sys::console::log_1(&"🚀 Build start".into());
@@ -217,9 +223,7 @@ fn App() -> impl IntoView {
                     progress: ((i + 1) as f32 / total_docs as f32) * 100.0,
                 }));
                 if let Err(e) = graphrag.add_document_from_text(&doc.content) {
-                    web_sys::console::warn_1(
-                        &format!("add_document {}: {}", doc.name, e).into(),
-                    );
+                    web_sys::console::warn_1(&format!("add_document {}: {}", doc.name, e).into());
                 }
                 gloo_timers::future::TimeoutFuture::new(30).await;
             }
@@ -245,9 +249,9 @@ fn App() -> impl IntoView {
                             all_entities.extend(result.entities);
                             all_relationships.extend(result.relationships);
                         },
-                        Err(e) => web_sys::console::warn_1(
-                            &format!("extract_entities: {}", e).into(),
-                        ),
+                        Err(e) => {
+                            web_sys::console::warn_1(&format!("extract_entities: {}", e).into())
+                        },
                     }
                     gloo_timers::future::TimeoutFuture::new(100).await;
                 }
@@ -330,8 +334,7 @@ fn App() -> impl IntoView {
                         let normalized = (hash as f32) / (u32::MAX as f32) * 2.0 - 1.0;
                         embedding[idx % embedding_dim] += normalized;
                     }
-                    let norm: f32 =
-                        embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
+                    let norm: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
                     if norm > 0.0 {
                         for x in &mut embedding {
                             *x /= norm;
@@ -345,14 +348,16 @@ fn App() -> impl IntoView {
             }
 
             // Index
-            set_build_status
-                .set(BuildStatus::Building(BuildStage::Indexing { progress: 50.0 }));
+            set_build_status.set(BuildStatus::Building(BuildStage::Indexing {
+                progress: 50.0,
+            }));
             let mut index = VectorIndex::new();
             for ((chunk_id, _content), embedding) in chunk_data.iter().zip(embeddings.iter()) {
                 index.add(embedding.clone(), chunk_id.clone(), chunk_id.clone());
             }
-            set_build_status
-                .set(BuildStatus::Building(BuildStage::Indexing { progress: 100.0 }));
+            set_build_status.set(BuildStatus::Building(BuildStage::Indexing {
+                progress: 100.0,
+            }));
             gloo_timers::future::TimeoutFuture::new(80).await;
 
             vector_index.set_value(Some(index));
@@ -401,10 +406,14 @@ fn App() -> impl IntoView {
                 if let Ok(tokenizer_json) = response.text().await {
                     OnnxEmbedder::from_tokenizer_json(384, &tokenizer_json)
                 } else {
-                    Err(onnx_embedder::OnnxEmbedderError::InvalidInput("read".into()))
+                    Err(onnx_embedder::OnnxEmbedderError::InvalidInput(
+                        "read".into(),
+                    ))
                 }
             } else {
-                Err(onnx_embedder::OnnxEmbedderError::InvalidInput("fetch".into()))
+                Err(onnx_embedder::OnnxEmbedderError::InvalidInput(
+                    "fetch".into(),
+                ))
             };
 
             let top: Vec<(String, f64)> = match embedder_result {
@@ -440,8 +449,7 @@ fn App() -> impl IntoView {
             let (refs, subg) = graphrag_instance.with_value(|gr_opt| {
                 if let Some(gr) = gr_opt {
                     let refs = build_ref_cards(gr, &top, &doc_lookup);
-                    let top_ids: Vec<String> =
-                        top.iter().map(|(id, _)| id.clone()).collect();
+                    let top_ids: Vec<String> = top.iter().map(|(id, _)| id.clone()).collect();
                     let sg = build_subgraph(gr, &top_ids);
                     (refs, sg)
                 } else {
@@ -498,14 +506,9 @@ fn App() -> impl IntoView {
                 }
             };
 
-            let segments: Vec<AnswerSegment> =
-                parse_answer_with_cites(&answer_text, refs.len());
+            let segments: Vec<AnswerSegment> = parse_answer_with_cites(&answer_text, refs.len());
             let dt_ms = (js_sys::Date::now() - t_start) as u32;
-            let eyebrow = format!(
-                "hybrid retrieval · k={} · {}ms",
-                top.len().max(1),
-                dt_ms
-            );
+            let eyebrow = format!("hybrid retrieval · k={} · {}ms", top.len().max(1), dt_ms);
             let turn = ChatTurn {
                 user_q: query_text,
                 eyebrow,
@@ -624,7 +627,8 @@ where
     FR: Fn(String) + Copy + 'static + Send + Sync,
     FC: Fn() -> bool + Copy + 'static + Send + Sync,
 {
-    let indexed_chip = move || match build_status.get() {
+    let indexed_chip = move || {
+        match build_status.get() {
         BuildStatus::Ready => view! {
             <span class="chip chip-mono chip-on"><span class="dot dot-on"></span> "indexed"</span>
         }
@@ -641,6 +645,7 @@ where
             <span class="chip chip-mono"><span class="dot"></span> "idle"</span>
         }
         .into_any(),
+    }
     };
 
     view! {
@@ -1172,9 +1177,7 @@ fn pipeline_progress(status: &BuildStatus) -> Vec<PipelineRow> {
         BuildStatus::Error(_) => (0.0, 0.0, 0.0, 0.0),
         BuildStatus::Building(BuildStage::Chunking { progress }) => (*progress, 0.0, 0.0, 0.0),
         BuildStatus::Building(BuildStage::Extracting { progress }) => (100.0, *progress, 0.0, 0.0),
-        BuildStatus::Building(BuildStage::Embedding { progress }) => {
-            (100.0, 100.0, *progress, 0.0)
-        },
+        BuildStatus::Building(BuildStage::Embedding { progress }) => (100.0, 100.0, *progress, 0.0),
         BuildStatus::Building(BuildStage::Indexing { progress }) => {
             (100.0, 100.0, 100.0, *progress)
         },
@@ -1279,7 +1282,13 @@ fn format_now() -> String {
     let h = date.get_hours();
     let m = date.get_minutes();
     let am = h < 12;
-    let h12 = if h == 0 { 12 } else if h > 12 { h - 12 } else { h };
+    let h12 = if h == 0 {
+        12
+    } else if h > 12 {
+        h - 12
+    } else {
+        h
+    };
     format!("{}:{:02} {}", h12, m, if am { "am" } else { "pm" })
 }
 

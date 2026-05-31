@@ -526,13 +526,28 @@ pub struct GlinerSetConfig {
     pub max_concurrent_chunks: Option<usize>,
 }
 
-fn default_gliner_mode()            -> String      { "span".to_string() }
+fn default_gliner_mode() -> String {
+    "span".to_string()
+}
 // Kept in sync with `GlinerConfig::default()` in config/mod.rs (canonical runtime
 // defaults). The drift-guard test `gliner_setconfig_default_matches_runtime` enforces it.
-fn default_gliner_entity_labels()   -> Vec<String> { vec!["person".into(), "organization".into(), "location".into(), "concept".into()] }
-fn default_gliner_relation_labels() -> Vec<String> { vec!["related to".into(), "part of".into(), "causes".into()] }
-fn default_entity_threshold()       -> f32         { 0.4 }
-fn default_relation_threshold()     -> f32         { 0.5 }
+fn default_gliner_entity_labels() -> Vec<String> {
+    vec![
+        "person".into(),
+        "organization".into(),
+        "location".into(),
+        "concept".into(),
+    ]
+}
+fn default_gliner_relation_labels() -> Vec<String> {
+    vec!["related to".into(), "part of".into(), "causes".into()]
+}
+fn default_entity_threshold() -> f32 {
+    0.4
+}
+fn default_relation_threshold() -> f32 {
+    0.5
+}
 
 impl Default for GlinerSetConfig {
     fn default() -> Self {
@@ -1834,7 +1849,8 @@ impl SetConfig {
                 } else {
                     // No semantic sub-section: use top-level entity_extraction settings directly
                     config.entities.use_gleaning = self.entity_extraction.use_gleaning;
-                    config.entities.max_gleaning_rounds = self.entity_extraction.max_gleaning_rounds;
+                    config.entities.max_gleaning_rounds =
+                        self.entity_extraction.max_gleaning_rounds;
                     config.entities.min_confidence = self.entity_extraction.min_confidence;
                 }
             },
@@ -1898,15 +1914,15 @@ impl SetConfig {
 
         // Map GLiNER configuration
         config.gliner = crate::config::GlinerConfig {
-            enabled:            self.gliner.enabled,
-            model_path:         self.gliner.model_path.clone(),
-            tokenizer_path:     self.gliner.tokenizer_path.clone(),
-            mode:               self.gliner.mode.clone(),
-            entity_labels:      self.gliner.entity_labels.clone(),
-            relation_labels:    self.gliner.relation_labels.clone(),
-            entity_threshold:   self.gliner.entity_threshold,
+            enabled: self.gliner.enabled,
+            model_path: self.gliner.model_path.clone(),
+            tokenizer_path: self.gliner.tokenizer_path.clone(),
+            mode: self.gliner.mode.clone(),
+            entity_labels: self.gliner.entity_labels.clone(),
+            relation_labels: self.gliner.relation_labels.clone(),
+            entity_threshold: self.gliner.entity_threshold,
             relation_threshold: self.gliner.relation_threshold,
-            use_gpu:            self.gliner.use_gpu,
+            use_gpu: self.gliner.use_gpu,
             max_concurrent_chunks: self.gliner.max_concurrent_chunks,
         };
 

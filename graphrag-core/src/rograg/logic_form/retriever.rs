@@ -47,8 +47,9 @@ impl LogicFormRetriever {
     ///
     /// Returns a `LogicFormRetriever` ready for query processing.
     pub fn new() -> Self {
-        let parsers: Vec<Box<dyn LogicFormParser>> =
-            vec![Box::new(PatternBasedParser::new().expect("static pattern set"))];
+        let parsers: Vec<Box<dyn LogicFormParser>> = vec![Box::new(
+            PatternBasedParser::new().expect("static pattern set"),
+        )];
 
         Self {
             parsers,
@@ -214,4 +215,3 @@ impl LogicFormRetriever {
         ]
     }
 }
-

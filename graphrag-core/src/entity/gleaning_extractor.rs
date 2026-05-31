@@ -590,7 +590,6 @@ mod tests {
         assert!(tom.description.len() > 10); // Should have the longer description
     }
 
-
     #[test]
     fn test_find_mentions() {
         let ollama_config = OllamaConfig::default();

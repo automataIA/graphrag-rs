@@ -14,7 +14,6 @@ use crate::parallel;
 use super::GraphRAG;
 
 impl GraphRAG {
-
     /// Build the knowledge graph from added documents
     ///
     /// This method implements dynamic pipeline selection based on the configured approach:
@@ -458,12 +457,7 @@ impl GraphRAG {
 
                 // Parallelism cap — ORT GLiNER is thread-safe via Arc<Model>.
                 // Default 4 concurrent inferences (RTX-class CPU/GPU sweet spot).
-                let parallelism = self
-                    .config
-                    .gliner
-                    .max_concurrent_chunks
-                    .unwrap_or(4)
-                    .max(1);
+                let parallelism = self.config.gliner.max_concurrent_chunks.unwrap_or(4).max(1);
 
                 use futures::stream::{self, StreamExt};
                 let mut stream = stream::iter(chunks.iter().cloned())
@@ -471,10 +465,9 @@ impl GraphRAG {
                         let ext = Arc::clone(&extractor);
                         let chunk_id = chunk.id.clone();
                         async move {
-                            let r = tokio::task::spawn_blocking(move || {
-                                ext.extract_from_chunk(&chunk)
-                            })
-                            .await;
+                            let r =
+                                tokio::task::spawn_blocking(move || ext.extract_from_chunk(&chunk))
+                                    .await;
                             (chunk_id, r)
                         }
                     })
@@ -497,10 +490,7 @@ impl GraphRAG {
                             for rel in relationships {
                                 if let Err(e) = graph.add_relationship(rel) {
                                     #[cfg(feature = "tracing")]
-                                    tracing::debug!(
-                                        "GLiNER: failed to add relationship: {}",
-                                        e
-                                    );
+                                    tracing::debug!("GLiNER: failed to add relationship: {}", e);
                                 }
                             }
                         },

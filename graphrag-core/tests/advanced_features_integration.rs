@@ -295,7 +295,8 @@ async fn test_graph_weight_optimization_setup() {
     let _optimizer = GraphWeightOptimizer::with_config(config);
 
     // Test queries for optimization
-    let test_queries = [TestQuery {
+    let test_queries = [
+        TestQuery {
             query: "Who taught Plato?".to_string(),
             expected_answer: "Socrates taught Plato".to_string(),
             weight: 1.0,
@@ -304,7 +305,8 @@ async fn test_graph_weight_optimization_setup() {
             query: "What is the foundation of Western Philosophy?".to_string(),
             expected_answer: "Socrates founded Western Philosophy".to_string(),
             weight: 1.0,
-        }];
+        },
+    ];
 
     // Note: actual optimization requires Ollama for LLM evaluation
     // Here we just test the setup

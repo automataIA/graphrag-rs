@@ -258,7 +258,9 @@ impl QueryValidator {
             relevance_checker: RelevanceChecker::new(),
         };
 
-        validator.initialize_safety_patterns().expect("static safety patterns");
+        validator
+            .initialize_safety_patterns()
+            .expect("static safety patterns");
         validator.initialize_quality_checks();
         validator
     }

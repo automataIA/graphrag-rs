@@ -72,7 +72,6 @@ pub struct GraphRAG {
 }
 
 impl GraphRAG {
-
     /// Ensure system is initialized
     pub(super) fn ensure_initialized(&mut self) -> Result<()> {
         if !self.is_initialized() {
@@ -86,7 +85,6 @@ impl GraphRAG {
 #[cfg(test)]
 mod tests {
     use super::*;
-
 
     #[test]
     fn test_builder_pattern() {

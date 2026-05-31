@@ -926,5 +926,4 @@ mod tests {
             .iter()
             .any(|c| { c.property_name == "age" && matches!(c.change_type, ChangeType::Removed) }));
     }
-
 }

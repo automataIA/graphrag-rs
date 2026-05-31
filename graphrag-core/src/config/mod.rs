@@ -9,11 +9,11 @@ use std::fs;
 
 /// Enhanced configuration options for GraphRAG
 pub mod enhancements;
-/// Hand-rolled JSON loader/writer for `Config` (extracted Phase 4 split).
-mod json_parser;
 /// JSON5 configuration support
 #[cfg(feature = "json5-support")]
 pub mod json5_loader;
+/// Hand-rolled JSON loader/writer for `Config` (extracted Phase 4 split).
+mod json_parser;
 /// Configuration file loading utilities
 pub mod loader;
 /// JSON Schema validation
@@ -1108,8 +1108,7 @@ pub struct EntityConfig {
 }
 
 /// Configuration for advanced GraphRAG features (Phases 2-3)
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 pub struct AdvancedFeaturesConfig {
     /// Phase 2.1: Symbolic Anchoring (CatRAG)
     /// Automatically applied for conceptual queries - no config needed
@@ -1583,7 +1582,6 @@ impl Config {
     }
 }
 
-
 impl Default for SymbolicAnchoringConfig {
     fn default() -> Self {
         Self {
@@ -1732,5 +1730,4 @@ impl Config {
             })?;
         Ok(config)
     }
-
 }

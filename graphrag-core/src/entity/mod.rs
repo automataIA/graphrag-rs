@@ -6,13 +6,13 @@
 
 /// ATOM atomic fact extraction module (Phase 1.3)
 pub mod atomic_fact_extractor;
-/// GLiNER-Relex joint NER + RE extractor (feature-gated: `gliner`)
-#[cfg(feature = "gliner")]
-mod gliner_extractor;
 /// Bidirectional entity-chunk index for fast lookups
 pub mod bidirectional_index;
 /// Gleaning-based entity extraction module
 pub mod gleaning_extractor;
+/// GLiNER-Relex joint NER + RE extractor (feature-gated: `gliner`)
+#[cfg(feature = "gliner")]
+mod gliner_extractor;
 /// LLM-based entity extractor (TRUE LLM extraction, not pattern-based)
 pub mod llm_extractor;
 /// LLM-based relationship extraction module
@@ -25,10 +25,10 @@ pub mod semantic_merging;
 pub mod string_similarity_linker;
 
 pub use atomic_fact_extractor::{AtomicFact, AtomicFactExtractor};
-#[cfg(feature = "gliner")]
-pub use gliner_extractor::GLiNERExtractor;
 pub use bidirectional_index::{BidirectionalIndex, IndexStatistics};
 pub use gleaning_extractor::{ExtractionCompletionStatus, GleaningConfig, GleaningEntityExtractor};
+#[cfg(feature = "gliner")]
+pub use gliner_extractor::GLiNERExtractor;
 pub use llm_extractor::LLMEntityExtractor;
 pub use llm_relationship_extractor::{
     ExtractedEntity, ExtractedRelationship, ExtractionResult, LLMRelationshipExtractor,
@@ -668,7 +668,11 @@ impl EntityExtractor {
             .any(|&prefix| word_lower.starts_with(prefix));
 
         // Must start with uppercase and be alphabetic
-        let is_proper_format = word.chars().next().expect("non-empty string").is_uppercase()
+        let is_proper_format = word
+            .chars()
+            .next()
+            .expect("non-empty string")
+            .is_uppercase()
             && word.chars().all(|c| c.is_alphabetic() || c == '\'');
 
         // Common short words that are rarely names

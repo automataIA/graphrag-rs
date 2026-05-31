@@ -198,9 +198,7 @@ pub fn extract_entities_simple(text: &str) -> ExtractionResult {
 
     // Extract technical terms
     for term in tech_terms.iter() {
-        if text.to_lowercase().contains(&term.to_lowercase())
-            && !seen_names.contains(*term)
-        {
+        if text.to_lowercase().contains(&term.to_lowercase()) && !seen_names.contains(*term) {
             entities.push(Entity {
                 name: term.to_string(),
                 entity_type: "TECHNOLOGY".to_string(),

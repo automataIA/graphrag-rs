@@ -325,7 +325,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn test_function_registration() {
         let mut caller = FunctionCaller::new();

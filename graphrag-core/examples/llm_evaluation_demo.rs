@@ -14,7 +14,8 @@ use graphrag_core::{
         GraphConstructionValidator, LLMEvaluation, LLMEvaluationPrompt, PipelineValidationReport,
         RelationshipExtractionValidator,
     },
-    text::TextProcessor, Document, DocumentId, Entity, EntityId, Relationship, Result,
+    text::TextProcessor,
+    Document, DocumentId, Entity, EntityId, Relationship, Result,
 };
 
 fn main() -> Result<()> {

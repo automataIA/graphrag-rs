@@ -617,7 +617,11 @@ impl OllamaClient {
             message: format!("Failed to serialize generation params: {}", e),
         })?;
 
-        if !options.as_object().expect("options is JSON object").is_empty() {
+        if !options
+            .as_object()
+            .expect("options is JSON object")
+            .is_empty()
+        {
             request_body["options"] = options;
         }
 

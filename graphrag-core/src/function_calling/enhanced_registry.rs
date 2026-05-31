@@ -546,7 +546,6 @@ impl CallableFunction for SummaryGenerationFunction {
 mod tests {
     use super::*;
 
-
     #[test]
     fn test_category_management() {
         let mut registry = EnhancedToolRegistry::new();

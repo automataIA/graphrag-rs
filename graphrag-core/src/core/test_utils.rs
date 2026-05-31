@@ -182,7 +182,10 @@ impl MockVectorStore {
 
     /// Pre-populate with vectors for testing
     pub fn with_vector(self, id: impl Into<String>, vector: Vec<f32>) -> Self {
-        self.vectors.lock().expect("lock poisoned").insert(id.into(), vector);
+        self.vectors
+            .lock()
+            .expect("lock poisoned")
+            .insert(id.into(), vector);
         self
     }
 
@@ -219,7 +222,10 @@ impl AsyncVectorStore for MockVectorStore {
                 ),
             });
         }
-        self.vectors.lock().expect("lock poisoned").insert(id, vector);
+        self.vectors
+            .lock()
+            .expect("lock poisoned")
+            .insert(id, vector);
         Ok(())
     }
 
@@ -255,7 +261,11 @@ impl AsyncVectorStore for MockVectorStore {
             .collect();
 
         // Sort by distance (ascending)
-        results.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            a.distance
+                .partial_cmp(&b.distance)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Take top k
         Ok(results.into_iter().take(k).collect())
@@ -275,7 +285,12 @@ impl AsyncVectorStore for MockVectorStore {
     }
 
     async fn remove_vector(&mut self, id: &str) -> Result<bool> {
-        Ok(self.vectors.lock().expect("lock poisoned").remove(id).is_some())
+        Ok(self
+            .vectors
+            .lock()
+            .expect("lock poisoned")
+            .remove(id)
+            .is_some())
     }
 
     async fn len(&self) -> usize {

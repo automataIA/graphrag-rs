@@ -81,15 +81,19 @@ impl TextAnalyzer {
         static ALPHA_REGEX: OnceLock<Regex> = OnceLock::new();
         static CHAPTER_REGEX: OnceLock<Regex> = OnceLock::new();
 
-        let decimal_re =
-            DECIMAL_REGEX.get_or_init(|| Regex::new(r"^(\d+(?:\.\d+)*)\s*[.:]?\s").expect("static regex literal"));
+        let decimal_re = DECIMAL_REGEX.get_or_init(|| {
+            Regex::new(r"^(\d+(?:\.\d+)*)\s*[.:]?\s").expect("static regex literal")
+        });
 
-        let roman_re = ROMAN_REGEX.get_or_init(|| Regex::new(r"^([IVXLCDM]+)[.:]?\s").expect("static regex literal"));
+        let roman_re = ROMAN_REGEX
+            .get_or_init(|| Regex::new(r"^([IVXLCDM]+)[.:]?\s").expect("static regex literal"));
 
-        let alpha_re = ALPHA_REGEX.get_or_init(|| Regex::new(r"^([A-Z])[.:]?\s").expect("static regex literal"));
+        let alpha_re = ALPHA_REGEX
+            .get_or_init(|| Regex::new(r"^([A-Z])[.:]?\s").expect("static regex literal"));
 
         let chapter_re = CHAPTER_REGEX.get_or_init(|| {
-            Regex::new(r"(?i)^(chapter|section|part|appendix)\s+(\d+|[IVXLCDM]+|[A-Z])\b").expect("static regex literal")
+            Regex::new(r"(?i)^(chapter|section|part|appendix)\s+(\d+|[IVXLCDM]+|[A-Z])\b")
+                .expect("static regex literal")
         });
 
         // Try decimal numbering (most common)

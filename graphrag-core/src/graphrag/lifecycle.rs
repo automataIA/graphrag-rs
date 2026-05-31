@@ -171,7 +171,6 @@ impl GraphRAG {
         Ok(())
     }
 
-
     /// Clear all entities and relationships from the knowledge graph
     ///
     /// This method preserves documents and text chunks but removes all extracted entities and relationships.

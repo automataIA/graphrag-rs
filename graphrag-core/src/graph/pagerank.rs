@@ -82,8 +82,8 @@ impl PersonalizedPageRank {
         reverse_mapping: HashMap<usize, EntityId>,
     ) -> Self {
         let n = adjacency_matrix.rows();
-        let cache_size =
-            NonZeroUsize::new(config.cache_size).unwrap_or(NonZeroUsize::new(1000).expect("non-zero literal"));
+        let cache_size = NonZeroUsize::new(config.cache_size)
+            .unwrap_or(NonZeroUsize::new(1000).expect("non-zero literal"));
 
         // Compute out-degrees for normalization
         let out_degrees = Self::compute_out_degrees(&adjacency_matrix);

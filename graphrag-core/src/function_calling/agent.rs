@@ -279,7 +279,14 @@ impl GraphRAGAgent {
             // Try to extract key terms from query
             let key_terms: Vec<&str> = query
                 .split_whitespace()
-                .filter(|word| word.len() > 3 && word.chars().next().expect("non-empty string").is_uppercase())
+                .filter(|word| {
+                    word.len() > 3
+                        && word
+                            .chars()
+                            .next()
+                            .expect("non-empty string")
+                            .is_uppercase()
+                })
                 .collect();
 
             for term in key_terms.iter().take(3) {
@@ -425,7 +432,6 @@ impl Default for GraphRAGAgent {
 mod tests {
     use super::*;
     use crate::core::{Entity, EntityId, KnowledgeGraph};
-
 
     #[test]
     fn test_entity_extraction_from_query() {

@@ -52,7 +52,9 @@ impl MetricsCollector {
 
     /// Get the current value of a gauge
     pub fn get_gauge(&self, name: &str) -> Option<f64> {
-        self.gauges.get(name).map(|gauge| *gauge.read().expect("rwlock poisoned"))
+        self.gauges
+            .get(name)
+            .map(|gauge| *gauge.read().expect("rwlock poisoned"))
     }
 
     /// Get histogram statistics
@@ -99,7 +101,12 @@ impl MetricsCollector {
     pub fn get_all_gauges(&self) -> HashMap<String, f64> {
         self.gauges
             .iter()
-            .map(|entry| (entry.key().clone(), *entry.value().read().expect("rwlock poisoned")))
+            .map(|entry| {
+                (
+                    entry.key().clone(),
+                    *entry.value().read().expect("rwlock poisoned"),
+                )
+            })
             .collect()
     }
 

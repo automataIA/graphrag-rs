@@ -324,7 +324,11 @@ impl AsyncGraphRAG {
         }
 
         // Sort by score and limit results
-        all_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        all_results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         all_results.truncate(max_results);
 
         Ok(all_results)
@@ -600,4 +604,3 @@ impl Default for AsyncGraphRAGBuilder {
         Self::new()
     }
 }
-

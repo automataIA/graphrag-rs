@@ -116,7 +116,6 @@ mod tests {
     }
 
     #[cfg(feature = "incremental")]
-
     #[cfg(feature = "incremental")]
     #[test]
     fn test_batch_processor_creation() {

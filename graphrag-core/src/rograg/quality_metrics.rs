@@ -1198,8 +1198,8 @@ impl QualityMetrics {
             return;
         }
 
-        let time_span =
-            recent_queries.first().expect("non-empty").timestamp - recent_queries.last().expect("non-empty").timestamp;
+        let time_span = recent_queries.first().expect("non-empty").timestamp
+            - recent_queries.last().expect("non-empty").timestamp;
         if time_span > 0 {
             self.performance_stats.throughput_qps = recent_queries.len() as f64 / time_span as f64;
         }

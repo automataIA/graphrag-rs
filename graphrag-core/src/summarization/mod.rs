@@ -937,7 +937,11 @@ impl DocumentTree {
         }
 
         // Sort by score and return top results
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         results.truncate(max_results);
 
         Ok(results)
@@ -1271,7 +1275,6 @@ impl TreeStatistics {
 mod tests {
     use super::*;
     use crate::core::DocumentId;
-
 
     #[test]
     fn test_extractive_summarization() {

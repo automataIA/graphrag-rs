@@ -35,7 +35,10 @@ pub fn parse_markdown(text: &str) -> Vec<Line<'static>> {
 
         // Horizontal rule (--- or ===)
         if raw_line.trim().len() >= 3
-            && raw_line.trim().chars().all(|c| c == '-' || c == '=' || c == '━')
+            && raw_line
+                .trim()
+                .chars()
+                .all(|c| c == '-' || c == '=' || c == '━')
         {
             lines.push(Line::from(vec![Span::styled(
                 "━".repeat(50),
@@ -67,17 +70,17 @@ pub fn parse_markdown(text: &str) -> Vec<Line<'static>> {
         // Bullets: - item or * item
         if raw_line.starts_with("- ") || raw_line.starts_with("* ") {
             let content = &raw_line[2..];
-            let mut spans =
-                vec![Span::styled("  • ".to_owned(), Style::default().fg(Color::Cyan))];
+            let mut spans = vec![Span::styled(
+                "  • ".to_owned(),
+                Style::default().fg(Color::Cyan),
+            )];
             spans.extend(parse_inline(content));
             lines.push(Line::from(spans));
             continue;
         }
 
         // Indented bullets: "  - item"
-        if (raw_line.starts_with("  - ") || raw_line.starts_with("  * "))
-            && raw_line.len() > 4
-        {
+        if (raw_line.starts_with("  - ") || raw_line.starts_with("  * ")) && raw_line.len() > 4 {
             let content = &raw_line[4..];
             let mut spans = vec![Span::styled(
                 "    ◦ ".to_owned(),
@@ -94,10 +97,7 @@ pub fn parse_markdown(text: &str) -> Vec<Line<'static>> {
                 .fg(Color::DarkGray)
                 .add_modifier(Modifier::ITALIC);
             lines.push(Line::from(vec![
-                Span::styled(
-                    " │ ".to_owned(),
-                    Style::default().fg(Color::DarkGray),
-                ),
+                Span::styled(" │ ".to_owned(), Style::default().fg(Color::DarkGray)),
                 Span::styled(content.to_owned(), style),
             ]));
             continue;
@@ -112,7 +112,9 @@ pub fn parse_markdown(text: &str) -> Vec<Line<'static>> {
 
 fn header_style(level: usize) -> Style {
     match level {
-        1 => Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+        1 => Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
         2 => Style::default()
             .fg(Color::LightBlue)
             .add_modifier(Modifier::BOLD),

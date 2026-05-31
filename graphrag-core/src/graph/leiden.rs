@@ -728,7 +728,6 @@ impl LeidenCommunityDetector {
         let sigma_tot_from = self.total_degree_of_community(graph, from_community, communities);
 
         // Delta Q using Newman's modularity formula
-        
 
         ((k_i_in_to as f32 - k_i_in_from as f32) / total_edges)
             - self.config.resolution

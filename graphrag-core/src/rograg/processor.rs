@@ -982,7 +982,6 @@ mod tests {
     }
 
     #[cfg(feature = "rograg")]
-
     #[cfg(feature = "rograg")]
     #[tokio::test]
     async fn test_processor_with_config() {

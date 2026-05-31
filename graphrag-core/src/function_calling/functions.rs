@@ -170,7 +170,8 @@ impl CallableFunction for GraphSearchFunction {
         }
 
         // Sort by relevance score and limit results
-        matching_entities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        matching_entities
+            .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         matching_entities.truncate(limit);
 
         let results: Vec<JsonValue> = matching_entities

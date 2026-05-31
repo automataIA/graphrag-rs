@@ -61,7 +61,6 @@ mod tests {
         graph
     }
 
-
     #[cfg(feature = "rograg")]
     #[test]
     fn test_executor_is_query() {

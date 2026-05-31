@@ -696,7 +696,11 @@ impl RetrievalSystem {
             let similarity = store_result.score;
             if similarity >= self.config.similarity_threshold {
                 let result = if id.starts_with("entity:") {
-                    let entity_id = EntityId::new(id.strip_prefix("entity:").expect("prefix checked").to_string());
+                    let entity_id = EntityId::new(
+                        id.strip_prefix("entity:")
+                            .expect("prefix checked")
+                            .to_string(),
+                    );
                     graph.get_entity(&entity_id).map(|entity| SearchResult {
                         id: entity.id.to_string(),
                         content: entity.name.clone(),
@@ -710,7 +714,11 @@ impl RetrievalSystem {
                             .collect(),
                     })
                 } else if id.starts_with("chunk:") {
-                    let chunk_id = ChunkId::new(id.strip_prefix("chunk:").expect("prefix checked").to_string());
+                    let chunk_id = ChunkId::new(
+                        id.strip_prefix("chunk:")
+                            .expect("prefix checked")
+                            .to_string(),
+                    );
                     if let Some(chunk) = graph.get_chunk(&chunk_id) {
                         let entity_names: Vec<String> = chunk
                             .entities
@@ -993,18 +1001,15 @@ impl RetrievalSystem {
         // Apply query-specific score adjustments
         for result in &mut results {
             match analysis.query_type {
-                QueryType::EntityFocused
-                    if result.result_type == ResultType::Entity => {
-                        result.score *= 1.2;
-                    },
-                QueryType::Conceptual
-                    if result.result_type == ResultType::HierarchicalSummary => {
-                        result.score *= 1.1;
-                    },
-                QueryType::Relationship
-                    if result.entities.len() > 1 => {
-                        result.score *= 1.15;
-                    },
+                QueryType::EntityFocused if result.result_type == ResultType::Entity => {
+                    result.score *= 1.2;
+                },
+                QueryType::Conceptual if result.result_type == ResultType::HierarchicalSummary => {
+                    result.score *= 1.1;
+                },
+                QueryType::Relationship if result.entities.len() > 1 => {
+                    result.score *= 1.15;
+                },
                 _ => {},
             }
 
@@ -1021,7 +1026,11 @@ impl RetrievalSystem {
         }
 
         // Sort by adjusted scores
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Diversity-aware deduplication
         let mut deduplicated = Vec::new();
@@ -1324,7 +1333,11 @@ impl RetrievalSystem {
     /// Rank and deduplicate search results (legacy)
     fn rank_and_deduplicate(&self, mut results: Vec<SearchResult>) -> Result<Vec<SearchResult>> {
         // Sort by score descending
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Deduplicate by ID
         let mut seen_ids = HashSet::new();
@@ -1507,7 +1520,6 @@ impl RetrievalSystem {
 mod tests {
     use super::*;
     use crate::{config::Config, core::KnowledgeGraph};
-
 
     #[test]
     fn test_query_placeholder() {

@@ -877,11 +877,7 @@ impl KnowledgeGraph {
         } else {
             // Build using triplet matrix first, then convert to CSR
             let mut triplet_mat = sprs::TriMat::new((nodes.len(), nodes.len()));
-            for ((row, col), val) in row_indices
-                .into_iter()
-                .zip(col_indices)
-                .zip(values)
-            {
+            for ((row, col), val) in row_indices.into_iter().zip(col_indices).zip(values) {
                 triplet_mat.add_triplet(row, col, val);
             }
             triplet_mat.to_csr()

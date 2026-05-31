@@ -515,9 +515,7 @@ impl LazyPropagationEngine {
     /// Register a dependency relationship
     pub fn add_dependency(&self, node_id: String, depends_on: String) {
         let mut deps = self.dependencies.write();
-        deps.entry(depends_on)
-            .or_default()
-            .insert(node_id);
+        deps.entry(depends_on).or_default().insert(node_id);
     }
 
     /// Get all nodes that depend on a given node

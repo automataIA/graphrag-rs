@@ -554,7 +554,6 @@ mod tests {
         assert!(config.validate().is_err());
     }
 
-
     #[tokio::test]
     async fn test_predefined_queries() {
         let config = WarmingConfig::builder()

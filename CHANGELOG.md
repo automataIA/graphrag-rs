@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+#### CI green: cargo-deny advisories/licenses + rustfmt (2026-05-31)
+- **Vulnerabilities patched via lockfile bumps:** `rand` 0.8.5→0.8.6 and 0.9.2→0.9.4
+  (RUSTSEC-2026-0097 unsoundness), `bytes` 1.10.1→1.11.1 (RUSTSEC-2026-0007 integer overflow),
+  `rustls-webpki` 0.103.7→0.103.13 (RUSTSEC-2026-0049/0098/0099/0104 — CRL + name-constraint
+  vulns). All patch-level, non-breaking.
+- **`deny.toml` licenses:** added `BSL-1.0` (Boost) and `CDLA-Permissive-2.0` (Mozilla CA bundle
+  via `webpki-roots`) to the allow-list — both permissive, were failing the licenses job.
+- **`deny.toml` advisory ignores (unfixable here, documented inline):** unmaintained transitive
+  crates `proc-macro-error`, `bincode`, `json`, `number_prefix`, `paste`, `rustls-pemfile`;
+  `lru` 0.12 unsoundness (RUSTSEC-2026-0002, pinned by ratatui 0.29, unreachable in our usage);
+  and `time` DoS (RUSTSEC-2026-0009) — its fix (≥0.3.47) requires rustc 1.88, above our MSRV 1.85,
+  so `time` is held at 0.3.44 and the advisory accepted (reachable only via untrusted RFC-2822
+  parsing in the server, not core/cli). Revisit when MSRV moves to ≥1.88.
+- **Formatting:** ran `cargo fmt --all` over the workspace (71 files) to clear the long-standing
+  `rustfmt` CI job. Mechanical, no behavior change.
+
 ### Added
 
 #### Documentation site (2026-05-31)
