@@ -147,10 +147,13 @@ package-lock.json
 # WASM Build Artifacts
 # ============================================
 /dist
+graphrag-wasm/dist/
 .playwright-cli/
 /pkg
 wasm-pack.log
 graphrag-wasm/pkg/
+# Large ML model (87 MB, downloadable) — do not track
+graphrag-wasm/models/
 
 # ============================================
 # Documentation Generation
@@ -208,7 +211,6 @@ config_*.json
 
 # Large test files (keep originals in docs-example)
 # *.txt  # Uncomment if needed
-graphrag-wasm/dist/models/minilm-l6.onnx
 
 # exclude auto-generated or specific md files if necessary,
 # but keep general .md (article.md, README.md, etc.)
