@@ -729,7 +729,6 @@ mod tests {
                 .replace("{entities}", "- Pinocchio (PERSON)\n- Geppetto (PERSON)")
                 .replace("{input_text}", text)
         );
-        assert!(!EPISTEMIC_PROMPT_BLOCK.is_empty());
     }
 
     #[test]

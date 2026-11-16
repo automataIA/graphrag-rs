@@ -274,12 +274,34 @@ fn load_json5_config(_content: &str) -> Result<Config> {
 
 #[cfg(feature = "yaml-support")]
 fn load_yaml_config(content: &str) -> Result<Config> {
-    let raw_config: RawConfig =
+    let value: serde_json::Value =
         serde_yaml::from_str(content).map_err(|e| GraphRAGError::Config {
             message: format!("Failed to parse YAML config: {e}"),
         })?;
 
-    convert_raw_config(raw_config)
+    match classify_config(&value)? {
+        ConfigKind::Runtime => {
+            checked_runtime_config(serde_yaml::from_str(content).map_err(|e| {
+                GraphRAGError::Config {
+                    message: format!("Failed to parse runtime YAML config: {e}"),
+                }
+            })?)
+        },
+        ConfigKind::Set => {
+            let set_config: crate::config::SetConfig =
+                serde_json::from_value(value).map_err(|e| GraphRAGError::Config {
+                    message: format!("Failed to parse SetConfig: {e}"),
+                })?;
+            checked_set_config(set_config)
+        },
+        ConfigKind::Legacy => {
+            let raw_config: RawConfig =
+                serde_json::from_value(value).map_err(|e| GraphRAGError::Config {
+                    message: format!("Failed to parse legacy YAML config: {e}"),
+                })?;
+            convert_raw_config(raw_config)
+        },
+    }
 }
 
 #[cfg(not(feature = "yaml-support"))]
@@ -785,5 +807,34 @@ mod tests {
             err.to_string().contains("`ollama` section was removed"),
             "{err}"
         );
+    }
+
+    #[cfg(feature = "yaml-support")]
+    #[test]
+    fn yaml_config_round_trips_runtime_config() {
+        let mut config = Config::default();
+        config.output_dir = "./yaml-round-trip-output".to_string();
+        config.text.chunk_size = 731;
+
+        let path = tempfile::NamedTempFile::new().unwrap();
+        let path = path.path().with_extension("yaml");
+        save_config(&config, path.to_str().unwrap()).unwrap();
+
+        let loaded = load_config(path.to_str().unwrap()).unwrap();
+        assert_eq!(loaded.output_dir, config.output_dir);
+        assert_eq!(loaded.text.chunk_size, config.text.chunk_size);
+
+        fs::remove_file(path).unwrap();
+    }
+
+    #[cfg(feature = "yaml-support")]
+    #[test]
+    fn yaml_legacy_configuration_is_still_supported() {
+        let content =
+            "system:\n  output_dir: ./legacy-output\ntext_processing:\n  chunk_size: 640\n";
+        let config = load_config_from_str(content, ConfigFormat::Yaml).unwrap();
+
+        assert_eq!(config.output_dir, "./legacy-output");
+        assert_eq!(config.text.chunk_size, 640);
     }
 }

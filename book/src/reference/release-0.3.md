@@ -9,7 +9,7 @@ outside the ordinary CI path.
 
 The workspace contains five packages: `graphrag-core`, `graphrag`,
 `graphrag-cli`, `graphrag-server`, and `graphrag-wasm`. All packages inherit
-version `0.3.0` and Rust `1.88` from the workspace. The facade's default
+version `0.3.0` and Rust `1.89` from the workspace. The facade's default
 features are `async`, `memory-storage`, and `basic-retrieval`; its minimal
 feature set has no Tokio or CLI dependency. The WASM check is run separately
 for `graphrag-wasm` with `wasm32-unknown-unknown`.

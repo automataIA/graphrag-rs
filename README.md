@@ -17,7 +17,7 @@ own documents before choosing a provider for a production workload.
 
 ## Quick start
 
-Requirements: Rust 1.88 or newer and a UTF-8 text file (`.txt`, Markdown, or
+Requirements: Rust 1.89 or newer and a UTF-8 text file (`.txt`, Markdown, or
 another plain text format). PDF parsing is not part of the base path; extract PDF
 text before indexing it.
 

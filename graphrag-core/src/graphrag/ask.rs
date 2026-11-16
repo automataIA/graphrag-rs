@@ -988,7 +988,7 @@ fn build_context_parts_excluding(
 
     for result in search_results.iter().filter(|r| {
         r.result_type != ResultType::Chunk
-            && !(r.result_type == ResultType::Entity && !r.source_chunks.is_empty())
+            && (r.result_type != ResultType::Entity || r.source_chunks.is_empty())
     }) {
         if !seen_text.insert(result.content.trim().to_string()) {
             continue;

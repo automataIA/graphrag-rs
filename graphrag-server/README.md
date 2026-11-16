@@ -137,6 +137,6 @@ cargo run --locked -p graphrag-server --features qdrant
 cargo run --locked -p graphrag-server --features 'qdrant,llm'
 ```
 
-The server is version `0.3.0` and follows the workspace Rust 1.88 MSRV. For
+The server is version `0.3.0` and follows the workspace Rust 1.89 MSRV. For
 core pipeline APIs and sync/async examples, see the root and facade crate
 README files.

@@ -9,10 +9,19 @@
 all-features = true
 
 [advisories]
-# Fail on any security advisory in the RustSec database.
+# Fail on RustSec advisories except the documented exceptions below.
 version = 2
 yanked = "warn"
 ignore = [
+    # zip 1.1.4 is only used by candle-core 0.8.4 for reading model
+    # archives; candle-core does not call ZipArchive::extract or stream
+    # extraction, the affected APIs in these four advisories. GLiNER2 pins
+    # Candle 0.8, so the fixed zip 9 cannot be selected directly. Recheck the
+    # dependency graph and Candle call sites when updating, and by 2027-03-01.
+    "RUSTSEC-2026-0367",
+    "RUSTSEC-2026-0368",
+    "RUSTSEC-2026-0369",
+    "RUSTSEC-2026-0429",
     # --- Unmaintained transitive crates (informational, no safe upgrade) ---
     # Remove each once the upstream that pulls it migrates away.
     "RUSTSEC-2025-0141", # bincode — transitive

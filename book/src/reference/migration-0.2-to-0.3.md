@@ -1,7 +1,7 @@
 # Migrating from 0.2 to 0.3
 
 GraphRAG-rs 0.3 keeps the workspace at five crates and raises the supported
-native toolchain to Rust 1.88. The base path remains local and works without an
+native toolchain to Rust 1.89. The base path remains local and works without an
 LLM service. Review the changes below before updating an application.
 
 ## Configuration

@@ -6,19 +6,25 @@
 //! chunk. Summary chunks are not part of `Document::chunks`, are never sent to entity
 //! extraction and are never summarised again (`is_summary_chunk`).
 
-use crate::core::{ChunkId, DocumentId, TextChunk};
+use crate::core::TextChunk;
+#[cfg(any(feature = "async", test))]
+use crate::core::{ChunkId, DocumentId};
 
+#[cfg(feature = "async")]
 use super::GraphRAG;
 
 /// Chunks per group when a document carries no chapter metadata at all.
+#[cfg(any(feature = "async", test))]
 pub(super) const FALLBACK_GROUP_SIZE: usize = 12;
 
 /// Cap of the chapter text sent in one call (characters, cut at a chunk boundary).
+#[cfg(any(feature = "async", test))]
 pub(super) const MAX_INPUT_CHARS: usize = 24_000;
 
 const ID_INFIX: &str = "_summary_";
 
 /// Id of the summary chunk of group `index` of document `doc`.
+#[cfg(any(feature = "async", test))]
 pub(super) fn summary_chunk_id(doc: &DocumentId, index: usize) -> ChunkId {
     ChunkId::new(format!("{doc}{ID_INFIX}{index}"))
 }
@@ -36,6 +42,7 @@ pub fn is_summary_chunk_id(id: &str) -> bool {
 
 /// Consecutive chunks of one document summarised together.
 #[derive(Debug, Clone)]
+#[cfg(any(feature = "async", test))]
 pub(super) struct SummaryGroup {
     /// Position among the groups of the document (0-based, part of the chunk id)
     pub index: usize,
@@ -47,6 +54,7 @@ pub(super) struct SummaryGroup {
     pub chunks: Vec<TextChunk>,
 }
 
+#[cfg(any(feature = "async", test))]
 impl SummaryGroup {
     /// Fixed marker line that opens the content of the summary chunk.
     pub fn marker(&self) -> String {
@@ -61,6 +69,7 @@ impl SummaryGroup {
 /// consecutive chunks with the same `metadata.chapter`, or groups of
 /// [`FALLBACK_GROUP_SIZE`] when no chunk carries a chapter. Chunks without chapter inside a
 /// document that has some form their own runs (labelled by chunk range).
+#[cfg(any(feature = "async", test))]
 pub(super) fn group_chunks(chunks: &[TextChunk]) -> Vec<SummaryGroup> {
     let chunks: Vec<&TextChunk> = chunks.iter().filter(|c| !is_summary_chunk(c)).collect();
     let any_chapter = chunks.iter().any(|c| c.metadata.chapter.is_some());
@@ -90,6 +99,7 @@ pub(super) fn group_chunks(chunks: &[TextChunk]) -> Vec<SummaryGroup> {
 
 /// Prompt of one summary call: static instructions first, the chapter text last (the
 /// server prompt cache reuses the shared prefix).
+#[cfg(any(feature = "async", test))]
 pub(super) fn build_summary_prompt(text: &str) -> String {
     format!(
         "Summarise what happens in the part of the text given below (a chapter or a run of \
@@ -106,6 +116,7 @@ TEXT:\n{text}"
 
 /// Chapter text for one group: chunk texts joined in order, cut at a chunk boundary once
 /// [`MAX_INPUT_CHARS`] would be exceeded. The flag says whether chunks were left out.
+#[cfg(any(feature = "async", test))]
 pub(super) fn group_input(group: &SummaryGroup) -> (String, bool) {
     let mut text = String::new();
     for (i, chunk) in group.chunks.iter().enumerate() {

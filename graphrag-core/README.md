@@ -123,5 +123,5 @@ cargo check -p graphrag-core --no-default-features --locked
 cargo fmt --all --check
 ```
 
-The package requires Rust 1.88, matching the workspace and its current WASM/UI
+The package requires Rust 1.89, matching the workspace and its current WASM/UI
 dependencies.

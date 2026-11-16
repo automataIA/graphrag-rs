@@ -11,8 +11,8 @@ resolver = "2"
 [workspace.package]
 version = "0.3.0"
 edition = "2021"
-# Leptos 0.8 and its transitive UI stack require Rust 1.88.
-rust-version = "1.88"
+# Actix Web security fixes require Rust 1.89.
+rust-version = "1.89"
 authors = ["GraphRAG-RS Contributors"]
 license = "MIT"
 repository = "https://github.com/automataIA/graphrag-rs"
@@ -38,7 +38,7 @@ tower = { version = "0.4", features = ["full"] }
 tower-http = { version = "0.5", features = ["fs", "trace", "cors"] }
 
 # Actix-web + Apistos for OpenAPI
-actix-web = { version = "4.9", features = ["macros"] }
+actix-web = { version = "4.18.2", features = ["macros"] }
 actix-cors = "0.7"
 actix-rt = "2.10"
 apistos = { version = "0.6", features = ["swagger-ui"] }
@@ -70,7 +70,7 @@ bcrypt = "0.15"
 
 # Serialization formats
 toml = "0.8"
-serde_yaml = "0.9"
+serde_yaml = { package = "serde-saphyr", version = ">=1.1, <1.2" }
 
 # Graph algorithms
 petgraph = { version = "0.6", default-features = false, features = ["serde-1"] }
@@ -128,9 +128,9 @@ chrono = { version = "0.4.38", default-features = false, features = [
 uuid = { version = "1.0", features = ["v4", "serde"] }
 
 # Vector databases (optional, for persistent storage)
-# NOTE: lancedb 0.26.2 should be compatible with arrow 56
+# LanceDB uses Arrow 57 types; Parquet persistence uses Arrow 60 separately.
 lancedb = "0.26.2"
-arrow = { version = "57", default-features = false }
+arrow = { version = "60", default-features = false }
 arrow-array = "57"
 arrow-schema = "57"
 

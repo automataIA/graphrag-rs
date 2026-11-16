@@ -2,7 +2,7 @@
 name = "graphrag-quickstart-sync"
 version = "0.3.0"
 edition = "2021"
-rust-version = "1.88"
+rust-version = "1.89"
 publish = false
 
 [workspace]

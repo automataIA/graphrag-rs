@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${GRAPHRAG_RUN_PRE_PUSH_CHECKS:-}" != "1" ]]; then
+  exit 0
+fi
+
+repo_root="$(git rev-parse --show-toplevel)"
+exec "$repo_root/scripts/ci/check-pre-push.sh"

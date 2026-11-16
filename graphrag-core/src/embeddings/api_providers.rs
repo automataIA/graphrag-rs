@@ -263,13 +263,13 @@ impl HttpEmbeddingProvider {
             .set("Content-Type", "application/json")
             .send_json(request_body)
             .map_err(|e| GraphRAGError::Embedding {
-                message: format!("HTTP request failed: {}", e),
+                message: format!("HTTP request failed: {e}"),
             })?;
 
         // Parse response
         let json_response: serde_json::Value =
             response.into_json().map_err(|e| GraphRAGError::Embedding {
-                message: format!("Failed to parse JSON response: {}", e),
+                message: format!("Failed to parse JSON response: {e}"),
             })?;
 
         // Extract embedding based on provider response format
@@ -368,13 +368,13 @@ impl HttpEmbeddingProvider {
             .set("Content-Type", "application/json")
             .send_json(request_body)
             .map_err(|e| GraphRAGError::Embedding {
-                message: format!("Batch HTTP request failed: {}", e),
+                message: format!("Batch HTTP request failed: {e}"),
             })?;
 
         // Parse response
         let json_response: serde_json::Value =
             response.into_json().map_err(|e| GraphRAGError::Embedding {
-                message: format!("Failed to parse batch JSON response: {}", e),
+                message: format!("Failed to parse batch JSON response: {e}"),
             })?;
 
         // Extract embeddings based on provider response format
