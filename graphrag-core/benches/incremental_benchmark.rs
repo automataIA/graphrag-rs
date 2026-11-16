@@ -18,15 +18,15 @@ use std::collections::HashMap;
 /// Generate a test document with realistic content
 fn generate_test_node(id: usize) -> GraphNode {
     GraphNode {
-        id: format!("node_{}", id),
-        label: format!("Test Node {}", id),
+        id: format!("node_{id}"),
+        label: format!("Test Node {id}"),
         node_type: NodeType::Entity,
         attributes: HashMap::from([
             ("type".to_string(), "test_entity".to_string()),
             ("index".to_string(), id.to_string()),
             (
                 "description".to_string(),
-                format!("This is test node number {}", id),
+                format!("This is test node number {id}"),
             ),
             ("category".to_string(), (id % 10).to_string()),
         ]),
@@ -297,10 +297,7 @@ fn bench_snapshot_creation(c: &mut Criterion) {
                 }
 
                 // Benchmark snapshot creation
-                b.iter(|| {
-                    let snapshot = black_box(manager.create_snapshot());
-                    snapshot
-                });
+                b.iter(|| black_box(manager.create_snapshot()));
             },
         );
     }

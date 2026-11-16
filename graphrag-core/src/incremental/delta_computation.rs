@@ -373,7 +373,7 @@ impl DeltaComputer {
 
         // Insert all edge keys
         for (source, target) in snapshot.edges.keys() {
-            let edge_key = format!("{}:{}", source, target);
+            let edge_key = format!("{source}:{target}");
             bloom.insert(&edge_key);
         }
 
@@ -757,7 +757,7 @@ mod tests {
 
     fn create_test_edge(source: &str, target: &str, edge_type: &str) -> EdgeSnapshot {
         let properties = HashMap::new();
-        let content_hash = format!("{}-{}-{}", source, target, edge_type);
+        let content_hash = format!("{source}-{target}-{edge_type}");
 
         EdgeSnapshot {
             source: source.to_string(),

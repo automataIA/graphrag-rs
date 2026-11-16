@@ -124,8 +124,10 @@ pub fn parse_answer_with_cites(raw: &str, ref_count: usize) -> Vec<AnswerSegment
                 }
             }
         }
-        buf.push(bytes[i] as char);
-        i += 1;
+        // `i` is always on a char boundary: only ASCII `[`, digits and `]` are skipped bytewise.
+        let ch = raw[i..].chars().next().unwrap_or_default();
+        buf.push(ch);
+        i += ch.len_utf8();
     }
     if !buf.is_empty() {
         out.push(AnswerSegment::Text(buf));
@@ -136,6 +138,37 @@ pub fn parse_answer_with_cites(raw: &str, ref_count: usize) -> Vec<AnswerSegment
         }
     }
     out
+}
+
+// ─── Keyword fallback ───────────────────────────────────────────────────────
+
+fn terms(text: &str) -> HashSet<String> {
+    text.split(|c: char| !c.is_alphanumeric())
+        .filter(|w| w.chars().count() >= 4)
+        .map(str::to_lowercase)
+        .collect()
+}
+
+/// Rank chunks by the fraction of (4+ char) query terms they contain.
+/// Used when vector search is unavailable (no ONNX model) or returns nothing.
+pub fn keyword_rank<'a>(
+    chunks: impl Iterator<Item = (&'a str, &'a str)>,
+    query: &str,
+    k: usize,
+) -> Vec<(String, f64)> {
+    let query_terms = terms(query);
+    if query_terms.is_empty() {
+        return Vec::new();
+    }
+    let mut scored: Vec<(String, f64)> = chunks
+        .filter_map(|(id, content)| {
+            let hits = terms(content).intersection(&query_terms).count();
+            (hits > 0).then(|| (id.to_string(), hits as f64 / query_terms.len() as f64))
+        })
+        .collect();
+    scored.sort_by(|a, b| b.1.total_cmp(&a.1));
+    scored.truncate(k);
+    scored
 }
 
 // ─── Ref card builder ───────────────────────────────────────────────────────
@@ -332,3 +365,35 @@ fn layout_subgraph(
 // Workaround unused import warning when graphrag is empty
 #[allow(dead_code)]
 fn _phantom_rel(_r: &Relationship) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keyword_rank_orders_chunks_by_query_term_overlap() {
+        let chunks = [
+            ("c1", "Socrates speaks about love."),
+            ("c2", "Diotima teaches Socrates the nature of Love."),
+            ("c3", "Aristophanes tells a myth."),
+        ];
+        let top = keyword_rank(chunks.iter().copied(), "Who is Diotima to Socrates?", 5);
+        let ids: Vec<&str> = top.iter().map(|(id, _)| id.as_str()).collect();
+        assert_eq!(ids, ["c2", "c1"]);
+        assert!(top[0].1 > top[1].1 && top[0].1 <= 1.0);
+    }
+
+    #[test]
+    fn cite_parser_keeps_non_ascii_text_intact() {
+        let segments = parse_answer_with_cites("Diotima è sacerdotessa — vedi [1].", 1);
+        let text: String = segments
+            .iter()
+            .filter_map(|s| match s {
+                AnswerSegment::Text(t) => Some(t.as_str()),
+                AnswerSegment::Cite(_) => None,
+            })
+            .collect();
+        assert_eq!(text, "Diotima è sacerdotessa — vedi .");
+        assert!(matches!(segments[1], AnswerSegment::Cite(1)));
+    }
+}

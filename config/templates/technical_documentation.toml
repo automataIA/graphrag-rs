@@ -2,10 +2,10 @@
 # GraphRAG Configuration Template - TECHNICAL DOCUMENTATION
 # =============================================================================
 # 🎯 FULLY TEXT-AGNOSTIC: Works with ANY technical document without hardcoded assumptions
-# 🚀 100% DYNAMIC: No hardcoded API names, function names, or technology-specific logic
+# 🚀 text-agnostic configuration: No hardcoded API names, function names, or technology-specific logic
 # 📚 Use cases: ANY technical documentation - APIs, manuals, specifications, code docs
 # ⚡ Breakthrough Features: PageRank, Caching, Incremental, ROGRAG, Async processing
-# Based on 2024 research: precision-focused parameters for technical accuracy
+# Performance and quality depend on the selected pipeline and corpus.
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -36,14 +36,14 @@ parallel_execution = true
 # TECHNICAL CHUNKING: Research shows 256-512 tokens optimal for precise technical info
 # Reference: Databricks (2024) "The Ultimate Guide to Chunking Strategies for RAG"
 chunk_size = 512              # Smaller chunks for precise technical concepts (Databricks 2024)
-chunk_overlap = 100           # 20% overlap - minimal for technical precision (Pinecone 2024)
+chunk_overlap = 100           # configured overlap for technical text
 min_chunk_size = 100          # Captures complete technical statements
 clean_control_chars = true
 normalize_whitespace = true
 
 [pipeline.entity_extraction]
 # TECHNICAL ENTITY TYPES: Specialized for technical documentation
-model_name = "llama3.1:8b"
+model_name = "qwen3.5-9b"
 temperature = 0.05            # Very low for technical precision (Medium 2024)
 max_tokens = 800              # Moderate length for technical descriptions
 entity_types = [
@@ -101,7 +101,7 @@ max_community_size = 20       # Moderate-sized technical modules
 # TECHNICAL TEXT PROCESSING
 enabled = true
 chunk_size = 512              # Consistent with pipeline
-chunk_overlap = 100           # 20% overlap for technical precision
+chunk_overlap = 100           # configured overlap for technical text
 min_chunk_size = 100
 max_chunk_size = 1000         # Moderate size for technical concepts
 normalize_whitespace = true
@@ -144,8 +144,8 @@ dependency_relationship_boost = 1.5      # Boost technical dependencies
 [vector_processing]
 # TECHNICAL SEARCH: Precision-focused
 enabled = true
-embedding_model = "nomic-embed-text"
-embedding_dimensions = 768
+embedding_model = "multilingual-e5-small"
+embedding_dimensions = 384
 use_hnsw_index = true
 hnsw_ef_construction = 200    # Standard for technical search
 hnsw_m = 16                   # Balanced connections for technical docs
@@ -168,25 +168,18 @@ config_patterns = ["config", "configuration", "setting", "parameter", "option"]
 error_patterns = ["error", "exception", "failure", "bug", "issue", "troubleshoot"]
 how_to_patterns = ["how to", "steps", "tutorial", "guide", "install", "setup"]
 
-[ollama]
+[llm]
 # TECHNICAL LLM: Precision-optimized
 enabled = true
-host = "http://localhost"
-port = 11434
-chat_model = "llama3.1:8b"
-embedding_model = "nomic-embed-text"
+base_url = "http://127.0.0.1:8080/v1"
+embedding_base_url = "http://127.0.0.1:8081/v1"
+chat_model = "qwen3.5-9b"
+embedding_model = "multilingual-e5-small"
 timeout_seconds = 60          # Standard timeout
 max_retries = 3
 fallback_to_hash = false
 max_tokens = 800              # Concise technical responses
 temperature = 0.1             # Research: low for technical accuracy (IBM 2024)
-
-[ollama.generation]
-# TECHNICAL GENERATION: Highly precise
-temperature = 0.1             # Very low for technical accuracy (phData 2024)
-top_p = 0.7                   # Focused technical responses (AnalyticsVidhya 2024)
-max_tokens = 1000             # Adequate for technical explanations
-stream = false
 
 [performance]
 # TECHNICAL PERFORMANCE: Speed and precision

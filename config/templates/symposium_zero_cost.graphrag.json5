@@ -138,17 +138,17 @@
   },
 
   // ---------------------------------------------------------------------------
-  // OLLAMA: Used ONLY for Final Answer Generation
+  // LLM (llama.cpp): Used ONLY for Final Answer Generation
   // ---------------------------------------------------------------------------
-  ollama: {
+  llm: {
     enabled: true,                      // Enable for query answer generation
-    host: "http://localhost",
-    port: 11434,
-    chat_model: "qwen3:8b-q4_k_m",      // Used ONLY for final natural response
-    embedding_model: "nomic-embed-text",
+    base_url: "http://127.0.0.1:8080/v1",
+    embedding_base_url: "http://127.0.0.1:8081/v1",
+    chat_model: "qwen3.5-9b",      // Used ONLY for final natural response
+    embedding_model: "multilingual-e5-small",
     timeout_seconds: 90,
     max_retries: 3,
-    fallback_to_hash: true,             // CRITICAL: Use hash if LLM unavailable
+    fallback_to_hash: false,  // llama.cpp embeddings never fall back to hash
     max_tokens: 1500,
     temperature: 0.3
   },
@@ -225,9 +225,9 @@
 //   - Query: ~$0.05 (only LLM for natural answer generation)
 //
 // ⏱️ PERFORMANCE:
-//   - Processing: 5-10 seconds (100x faster than LLM approach)
+// Performance and quality depend on the selected pipeline and corpus.
 //   - Retrieval: 50ms (pure algorithmic)
 //   - Query total: ~1-2 seconds (50ms retrieval + LLM generation)
 //
-// 🎯 QUALITY: ~85-90% accuracy (excellent for zero-cost approach)
+// Performance and quality depend on the selected pipeline and corpus.
 // ==========================================================================

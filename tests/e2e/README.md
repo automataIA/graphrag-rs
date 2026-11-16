@@ -17,7 +17,7 @@ End-to-end benchmarks that test different pipeline configurations against real b
 # Run a single pipeline against one book
 ./run_benchmarks.sh --pipeline semantic_qwen3 --book symposium
 
-# Run everything (requires Ollama with models)
+# Run everything (requires llama-server chat on :8080 and embeddings on :8081)
 ./run_benchmarks.sh
 ```
 
@@ -26,12 +26,12 @@ End-to-end benchmarks that test different pipeline configurations against real b
 | # | Dimension | Values |
 |---|-----------|--------|
 | 1 | **Approach** | `algorithmic`, `semantic`, `hybrid` |
-| 2 | **Embeddings** | `hash` (fast), `ollama` (nomic-embed-text) |
+| 2 | **Embeddings** | `hash` (fast), `llama_cpp` (multilingual-e5-small) |
 | 3 | **Entity extraction** | gleaning on/off, rounds 0-4 |
 | 4 | **Graph construction** | max_connections, similarity_threshold |
 | 5 | **Text processing** | chunk_size/overlap: 256/50, 512/100, 800/300 |
 | 6 | **Retrieval** | LightRAG, Leiden, CrossEncoder on/off |
-| 7 | **LLM** | qwen3:8b, llama3.1:8b, mistral-nemo |
+| 7 | **LLM** | qwen3.5-9b (llama-server alias) |
 
 ## Defined Pipelines
 
@@ -39,7 +39,7 @@ End-to-end benchmarks that test different pipeline configurations against real b
 - `algo_hash_small` — hash embeddings, 256/50 chunks
 - `algo_hash_medium` — hash embeddings, 512/100 chunks
 - `algo_hash_large` — hash embeddings, 800/300 chunks, Leiden
-- `algo_ollama_embed` — Ollama embeddings, 512/100 chunks
+- `algo_llama_embed` — llama.cpp embeddings, 512/100 chunks
 
 ### Semantic (require LLM)
 - `semantic_qwen3` — Qwen3 8B, gleaning×2, LightRAG+Leiden
@@ -87,16 +87,16 @@ pipeline_my_custom() {
     cat <<-PARAMS
 name=my_custom
 approach=semantic
-embedding=ollama
-embed_model=nomic-embed-text
-embed_dim=768
+embedding=llama_cpp
+embed_model=multilingual-e5-small
+embed_dim=384
 chunk_size=600
 chunk_overlap=200
 use_gleaning=true
 gleaning_rounds=3
-llm_model=qwen3:8b-q4_k_m
+llm_model=qwen3.5-9b
 llm_temp=0.15
-ollama_enabled=true
+llm_enabled=true
 lightrag=true
 leiden=true
 cross_encoder=true
@@ -110,4 +110,4 @@ Then add it to `ALL_PIPELINES` array.
 
 - `jq` (for JSON processing)
 - `graphrag-cli` (built via `cargo build --release -p graphrag-cli`)
-- Ollama (for semantic/hybrid pipelines) with models listed in `ollama list`
+- llama.cpp `llama-server` (for semantic/hybrid pipelines): chat model on `LLM_BASE_URL` (default `http://127.0.0.1:8080/v1`) and `--embeddings --pooling mean` on `LLM_EMBEDDING_BASE_URL` (default `http://127.0.0.1:8081/v1`)

@@ -20,7 +20,8 @@ use crate::{GraphRAG, Result};
 /// println!("{}", response);
 /// ```
 pub fn answer(document: &str, question: &str) -> Result<String> {
-    GraphRAG::quick_answer(document, question)
+    let mut graphrag = GraphRAG::quick_start_sync(document)?;
+    graphrag.ask_sync(question)
 }
 
 /// Answer a question about a file with one function call

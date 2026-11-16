@@ -1,5 +1,5 @@
 // Advanced text chunking with hierarchical boundary preservation (2024 best practices)
-// Shared utility module implementing state-of-the-art chunking strategies
+// Shared utility module implementing configurable chunking strategies
 
 /// Hierarchical text chunking following LangChain RecursiveCharacterTextSplitter approach
 /// with semantic boundary preservation for optimal RAG performance
@@ -56,6 +56,10 @@ impl HierarchicalChunker {
             while end > start && !text.is_char_boundary(end) {
                 end -= 1;
             }
+            // chunk_size smaller than one character: take that whole character.
+            if end == start {
+                end = start + text[start..].chars().next().map_or(1, char::len_utf8);
+            }
 
             // If we're at the exact end, no need to adjust
             if end >= text.len() {
@@ -95,7 +99,8 @@ impl HierarchicalChunker {
             // Try to align next start with word boundary
             next_start = self.find_word_boundary_backward(text, next_start);
 
-            start = next_start;
+            // Overlap must never pull `start` back to (or before) itself, or the loop never ends.
+            start = if next_start > start { next_start } else { end };
         }
 
         chunks
@@ -133,22 +138,12 @@ impl HierarchicalChunker {
             pos -= 1;
         }
 
-        // Look for whitespace (word boundary) going backward
-        while pos > 0 {
-            if let Some(ch) = text.chars().nth(pos.saturating_sub(1)) {
-                if ch.is_whitespace() {
-                    return pos;
-                }
-            }
-            pos = pos.saturating_sub(1);
-
-            // Ensure we stay on UTF-8 boundaries
-            while pos > 0 && !text.is_char_boundary(pos) {
-                pos -= 1;
-            }
-        }
-
-        pos
+        // Look for whitespace (word boundary) going backward; `pos` is a byte offset.
+        text[..pos]
+            .char_indices()
+            .rev()
+            .find(|(_, ch)| ch.is_whitespace())
+            .map_or(0, |(i, ch)| i + ch.len_utf8())
     }
 
     /// Advanced sentence boundary detection
@@ -287,8 +282,7 @@ mod tests {
             chunks[0].contains("multiple paragraphs")
                 || chunks[0].contains("preserved")
                 || chunks[0].contains("coherence"),
-            "Chunks should contain content from second paragraph. Got: {:?}",
-            chunks
+            "Chunks should contain content from second paragraph. Got: {chunks:?}"
         );
 
         // Verify chunks respect semantic boundaries (don't split in middle of words)
@@ -308,8 +302,7 @@ mod tests {
                     last_char.is_whitespace()
                         || last_char.is_ascii_punctuation()
                         || trimmed == text.trim(),
-                    "Chunk {} should end at word/sentence boundary",
-                    i
+                    "Chunk {i} should end at word/sentence boundary"
                 );
             }
         }
@@ -324,6 +317,53 @@ mod tests {
         if let Some(boundary) = chunker.find_sentence_boundary(text, 0, 30) {
             let chunk = &text[0..boundary];
             assert!(!chunk.ends_with("Dr."));
+        }
+    }
+
+    /// Runs `chunk_text` on a worker thread so a regression fails instead of hanging.
+    fn chunk_with_timeout(text: &str, size: usize, overlap: usize) -> Vec<String> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let text = text.to_string();
+        std::thread::spawn(move || {
+            let _ = tx.send(
+                HierarchicalChunker::new()
+                    .with_min_size(0)
+                    .chunk_text(&text, size, overlap),
+            );
+        });
+        rx.recv_timeout(std::time::Duration::from_secs(5))
+            .expect("chunk_text did not terminate")
+    }
+
+    #[test]
+    fn terminates_when_boundary_pulls_start_back() {
+        // A paragraph break just past the overlap used to reset `start` to itself forever.
+        let text =
+            "Test paragraph one. Test paragraph two.\n\nNew paragraph with different content.";
+        let chunks = chunk_with_timeout(text, 50, 10);
+        assert!(chunks.last().unwrap().contains("different content."));
+    }
+
+    #[test]
+    fn terminates_with_overlap_not_smaller_than_chunk() {
+        let chunks = chunk_with_timeout("alpha beta gamma delta epsilon", 5, 10);
+        assert!(chunks.concat().contains("epsilon"));
+    }
+
+    #[test]
+    fn word_boundaries_use_byte_offsets_with_accents() {
+        let text = "Perché Socrate è già là: così parlò Diotima, città più antica dell'età.";
+        for chunk in chunk_with_timeout(text, 30, 8) {
+            assert!(
+                text.contains(&chunk),
+                "chunk must be a slice of the text: {chunk:?}"
+            );
+            let first = chunk.chars().next().unwrap();
+            let pos = text.find(&chunk).unwrap();
+            assert!(
+                pos == 0 || text[..pos].ends_with(char::is_whitespace) || !first.is_alphanumeric(),
+                "chunk starts mid-word: {chunk:?}"
+            );
         }
     }
 

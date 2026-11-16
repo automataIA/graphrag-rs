@@ -128,7 +128,7 @@ use_cooccurrence = true
 cooccurrence_window = 50    # Word window for co-occurrence
 min_cooccurrence_count = 2  # Minimum co-occurrences
 
-# Graph scoring (without PageRank - simpler, faster)
+# Performance and quality depend on the selected pipeline and corpus.
 use_pagerank = false
 use_degree_centrality = true  # Use simple degree centrality
 
@@ -172,15 +172,15 @@ extract_position = true
 calculate_confidence = true
 
 # -----------------------------------------------------------------------------
-# OLLAMA: LLM Service (DISABLED for algorithmic pipeline)
+# LLM (llama.cpp): LLM Service (DISABLED for algorithmic pipeline)
 # -----------------------------------------------------------------------------
-[ollama]
+[llm]
 enabled = false           # ❌ LLM NOT required for algorithmic pipeline
-host = "http://localhost"
-port = 11434
+base_url = "http://127.0.0.1:8080/v1"
+embedding_base_url = "http://127.0.0.1:8081/v1"
 timeout_seconds = 30
 max_retries = 1
-fallback_to_hash = true   # Fallback to hash embeddings if Ollama unavailable
+fallback_to_hash = true   # Fallback to hash embeddings if llama.cpp unavailable
 
 # -----------------------------------------------------------------------------
 # QUERY PROCESSING: Pattern-based Query Understanding
@@ -242,12 +242,12 @@ log_insights = false
 # - Fast processing speed (no neural network inference)
 # - Low resource requirements (CPU-only, minimal memory)
 # - Deterministic and reproducible results
-# - No external API dependencies (no OpenAI, no Ollama)
+# - No external API dependencies (no OpenAI, no llama.cpp)
 # - Works well for structured data and clear patterns
 # - Excellent for exact keyword matching and known entities
 #
 # ⚠️  CONSIDERATIONS:
-# - Lower quality for nuanced/implicit relationships
+# Performance and quality depend on the selected pipeline and corpus.
 # - Struggles with synonyms and paraphrasing
 # - Pattern-based extraction may miss context-dependent entities
 # - Limited understanding of semantic similarity
@@ -262,9 +262,9 @@ log_insights = false
 # - Batch processing pipelines
 #
 # ⚡ PERFORMANCE COMPARISON:
-# - Speed: ~10-50x faster than semantic pipeline
+# Performance and quality depend on the selected pipeline and corpus.
 # - Memory: ~5-10x less memory usage
-# - Accuracy: 70-85% of semantic quality (domain-dependent)
+# Performance and quality depend on the selected pipeline and corpus.
 #
 # 🚀 QUICK START:
 # 1. No installation required (pure Rust, no dependencies)

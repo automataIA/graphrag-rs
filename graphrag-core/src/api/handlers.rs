@@ -16,7 +16,9 @@ use tokio::sync::RwLock;
 /// Application state shared across handlers
 #[derive(Clone)]
 pub struct AppState {
+    /// Default GraphRAG instance
     pub graphrag: Arc<RwLock<GraphRAG>>,
+    /// Per-session GraphRAG instances keyed by session id
     pub sessions: Arc<RwLock<HashMap<String, Arc<RwLock<GraphRAG>>>>>,
 }
 
@@ -29,21 +31,29 @@ pub async fn health_check() -> impl IntoResponse {
     }))
 }
 
+/// Body of a query request
 #[derive(Deserialize)]
 pub struct QueryRequest {
+    /// Natural-language question
     pub query: String,
+    /// Query tuning options
     #[serde(default)]
     pub options: QueryOptions,
 }
 
+/// Options controlling query execution
 #[derive(Deserialize, Default)]
 pub struct QueryOptions {
+    /// Maximum number of answers (default 10)
     #[serde(default = "default_limit")]
     pub limit: usize,
+    /// Reuse cached answers when available
     #[serde(default)]
     pub use_cache: bool,
+    /// Include source references in the response
     #[serde(default)]
     pub include_sources: bool,
+    /// Include a confidence score in the response
     #[serde(default)]
     pub include_confidence: bool,
 }
@@ -52,30 +62,42 @@ fn default_limit() -> usize {
     10
 }
 
+/// Response returned by the query endpoint
 #[derive(Serialize)]
 pub struct QueryResponse {
+    /// Answer fragments
     pub answer: Vec<String>,
+    /// Source references, when requested
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sources: Option<Vec<String>>,
+    /// Confidence score, when requested
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confidence: Option<f32>,
+    /// Timing and token usage
     pub metadata: ResponseMetadata,
 }
 
+/// Metadata attached to a query response
 #[derive(Serialize)]
 pub struct ResponseMetadata {
+    /// Query wall time in milliseconds
     pub query_time_ms: u64,
+    /// Tokens consumed by the query
     pub tokens_used: usize,
 }
 
+/// Answer a query against the shared GraphRAG instance
 pub async fn handle_query(
     State(state): State<AppState>,
     Json(req): Json<QueryRequest>,
 ) -> Result<Json<QueryResponse>, AppError> {
     let start = std::time::Instant::now();
 
-    let graphrag = state.graphrag.read().await;
-    let results = graphrag.query(&req.query).map_err(AppError::GraphRAG)?;
+    let mut graphrag = state.graphrag.write().await;
+    let results = graphrag
+        .query_internal(&req.query)
+        .await
+        .map_err(AppError::GraphRAG)?;
 
     let query_time = start.elapsed().as_millis() as u64;
 
@@ -100,14 +122,19 @@ pub async fn handle_query(
     Ok(Json(response))
 }
 
+/// Body of an add-document request
 #[derive(Deserialize)]
 pub struct DocumentRequest {
+    /// Document identifier
     pub id: String,
+    /// Document text
     pub content: String,
+    /// Arbitrary key/value metadata
     #[serde(default)]
     pub metadata: HashMap<String, String>,
 }
 
+/// Add a document to the shared GraphRAG instance
 pub async fn add_document(
     State(state): State<AppState>,
     Json(req): Json<DocumentRequest>,
@@ -133,13 +160,14 @@ pub async fn add_document(
     })))
 }
 
+/// Fetch a document by id
 pub async fn get_document(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let graphrag = state.graphrag.read().await;
 
-    if let Some(graph) = graphrag.get_knowledge_graph() {
+    if let Some(graph) = graphrag.knowledge_graph() {
         let doc_id = crate::core::DocumentId::new(id.clone());
         if let Some(doc) = graph.get_document(&doc_id) {
             return Ok(Json(serde_json::json!({
@@ -153,12 +181,13 @@ pub async fn get_document(
     Err(AppError::NotFound(format!("Document not found: {}", id)))
 }
 
+/// Return entity, relationship and chunk counts
 pub async fn graph_stats(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let graphrag = state.graphrag.read().await;
 
-    if let Some(graph) = graphrag.get_knowledge_graph() {
+    if let Some(graph) = graphrag.knowledge_graph() {
         Ok(Json(serde_json::json!({
             "entities": graph.entity_count(),
             "relationships": graph.relationship_count(),
@@ -178,12 +207,13 @@ pub async fn graph_stats(
     }
 }
 
+/// Export the knowledge graph as nodes and edges
 pub async fn export_graph(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let graphrag = state.graphrag.read().await;
 
-    if let Some(graph) = graphrag.get_knowledge_graph() {
+    if let Some(graph) = graphrag.knowledge_graph() {
         let nodes: Vec<serde_json::Value> = graph
             .entities()
             .map(|entity| {
@@ -225,12 +255,16 @@ pub async fn export_graph(
     }
 }
 
+/// Query parameters for listing entities
 #[derive(Deserialize)]
 pub struct ListEntitiesQuery {
+    /// Page number (1-based)
     #[serde(default = "default_page")]
     pub page: usize,
+    /// Entities per page
     #[serde(default = "default_page_size")]
     pub page_size: usize,
+    /// Only return entities of this type
     #[serde(default)]
     pub entity_type: Option<String>,
 }
@@ -242,20 +276,21 @@ fn default_page_size() -> usize {
     20
 }
 
+/// List entities with pagination and optional type filter
 pub async fn list_entities(
     State(state): State<AppState>,
     Query(params): Query<ListEntitiesQuery>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let graphrag = state.graphrag.read().await;
 
-    if let Some(graph) = graphrag.get_knowledge_graph() {
+    if let Some(graph) = graphrag.knowledge_graph() {
         let mut entities: Vec<serde_json::Value> = graph
             .entities()
             .filter(|entity| {
                 params
                     .entity_type
                     .as_ref()
-                    .map_or(true, |t| entity.entity_type == *t)
+                    .is_none_or(|t| entity.entity_type == *t)
             })
             .map(|entity| {
                 serde_json::json!({
@@ -280,7 +315,7 @@ pub async fn list_entities(
             "page": params.page,
             "page_size": params.page_size,
             "total": total,
-            "total_pages": (total + params.page_size - 1) / params.page_size
+            "total_pages": total.div_ceil(params.page_size)
         })))
     } else {
         Ok(Json(serde_json::json!({
@@ -293,6 +328,7 @@ pub async fn list_entities(
     }
 }
 
+/// Return session and graph metrics
 pub async fn get_metrics(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, AppError> {
@@ -305,7 +341,7 @@ pub async fn get_metrics(
         }
     });
 
-    if let Some(graph) = graphrag.get_knowledge_graph() {
+    if let Some(graph) = graphrag.knowledge_graph() {
         metrics["graph"] = serde_json::json!({
             "entities": graph.entity_count(),
             "relationships": graph.relationship_count(),
@@ -318,11 +354,16 @@ pub async fn get_metrics(
 
 // === Error Handling ===
 
+/// Error type returned by the API handlers
 #[derive(Debug)]
 pub enum AppError {
+    /// Error from the GraphRAG core
     GraphRAG(GraphRAGError),
+    /// Requested resource does not exist
     NotFound(String),
+    /// Request is malformed
     BadRequest(String),
+    /// Unexpected server-side failure
     Internal(String),
 }
 

@@ -92,11 +92,6 @@ impl QueryRefiner {
         }
     }
 
-    /// Create a query refiner with default configuration
-    pub fn default() -> Self {
-        Self::new(QueryRefinementConfig::default())
-    }
-
     /// Refine a query using the concept graph and bidirectional index
     ///
     /// This performs iterative deepening to expand the query with related concepts
@@ -107,8 +102,18 @@ impl QueryRefiner {
         concept_graph: &ConceptGraph,
         bidirectional_index: &BidirectionalIndex,
     ) -> RefinedQuery {
-        // Step 1: Extract initial concepts from query
-        let initial_concepts = self.concept_extractor.extract_concepts(query);
+        // Step 1: Extract initial concepts from query. The extractor is tuned for
+        // documents (capitalized phrases, repeated words), so also pick up graph
+        // concepts the query mentions as whole words.
+        let mut initial_concepts = self.concept_extractor.extract_concepts(query);
+        let query_words = normalized_words(query);
+        for concept in concept_graph.concepts.keys() {
+            if !initial_concepts.contains(concept)
+                && query_words.contains(&normalized_words(concept))
+            {
+                initial_concepts.push(concept.clone());
+            }
+        }
 
         if initial_concepts.is_empty() {
             return RefinedQuery {
@@ -312,7 +317,7 @@ impl QueryRefiner {
     /// Denormalize EntityId back to concept
     fn denormalize_entity_id(&self, entity_id: &EntityId) -> String {
         // Extract concept from entity ID (remove prefix if present)
-        let id_str = entity_id.as_str();
+        let id_str = entity_id.0.as_str();
         id_str
             .split('_')
             .skip_while(|part| part.to_uppercase() == *part) // Skip entity type prefix
@@ -383,10 +388,26 @@ impl RefinedQuery {
     }
 }
 
+/// Lowercase words separated by single spaces and padded, for whole-word matching.
+fn normalized_words(text: &str) -> String {
+    let words: Vec<String> = text
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .map(str::to_lowercase)
+        .collect();
+    format!(" {} ", words.join(" "))
+}
+
+impl Default for QueryRefiner {
+    fn default() -> Self {
+        Self::new(QueryRefinementConfig::default())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lightrag::concept_graph::{ConceptExtractor, ConceptGraphBuilder};
+    use crate::lightrag::concept_graph::ConceptGraphBuilder;
 
     #[test]
     fn test_query_refinement_basic() {

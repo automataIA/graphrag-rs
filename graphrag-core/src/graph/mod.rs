@@ -134,6 +134,7 @@ impl GraphBuilder {
 
                 for (source_id, target_id, relation_type) in relationships {
                     let relationship = Relationship {
+                        description: None,
                         source: source_id,
                         target: target_id,
                         relation_type,
@@ -269,6 +270,7 @@ impl GraphBuilder {
                 for (j, similarity) in similarities {
                     let entity2 = &entities[j];
                     let relationship = Relationship {
+                        description: None,
                         source: entity1.id.clone(),
                         target: entity2.id.clone(),
                         relation_type: "SEMANTICALLY_SIMILAR".to_string(),

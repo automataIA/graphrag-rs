@@ -15,10 +15,6 @@ pub mod huggingface;
 #[cfg(feature = "ureq")]
 pub mod api_providers;
 
-/// Ollama embedding provider
-#[cfg(feature = "ollama")]
-pub mod ollama;
-
 /// TOML configuration for embedding providers
 pub mod config;
 
@@ -105,8 +101,8 @@ pub enum EmbeddingProviderType {
     /// Local Candle model
     Candle,
 
-    /// Local Ollama model
-    Ollama,
+    /// Local llama.cpp server (`llama-server --embeddings`)
+    LlamaCpp,
 
     /// Custom provider
     Custom(String),
@@ -124,8 +120,8 @@ impl std::fmt::Display for EmbeddingProviderType {
             Self::TogetherAI => write!(f, "TogetherAI"),
             Self::Onnx => write!(f, "ONNX"),
             Self::Candle => write!(f, "Candle"),
-            Self::Ollama => write!(f, "Ollama"),
-            Self::Custom(name) => write!(f, "Custom({})", name),
+            Self::LlamaCpp => write!(f, "LlamaCpp"),
+            Self::Custom(name) => write!(f, "Custom({name})"),
         }
     }
 }

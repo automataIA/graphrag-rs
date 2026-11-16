@@ -250,7 +250,7 @@ impl QueryConceptMatcher {
         let mut total_similarity = 0.0;
 
         for query_token in query_tokens {
-            let mut best_match = 0.0;
+            let mut best_match = 0.0_f32;
 
             for concept_token in &concept_tokens {
                 let distance = self.levenshtein_distance(query_token, concept_token);
@@ -290,11 +290,11 @@ impl QueryConceptMatcher {
         let mut matrix = vec![vec![0; len2 + 1]; len1 + 1];
 
         // Initialize first row and column
-        for i in 0..=len1 {
-            matrix[i][0] = i;
+        for (i, row) in matrix.iter_mut().enumerate() {
+            row[0] = i;
         }
-        for j in 0..=len2 {
-            matrix[0][j] = j;
+        for (j, cell) in matrix[0].iter_mut().enumerate() {
+            *cell = j;
         }
 
         let s1_chars: Vec<char> = s1.chars().collect();

@@ -1,0 +1,751 @@
+{
+ "_doc": "Heldout indipendente per il filtro entita' Jev (g6). Regola v3, congelata il 2026-11-11 PRIMA dell'annotazione; i chunk sono annotati senza consultare score Jev (candidati = nomi GLiNER2.5 dal jev_raw.jsonl di g5, solo i nomi). Da usare UNA sola volta per la valutazione finale: se una soglia o un prompt viene scelto guardando questi risultati, il set diventa di sviluppo. Selezione: 24 chunk non usati con almeno un candidato collettivo (scelti per nome, non per score) + 26 casuali (random.Random(20261111).sample sui chunk non usati dal gold v2). Etichette: PERSON = personaggio specifico (anche senza nome proprio, se il nome comune e' la sua designazione principale nella storia: il contadino, il giudice, il Serpente); LOCATION = luogo specifico, identificabile e persistente nella storia, anche senza nome proprio (la casa della Fata); EVENT = evento preciso della storia; GROUP = gruppo di personaggi che nel testo rappresenta un insieme identificabile di agenti che partecipano alla storia, anche senza nome proprio (le faine, i carabinieri, gli assassini); ALIAS = termine comune o epiteto per un personaggio/luogo che ha una designazione principale diversa (babbo per Geppetto, burattino per Pinocchio, pescatore per il Pescatore verde); GENERIC = nome comune usato genericamente, luogo generico (il mare, la scuola) o collettivo indeterminato (la gente, i ragazzi in generale); JUNK = frammento, parte del corpo, verbo, oggetto qualunque, stato o sentimento; AMBIG = escluso dal punteggio. Da tenere: PERSON, LOCATION, EVENT, GROUP. Da scartare: GENERIC, JUNK. ALIAS riportato a parte. missed = entita' (incluse GROUP) presenti nel testo ma non tra i candidati.",
+ "rule_version": "v3",
+ "chunks": [
+  {
+   "chunk": 17,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "strada": "GENERIC",
+    "carabiniere": "PERSON",
+    "Pinocchio": "PERSON",
+    "burattino di legno": "ALIAS",
+    "ava Geppetto": "JUNK",
+    "puledro": "GENERIC",
+    "Geppetto": "PERSON",
+    "carabinieri": "GENERIC"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 26,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "focolare": "AMBIG",
+    "fame": "JUNK",
+    "stanza": "AMBIG",
+    "ripostigli": "JUNK",
+    "cassette": "JUNK",
+    "coltello": "JUNK"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 31,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "campagna": "GENERIC",
+    "paese": "LOCATION",
+    "fame": "JUNK",
+    "botteghe": "GENERIC",
+    "strada": "GENERIC",
+    "casa": "LOCATION",
+    "porte\r\ndi casa": "GENERIC",
+    "paura": "JUNK",
+    "lampi": "JUNK"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 42,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "Geppetto": "PERSON",
+    "Pinocchio": "PERSON",
+    "burattino": "ALIAS",
+    "casa tua": "LOCATION",
+    "scuola": "GENERIC"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 43,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "scuola": "GENERIC",
+    "Geppetto": "PERSON",
+    "Pinocchio": "PERSON",
+    "burattino": "ALIAS"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 46,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "tito bello": "JUNK",
+    "buon vecchio": "ALIAS",
+    "burattino": "ALIAS",
+    "casa": "LOCATION",
+    "Geppetto": "PERSON",
+    "libraio": "GENERIC"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 62,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "Arlecchino": "PERSON",
+    "giandarmi": "GROUP",
+    "burattinaio": "ALIAS",
+    "bruciare": "JUNK"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 64,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "Arlecchino": "PERSON",
+    "Pinocchio": "PERSON",
+    "giandarmi": "GROUP",
+    "adagio adagio": "JUNK",
+    "Mangiafoco": "PERSON"
+   },
+   "missed": [
+    "burattini (GROUP)"
+   ]
+  },
+  {
+   "chunk": 65,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "adagio adagio": "JUNK",
+    "Mangiafoco": "PERSON",
+    "barba del burattinaio": "JUNK",
+    "Arlecchino": "PERSON"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 67,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "scuola": "GENERIC",
+    "Mangiafoco": "PERSON",
+    "giandarmi": "GROUP"
+   },
+   "missed": [
+    "Geppetto (PERSON)",
+    "burattini della compagnia (GROUP)"
+   ]
+  },
+  {
+   "chunk": 69,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "babbo": "ALIAS",
+    "Gatto": "PERSON",
+    "Pinocchio": "PERSON",
+    "Volpe": "PERSON",
+    "porta di casa sua": "AMBIG",
+    "burattino": "ALIAS",
+    "Mangiafoco": "PERSON"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 83,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "albero": "GENERIC",
+    "burattino": "ALIAS",
+    "Grillo-parlante": "PERSON"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 84,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "strada": "GENERIC",
+    "Grillo": "ALIAS",
+    "assassini": "GROUP",
+    "Grillo-parlante": "PERSON"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 85,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "strada": "GENERIC",
+    "assassini": "AMBIG",
+    "Pinocchio": "PERSON",
+    "Grillo": "ALIAS",
+    "Grillo-parlante": "PERSON"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 90,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "campagna": "GENERIC",
+    "assassini": "GROUP",
+    "fusto": "JUNK",
+    "pino": "GENERIC",
+    "terra": "GENERIC",
+    "rami": "JUNK",
+    "corsa": "JUNK"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 94,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "finestra": "GENERIC",
+    "bussare": "JUNK",
+    "porta": "GENERIC",
+    "Bambina": "ALIAS",
+    "casa": "LOCATION"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 107,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "camera": "AMBIG",
+    "Pinocchio": "PERSON",
+    "gastigo": "JUNK",
+    "Civetta": "PERSON",
+    "becchini": "GROUP",
+    "Corvo": "PERSON"
+   },
+   "missed": [
+    "medici (GROUP)",
+    "Fata (PERSON)"
+   ]
+  },
+  {
+   "chunk": 113,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "camera": "AMBIG",
+    "ufo": "JUNK",
+    "Fata": "PERSON",
+    "viaggio": "JUNK",
+    "morte": "JUNK",
+    "conigli": "GROUP"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 115,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "osteria del Gambero Rosso": "LOCATION",
+    "Campo dei miracoli": "LOCATION",
+    "io": "JUNK",
+    "albero": "GENERIC",
+    "buio": "JUNK",
+    "bosco": "AMBIG",
+    "mi": "JUNK",
+    "assassini": "GROUP",
+    "strada": "GENERIC"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 118,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "burattino": "ALIAS",
+    "camera": "AMBIG",
+    "Campo dei miracoli": "LOCATION",
+    "Fata": "PERSON",
+    "Volpe": "PERSON",
+    "Gatto": "PERSON",
+    "bugia": "JUNK"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 119,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "burattino": "ALIAS",
+    "camera": "AMBIG",
+    "Pinocchio": "PERSON",
+    "ragazzo": "GENERIC",
+    "Fata": "PERSON"
+   },
+   "missed": [
+    "Picchi (GROUP)"
+   ]
+  },
+  {
+   "chunk": 121,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "Gatto": "PERSON",
+    "Volpe": "PERSON",
+    "bosco": "AMBIG",
+    "Quercia grande": "LOCATION",
+    "osteria del Gambero rosso": "LOCATION",
+    "assassini": "GROUP",
+    "strada": "GENERIC",
+    "osteria": "ALIAS"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 135,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "prigione": "GENERIC",
+    "giandarmi": "GROUP",
+    "flussione d'occhi": "JUNK",
+    "giudice": "PERSON",
+    "burattino": "ALIAS",
+    "iniqua frode": "EVENT"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 148,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "casotto di\r\n   legno": "LOCATION",
+    "piovere": "JUNK",
+    "muro": "GENERIC",
+    "cane": "ALIAS",
+    "contadino": "PERSON",
+    "ladri": "GENERIC"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 151,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "buca del casotto": "GENERIC",
+    "Melampo": "PERSON",
+    "Pinocchio": "PERSON",
+    "burattino": "ALIAS",
+    "faine": "GROUP",
+    "consiglio": "JUNK"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 152,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "pollaio": "LOCATION",
+    "Melampo": "PERSON",
+    "Pinocchio": "PERSON",
+    "patti": "JUNK",
+    "cane": "GENERIC",
+    "casotto": "LOCATION",
+    "faine": "GROUP",
+    "contadino": "PERSON"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 153,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "pollaio": "LOCATION",
+    "lui": "JUNK"
+   },
+   "missed": [
+    "faine (GROUP)"
+   ]
+  },
+  {
+   "chunk": 155,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "dino": "JUNK",
+    "Melampo": "PERSON",
+    "pollaio": "LOCATION",
+    "faine": "GROUP",
+    "cane": "ALIAS"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 164,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "Colombo": "PERSON",
+    "burattino": "ALIAS",
+    "volo": "JUNK",
+    "cavallerizzi": "GENERIC",
+    "nuvole": "GENERIC"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 166,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "Colombo": "PERSON",
+    "spiaggia del mare": "GENERIC",
+    "Pinocchio": "PERSON",
+    "mare": "GENERIC",
+    "vecce": "JUNK",
+    "volo": "JUNK",
+    "spiaggia": "GENERIC"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 175,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "Delfino": "PERSON",
+    "strada ferrata": "GENERIC",
+    "Pinocchio": "PERSON",
+    "burrasca": "EVENT",
+    "signor pesce": "ALIAS"
+   },
+   "missed": [
+    "Pesce-cane (PERSON)"
+   ]
+  },
+  {
+   "chunk": 188,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "Fata": "PERSON",
+    "scuola": "GENERIC"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 193,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "scuola": "GENERIC",
+    "Pinocchio": "PERSON",
+    "calcio": "JUNK",
+    "monelli": "GROUP",
+    "maestro": "PERSON",
+    "gomitata": "JUNK",
+    "buona Fata": "ALIAS"
+   },
+   "missed": [
+    "compagni (GROUP)"
+   ]
+  },
+  {
+   "chunk": 197,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "spiaggia": "GENERIC",
+    "mare": "GENERIC",
+    "combattimento": "EVENT",
+    "compagni": "GROUP",
+    "Pesce-cane": "PERSON"
+   },
+   "missed": [
+    "carabinieri (GROUP)"
+   ]
+  },
+  {
+   "chunk": 198,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "scuola": "GENERIC",
+    "Pinocchio": "PERSON",
+    "sugo": "JUNK",
+    "celia": "JUNK",
+    "monelli": "GROUP"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 207,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "Eugenio": "PERSON",
+    "scuola": "GENERIC",
+    "tempia": "JUNK",
+    "carabinieri": "GROUP"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 210,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "spiaggia del mare": "GENERIC",
+    "carabinieri": "GROUP",
+    "mento": "JUNK",
+    "paese": "AMBIG",
+    "burattino": "ALIAS"
+   },
+   "missed": [
+    "casa della sua buona fata (LOCATION)"
+   ]
+  },
+  {
+   "chunk": 211,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "spiaggia del mare": "GENERIC",
+    "berretto": "JUNK",
+    "corse dei cani": "GENERIC",
+    "cane mastino": "ALIAS",
+    "strada": "GENERIC"
+   },
+   "missed": [
+    "carabinieri (GROUP)"
+   ]
+  },
+  {
+   "chunk": 221,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "riguardi": "JUNK",
+    "mari": "GENERIC",
+    "casa mia": "AMBIG",
+    "pescatore": "ALIAS"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 266,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "Lucignolo": "PERSON",
+    "Pinocchio": "PERSON",
+    "maestro": "PERSON"
+   },
+   "missed": [
+    "Fata (PERSON)"
+   ]
+  },
+  {
+   "chunk": 273,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "Lucignolo": "PERSON",
+    "porta": "GENERIC",
+    "re allegri": "JUNK"
+   },
+   "missed": [
+    "Marmottina (PERSON)",
+    "Fata (PERSON)"
+   ]
+  },
+  {
+   "chunk": 280,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "omino": "PERSON",
+    "porta": "GENERIC"
+   },
+   "missed": [
+    "Direttore di una compagnia di pagliacci (PERSON)"
+   ]
+  },
+  {
+   "chunk": 281,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "piazza del mercato": "GENERIC",
+    "Lucignolo": "PERSON",
+    "Pinocchio": "PERSON",
+    "ere": "JUNK",
+    "omino": "PERSON",
+    "mogi mogi": "JUNK"
+   },
+   "missed": [
+    "Direttore di una compagnia di pagliacci (PERSON)"
+   ]
+  },
+  {
+   "chunk": 283,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "Lucignolo": "PERSON",
+    "chiassate": "JUNK",
+    "stalla": "AMBIG",
+    "giuochi": "JUNK",
+    "Paese dei balocchi": "LOCATION",
+    "divertimenti": "JUNK",
+    "i latte e miele": "JUNK"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 306,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "affogare": "JUNK",
+    "burattino": "ALIAS",
+    "pesci": "GROUP",
+    "compratore": "PERSON"
+   },
+   "missed": [
+    "Fata (PERSON)"
+   ]
+  },
+  {
+   "chunk": 321,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "Volpe": "PERSON",
+    "Gatto": "PERSON",
+    "campo": "GENERIC",
+    "serpente": "PERSON",
+    "pappagallo": "PERSON",
+    "contadino di santa ragione": "JUNK",
+    "medici": "GROUP",
+    "prigione": "GENERIC",
+    "Osteria": "ALIAS",
+    "Bambina": "ALIAS",
+    "cane": "GENERIC",
+    "Giudice": "PERSON",
+    "pollaio": "LOCATION",
+    "camera": "AMBIG",
+    "bugia": "JUNK"
+   },
+   "missed": [
+    "Quercia Grande (LOCATION)"
+   ]
+  },
+  {
+   "chunk": 322,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "Colombo": "PERSON",
+    "spiaggia": "GENERIC",
+    "serpente": "PERSON",
+    "mare": "GENERIC",
+    "affogare": "JUNK",
+    "santa ragione": "JUNK",
+    "pescatori": "GROUP",
+    "babbo": "ALIAS",
+    "morta": "JUNK"
+   },
+   "missed": [
+    "contadino (PERSON)",
+    "casa della bella Bambina (LOCATION)"
+   ]
+  },
+  {
+   "chunk": 329,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "mare": "GENERIC",
+    "babbo": "ALIAS",
+    "fuga": "EVENT",
+    "Geppetto": "PERSON",
+    "acqua": "GENERIC"
+   },
+   "missed": [
+    "Pesce-cane (PERSON)"
+   ]
+  },
+  {
+   "chunk": 337,
+   "split": "heldout2",
+   "selection": "collective",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "mascherine": "ALIAS",
+    "Geppetto": "PERSON",
+    "Gatto": "PERSON",
+    "viottola": "GENERIC",
+    "campi": "GENERIC",
+    "capanna": "LOCATION"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 345,
+   "split": "heldout2",
+   "selection": "random",
+   "labels": {
+    "capanna": "LOCATION",
+    "burattino": "ALIAS",
+    "Giangio": "PERSON",
+    "babbo": "ALIAS",
+    "l'ortolano": "ALIAS",
+    "studi": "JUNK"
+   },
+   "missed": []
+  }
+ ]
+}

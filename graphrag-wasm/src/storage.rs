@@ -100,7 +100,7 @@ impl From<StorageError> for JsValue {
 ///
 /// ## Usage
 ///
-/// ```rust
+/// ```rust,ignore
 /// let db = IndexedDBStore::new("graphrag", 1).await?;
 /// db.put("entities", "entity_1", &entity_data).await?;
 /// let entity = db.get("entities", "entity_1").await?;
@@ -418,7 +418,7 @@ impl IndexedDBStore {
 ///
 /// ## Usage
 ///
-/// ```rust
+/// ```rust,ignore
 /// let cache = CacheStore::open("graphrag-models").await?;
 /// cache.put("bert-model", &model_bytes).await?;
 /// let model = cache.get("bert-model").await?;

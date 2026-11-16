@@ -81,7 +81,7 @@ Relationships define how entities are connected, such as "works_for" or "located
     if !doc_validation.warnings.is_empty() {
         println!("Warnings:");
         for warning in &doc_validation.warnings {
-            println!("  ⚠️  {}", warning);
+            println!("  ⚠️  {warning}");
         }
     }
     println!();
@@ -153,6 +153,7 @@ Relationships define how entities are connected, such as "works_for" or "located
     // Phase 3: Relationship Extraction (simulated)
     let relationships = vec![
         Relationship {
+            description: None,
             source: EntityId::new("e1".to_string()),
             target: EntityId::new("e3".to_string()),
             relation_type: "composed_of".to_string(),
@@ -164,6 +165,7 @@ Relationships define how entities are connected, such as "works_for" or "located
             causal_strength: None,
         },
         Relationship {
+            description: None,
             source: EntityId::new("e3".to_string()),
             target: EntityId::new("e4".to_string()),
             relation_type: "connected_by".to_string(),
@@ -232,7 +234,7 @@ Relationships define how entities are connected, such as "works_for" or "located
     if !report.all_warnings().is_empty() {
         println!("\n⚠️  All Warnings:");
         for warning in report.all_warnings() {
-            println!("   - {}", warning);
+            println!("   - {warning}");
         }
     }
 
@@ -289,6 +291,7 @@ fn demo_query_evaluation() -> Result<()> {
 
     // Retrieved relationships
     let relationships = vec![Relationship {
+        description: None,
         source: EntityId::new("e2".to_string()),
         target: EntityId::new("e3".to_string()),
         relation_type: "is_a".to_string(),
@@ -339,7 +342,7 @@ fn demo_query_evaluation() -> Result<()> {
     println!("### Generated LLM Evaluation Prompt");
     println!("(Prompt length: {} chars)", evaluation_prompt.len());
     println!("\n--- BEGIN PROMPT ---");
-    println!("{}", evaluation_prompt);
+    println!("{evaluation_prompt}");
     println!("--- END PROMPT ---\n");
 
     // Simulate LLM response parsing

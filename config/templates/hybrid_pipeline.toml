@@ -1,16 +1,16 @@
 # =============================================================================
 # HYBRID PIPELINE CONFIGURATION
-# Combined semantic + algorithmic approach for balanced quality and performance
+# Performance and quality depend on the selected pipeline and corpus.
 # =============================================================================
 #
 # This template demonstrates a HYBRID pipeline combining:
-# - Semantic (neural/LLM-based) for quality and nuance
+# Performance and quality depend on the selected pipeline and corpus.
 # - Algorithmic (pattern-based) for speed and coverage
 # - Weighted fusion using RRF (Reciprocal Rank Fusion)
 # - Cross-validation between approaches for confidence scoring
 #
-# Best for: Production systems requiring both quality and efficiency
-# Requires: Ollama (or OpenAI API) for semantic components
+# Performance and quality depend on the selected pipeline and corpus.
+# Requires: llama.cpp (or another OpenAI-compatible API) for semantic components
 # Resource usage: Medium (balanced between semantic and algorithmic)
 #
 # =============================================================================
@@ -53,7 +53,7 @@ min_confidence_delta = 0.15  # Minimum confidence difference for reweighting
 
 # --- HYBRID EMBEDDINGS: Dual Embedding Strategy ---
 [hybrid.embeddings]
-# Primary embedding (semantic - high quality)
+# Performance and quality depend on the selected pipeline and corpus.
 primary_backend = "huggingface"
 primary_model = "sentence-transformers/all-MiniLM-L6-v2"
 primary_dimensions = 384
@@ -75,7 +75,7 @@ use_patterns = true          # Algorithmic: Pattern-based extraction
 max_gleaning_rounds = 2      # Reduced rounds for efficiency
 
 # LLM configuration (for semantic extraction)
-llm_model = "llama3.1:8b"
+llm_model = "qwen3.5-9b"
 llm_temperature = 0.15
 llm_max_tokens = 1000
 
@@ -202,23 +202,17 @@ extract_position = true
 calculate_confidence = true
 
 # -----------------------------------------------------------------------------
-# OLLAMA: LLM Service (for semantic components)
+# LLM (llama.cpp): LLM Service (for semantic components)
 # -----------------------------------------------------------------------------
-[ollama]
+[llm]
 enabled = true               # ✅ Required for semantic components
-host = "http://localhost"
-port = 11434
-chat_model = "llama3.1:8b"
-embedding_model = "nomic-embed-text"
+base_url = "http://127.0.0.1:8080/v1"
+embedding_base_url = "http://127.0.0.1:8081/v1"
+chat_model = "qwen3.5-9b"
+embedding_model = "multilingual-e5-small"
 timeout_seconds = 45
 max_retries = 3
-fallback_to_hash = true      # Fallback to algorithmic if LLM unavailable
-
-[ollama.generation]
-temperature = 0.2
-top_p = 0.9
-max_tokens = 800
-stream = false
+fallback_to_hash = false  # llama.cpp embeddings never fall back to hash
 
 # -----------------------------------------------------------------------------
 # QUERY PROCESSING: Hybrid Query Understanding
@@ -282,7 +276,7 @@ cache_semantic_embeddings = true
 cache_algorithmic_embeddings = false  # Hash embeddings are cheap to recompute
 
 # -----------------------------------------------------------------------------
-# MONITORING: Comprehensive Quality Tracking
+# Performance and quality depend on the selected pipeline and corpus.
 # -----------------------------------------------------------------------------
 [monitoring]
 enabled = true
@@ -299,7 +293,7 @@ log_approach_agreement = true
 # HYBRID PIPELINE SUMMARY:
 #
 # ✅ STRENGTHS:
-# - Best of both worlds: semantic quality + algorithmic speed
+# Performance and quality depend on the selected pipeline and corpus.
 # - Robust to individual approach failures (cross-validation)
 # - Better coverage (union of both extraction methods)
 # - Adaptive weighting based on query characteristics
@@ -307,15 +301,15 @@ log_approach_agreement = true
 # - Graceful degradation (falls back to algorithmic if LLM fails)
 #
 # 🎯 OPTIMAL USE CASES:
-# - Production systems requiring quality AND performance
+# Performance and quality depend on the selected pipeline and corpus.
 # - Diverse query workloads (short keywords + complex semantic queries)
 # - Systems with variable resource availability
 # - Applications requiring high recall (don't miss entities)
 # - Mixed document types (structured + unstructured)
 #
 # ⚖️  TRADE-OFFS:
-# - Speed: 2-3x faster than pure semantic (but slower than pure algorithmic)
-# - Quality: 90-95% of pure semantic quality
+# Performance and quality depend on the selected pipeline and corpus.
+# Performance and quality depend on the selected pipeline and corpus.
 # - Memory: 1.5x semantic memory usage
 # - Complexity: More configuration parameters to tune
 #
@@ -323,11 +317,11 @@ log_approach_agreement = true
 # - Latency: ~100-200ms per query (depends on top_k and fusion)
 # - Throughput: ~100-500 documents/second (depends on gleaning rounds)
 # - Memory: ~3-4GB for typical workloads
-# - Accuracy: 85-95% (better than algorithmic, competitive with semantic)
+# Performance and quality depend on the selected pipeline and corpus.
 #
 # 🎚️  TUNING RECOMMENDATIONS:
 #
-# For QUALITY-first workloads:
+# Performance and quality depend on the selected pipeline and corpus.
 #   semantic_weight = 0.7
 #   algorithmic_weight = 0.3
 #   max_gleaning_rounds = 3
@@ -346,17 +340,17 @@ log_approach_agreement = true
 #   require_cross_validation = false
 #
 # 🚀 QUICK START:
-# 1. Install Ollama: https://ollama.ai/
-# 2. Pull models: ollama pull llama3.1:8b && ollama pull nomic-embed-text
-# 3. Adjust weights based on your quality/speed requirements
+# 1. Install llama.cpp: https://github.com/ggml-org/llama.cpp
+# 2. Start servers: llama-server -m Qwen3.5-9B-UD-Q5_K_XL.gguf --alias qwen3.5-9b --port 8080 ; llama-server -m multilingual-e5-small.gguf --embeddings --pooling mean --alias multilingual-e5-small --port 8081
+# Performance and quality depend on the selected pipeline and corpus.
 # 4. Run pipeline: cargo run --example your_example -- hybrid_pipeline.toml
-# 5. Monitor fusion quality metrics and adjust weights
+# Performance and quality depend on the selected pipeline and corpus.
 #
 # 💡 ADVANCED OPTIMIZATION:
 # - Enable use_dynamic_weighting for adaptive query routing
 # - Use query_routing to automatically select best approach per query
 # - Tune rrf_k based on your result distribution (40-80 typical)
 # - Enable cross_validation_boost for high-confidence requirements
-# - Adjust semantic_top_k and algorithmic_top_k for RRF fusion quality
+# Performance and quality depend on the selected pipeline and corpus.
 #
 # =============================================================================

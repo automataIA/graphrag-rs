@@ -144,14 +144,14 @@ pub enum ImportError {
 impl std::fmt::Display for ImportError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            ImportError::FileNotFound(path) => write!(f, "File not found: {}", path),
+            ImportError::FileNotFound(path) => write!(f, "File not found: {path}"),
             ImportError::ParseError(msg, line) => {
-                write!(f, "Parse error at line {}: {}", line, msg)
+                write!(f, "Parse error at line {line}: {msg}")
             },
-            ImportError::ValidationError(msg) => write!(f, "Validation error: {}", msg),
-            ImportError::MissingField(field) => write!(f, "Missing required field: {}", field),
-            ImportError::InvalidFormat(msg) => write!(f, "Invalid format: {}", msg),
-            ImportError::UnsupportedFormat(msg) => write!(f, "Unsupported format: {}", msg),
+            ImportError::ValidationError(msg) => write!(f, "Validation error: {msg}"),
+            ImportError::MissingField(field) => write!(f, "Missing required field: {field}"),
+            ImportError::InvalidFormat(msg) => write!(f, "Invalid format: {msg}"),
+            ImportError::UnsupportedFormat(msg) => write!(f, "Unsupported format: {msg}"),
         }
     }
 }
@@ -214,7 +214,7 @@ impl DataImporter {
         let mut errors = Vec::new();
 
         let file = File::open(path)
-            .map_err(|e| ImportError::ParseError(format!("Failed to open file: {}", e), 0))?;
+            .map_err(|e| ImportError::ParseError(format!("Failed to open file: {e}"), 0))?;
 
         let mut reader = ReaderBuilder::new()
             .delimiter(delimiter)
@@ -224,7 +224,7 @@ impl DataImporter {
         // Get headers
         let headers = reader
             .headers()
-            .map_err(|e| ImportError::ParseError(format!("Failed to read headers: {}", e), 0))?
+            .map_err(|e| ImportError::ParseError(format!("Failed to read headers: {e}"), 0))?
             .clone();
 
         let mappings = self.config.column_mappings.as_ref().ok_or_else(|| {
@@ -265,7 +265,7 @@ impl DataImporter {
                 Ok(r) => r,
                 Err(e) => {
                     errors.push(ImportError::ParseError(
-                        format!("CSV parse error: {}", e),
+                        format!("CSV parse error: {e}"),
                         line_num + 2, // +2 for header and 0-indexing
                     ));
                     if errors.len() >= self.config.max_errors {
@@ -364,7 +364,7 @@ impl DataImporter {
     /// Import JSON file
     fn import_json(&self, path: &Path) -> Result<ImportResult, ImportError> {
         let file = File::open(path)
-            .map_err(|e| ImportError::ParseError(format!("Failed to open file: {}", e), 0))?;
+            .map_err(|e| ImportError::ParseError(format!("Failed to open file: {e}"), 0))?;
 
         let reader = BufReader::new(file);
 
@@ -380,7 +380,7 @@ impl DataImporter {
         }
 
         let json_data: JsonData = serde_json::from_reader(reader)
-            .map_err(|e| ImportError::ParseError(format!("JSON parse error: {}", e), 0))?;
+            .map_err(|e| ImportError::ParseError(format!("JSON parse error: {e}"), 0))?;
 
         let mut errors = Vec::new();
         let mut valid_entities = Vec::new();
@@ -429,7 +429,7 @@ impl DataImporter {
     /// Import JSONL file
     fn import_jsonl(&self, path: &Path) -> Result<ImportResult, ImportError> {
         let file = File::open(path)
-            .map_err(|e| ImportError::ParseError(format!("Failed to open file: {}", e), 0))?;
+            .map_err(|e| ImportError::ParseError(format!("Failed to open file: {e}"), 0))?;
 
         let reader = BufReader::new(file);
         let mut errors = Vec::new();
@@ -467,7 +467,7 @@ impl DataImporter {
                 Ok(l) => l,
                 Err(e) => {
                     errors.push(ImportError::ParseError(
-                        format!("Failed to read line: {}", e),
+                        format!("Failed to read line: {e}"),
                         line_num + 1,
                     ));
                     if errors.len() >= self.config.max_errors {
@@ -486,7 +486,7 @@ impl DataImporter {
                 Ok(p) => p,
                 Err(e) => {
                     errors.push(ImportError::ParseError(
-                        format!("JSON parse error: {}", e),
+                        format!("JSON parse error: {e}"),
                         line_num + 1,
                     ));
                     if errors.len() >= self.config.max_errors {
@@ -559,9 +559,10 @@ impl DataImporter {
     }
 
     /// Import RDF/Turtle file
-    fn import_rdf(&self, _path: &Path) -> Result<ImportResult, ImportError> {
+    fn import_rdf(&self, path: &Path) -> Result<ImportResult, ImportError> {
         #[cfg(not(feature = "rdf-import"))]
         {
+            let _ = path;
             Err(ImportError::UnsupportedFormat(
                 "RDF import requires 'rdf-import' feature".to_string(),
             ))
@@ -569,7 +570,6 @@ impl DataImporter {
 
         #[cfg(feature = "rdf-import")]
         {
-            use oxrdf::NamedNode;
             use oxttl::TurtleParser;
             use std::collections::HashMap;
 
@@ -583,7 +583,7 @@ impl DataImporter {
                 .map_err(|e| ImportError::FileNotFound(format!("Failed to read file: {}", e)))?;
 
             // Parse Turtle/RDF
-            let parser = TurtleParser::new().parse_read(&content[..]);
+            let parser = TurtleParser::new().for_slice(&content);
 
             // Track unique entities (subjects and objects)
             let mut entity_map: HashMap<String, HashMap<String, String>> = HashMap::new();
@@ -596,9 +596,7 @@ impl DataImporter {
                         let object = triple.object.to_string();
 
                         // Extract entity from subject
-                        entity_map
-                            .entry(subject.clone())
-                            .or_insert_with(HashMap::new);
+                        entity_map.entry(subject.clone()).or_default();
 
                         // Check if object is a URI (entity) or literal (property)
                         if object.starts_with('<') && object.ends_with('>') {
@@ -607,9 +605,7 @@ impl DataImporter {
                                 .trim_start_matches('<')
                                 .trim_end_matches('>')
                                 .to_string();
-                            entity_map
-                                .entry(object_id.clone())
-                                .or_insert_with(HashMap::new);
+                            entity_map.entry(object_id.clone()).or_default();
 
                             // Extract relation type from predicate URI
                             let relation_type = Self::extract_local_name(&predicate);
@@ -634,7 +630,11 @@ impl DataImporter {
                         }
                     },
                     Err(e) => {
-                        errors.push(format!("RDF parse error: {}", e));
+                        let line = e.location().start.line as usize + 1;
+                        errors.push(ImportError::ParseError(
+                            format!("RDF parse error: {e}"),
+                            line,
+                        ));
                     },
                 }
             }
@@ -679,15 +679,16 @@ impl DataImporter {
         let cleaned = uri.trim_start_matches('<').trim_end_matches('>');
         cleaned
             .split(&['#', '/'][..])
-            .last()
+            .next_back()
             .unwrap_or(cleaned)
             .to_string()
     }
 
     /// Import GraphML file
-    fn import_graphml(&self, _path: &Path) -> Result<ImportResult, ImportError> {
+    fn import_graphml(&self, path: &Path) -> Result<ImportResult, ImportError> {
         #[cfg(not(feature = "graphml-import"))]
         {
+            let _ = path;
             Err(ImportError::UnsupportedFormat(
                 "GraphML import requires 'graphml-import' feature".to_string(),
             ))
@@ -695,7 +696,6 @@ impl DataImporter {
 
         #[cfg(feature = "graphml-import")]
         {
-            use crate::core::{ChunkId, Entity, EntityId, EntityMention, Relationship};
             use quick_xml::events::Event;
             use quick_xml::Reader;
             use std::collections::HashMap;
@@ -732,12 +732,10 @@ impl DataImporter {
                                 current_node_attributes.clear();
 
                                 // Read node attributes
-                                for attr in e.attributes() {
-                                    if let Ok(attr) = attr {
-                                        if attr.key.as_ref() == b"id" {
-                                            current_node_id =
-                                                String::from_utf8_lossy(&attr.value).to_string();
-                                        }
+                                for attr in e.attributes().flatten() {
+                                    if attr.key.as_ref() == b"id" {
+                                        current_node_id =
+                                            String::from_utf8_lossy(&attr.value).to_string();
                                     }
                                 }
                             },
@@ -748,27 +746,22 @@ impl DataImporter {
                                 current_edge_attributes.clear();
 
                                 // Read edge attributes
-                                for attr in e.attributes() {
-                                    if let Ok(attr) = attr {
-                                        let key = attr.key.as_ref();
-                                        let value =
-                                            String::from_utf8_lossy(&attr.value).to_string();
-                                        match key {
-                                            b"source" => current_edge_source = value,
-                                            b"target" => current_edge_target = value,
-                                            _ => {},
-                                        }
+                                for attr in e.attributes().flatten() {
+                                    let key = attr.key.as_ref();
+                                    let value = String::from_utf8_lossy(&attr.value).to_string();
+                                    match key {
+                                        b"source" => current_edge_source = value,
+                                        b"target" => current_edge_target = value,
+                                        _ => {},
                                     }
                                 }
                             },
                             b"data" => {
                                 // Read data key attribute
-                                for attr in e.attributes() {
-                                    if let Ok(attr) = attr {
-                                        if attr.key.as_ref() == b"key" {
-                                            current_data_key =
-                                                String::from_utf8_lossy(&attr.value).to_string();
-                                        }
+                                for attr in e.attributes().flatten() {
+                                    if attr.key.as_ref() == b"key" {
+                                        current_data_key =
+                                            String::from_utf8_lossy(&attr.value).to_string();
                                     }
                                 }
                             },
@@ -777,7 +770,7 @@ impl DataImporter {
                     },
                     Ok(Event::Text(e)) => {
                         if !current_data_key.is_empty() {
-                            let value = e.unescape().unwrap_or_default().to_string();
+                            let value = e.xml10_content().unwrap_or_default().to_string();
                             if in_node {
                                 current_node_attributes.insert(current_data_key.clone(), value);
                             } else if in_edge {
@@ -839,7 +832,8 @@ impl DataImporter {
                     },
                     Ok(Event::Eof) => break,
                     Err(e) => {
-                        errors.push(format!("XML parse error: {}", e));
+                        errors.push(ImportError::ParseError(format!("XML parse error: {e}"), 0));
+                        break;
                     },
                     _ => {},
                 }

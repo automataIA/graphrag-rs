@@ -396,6 +396,9 @@ impl ParquetPersistence {
                     confidence: confidences.value(i),
                     mentions: Vec::new(), // Will be populated later if needed
                     embedding,
+                    first_mentioned: None,
+                    last_mentioned: None,
+                    temporal_validity: None,
                 };
 
                 entities.push(entity);
@@ -408,8 +411,8 @@ impl ParquetPersistence {
         Ok(entities)
     }
 
-    /// Placeholder implementations for relationships, chunks, and documents
-    /// These will be similar to entities but with different schemas
+    // Placeholder implementations for relationships, chunks, and documents
+    // These will be similar to entities but with different schemas
 
     #[cfg(feature = "persistent-storage")]
     fn save_relationships(&self, graph: &KnowledgeGraph) -> Result<()> {
@@ -432,6 +435,7 @@ impl ParquetPersistence {
                 DataType::List(Arc::new(Field::new("item", DataType::Utf8, true))),
                 true,
             ),
+            Field::new("description", DataType::Utf8, true),
         ]));
 
         // Convert relationships to Arrow arrays
@@ -458,6 +462,10 @@ impl ParquetPersistence {
             context_builder.append(true);
         }
         let contexts = context_builder.finish();
+        let descriptions: StringArray = relationships
+            .iter()
+            .map(|r| r.description.as_deref())
+            .collect();
 
         // Create RecordBatch
         let batch = RecordBatch::try_new(
@@ -468,6 +476,7 @@ impl ParquetPersistence {
                 Arc::new(types),
                 Arc::new(confidences),
                 Arc::new(contexts),
+                Arc::new(descriptions),
             ],
         )
         .map_err(|e| GraphRAGError::Config {
@@ -572,6 +581,11 @@ impl ParquetPersistence {
                     message: "Invalid context column type".to_string(),
                 })?;
 
+            // Optional: absent in files written before the ontology refactor
+            let descriptions = batch
+                .column_by_name("description")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+
             for i in 0..batch.num_rows() {
                 // Extract context chunk IDs
                 let mut context = Vec::new();
@@ -597,6 +611,13 @@ impl ParquetPersistence {
                     relation_type: types.value(i).to_string(),
                     confidence: confidences.value(i),
                     context,
+                    description: descriptions
+                        .filter(|d| !d.is_null(i))
+                        .map(|d| d.value(i).to_string()),
+                    embedding: None,
+                    temporal_type: None,
+                    temporal_range: None,
+                    causal_strength: None,
                 };
 
                 relationships.push(relationship);
@@ -1245,6 +1266,45 @@ impl ParquetPersistence {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    fn graph_with_described_relationship() -> KnowledgeGraph {
+        let mut graph = KnowledgeGraph::new();
+        for id in ["a", "b"] {
+            graph
+                .add_entity(Entity::new(
+                    EntityId::new(id.to_string()),
+                    id.to_uppercase(),
+                    "PERSON".to_string(),
+                    0.9,
+                ))
+                .unwrap();
+        }
+        let mut rel = Relationship::new(
+            EntityId::new("a".to_string()),
+            EntityId::new("b".to_string()),
+            "OTHER".to_string(),
+            0.8,
+        );
+        rel.description = Some("questions: A questions B".to_string());
+        graph.add_relationship(rel).unwrap();
+        graph
+    }
+
+    #[test]
+    #[cfg(feature = "persistent-storage")]
+    fn relationship_description_round_trips() {
+        let temp_dir = TempDir::new().unwrap();
+        let persistence = ParquetPersistence::new(temp_dir.path().to_path_buf()).unwrap();
+        persistence
+            .save_relationships(&graph_with_described_relationship())
+            .unwrap();
+        let rels = persistence.load_relationships().unwrap();
+        assert_eq!(rels.len(), 1);
+        assert_eq!(
+            rels[0].description.as_deref(),
+            Some("questions: A questions B")
+        );
+    }
 
     #[test]
     fn test_parquet_persistence_creation() {

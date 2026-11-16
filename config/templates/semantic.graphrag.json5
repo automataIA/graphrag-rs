@@ -1,6 +1,6 @@
 {
   // GraphRAG Semantic Pipeline Configuration
-  // High-quality neural/LLM-based approach
+  // Performance and quality depend on the selected pipeline and corpus.
   // VSCode: This file has autocomplete! Type to see suggestions.
 
   "$schema": "../schema/graphrag-config.schema.json",
@@ -29,7 +29,7 @@
   semantic: {
     // --- Embeddings: Neural Vector Representations ---
     embeddings: {
-      backend: "huggingface",  // Options: huggingface, openai, voyage, ollama
+      backend: "huggingface",  // Options: huggingface, openai, voyage, llama_cpp
       model_name: "sentence-transformers/all-MiniLM-L6-v2",
       embedding_dimensions: 384,  // Must match model output
       normalize_embeddings: true,
@@ -41,7 +41,7 @@
       use_gleaning: true,
       max_gleaning_rounds: 3,  // 1-10, higher = better quality
 
-      llm_model: "llama3.1:8b",
+      llm_model: "qwen3.5-9b",
       llm_temperature: 0.1,  // 0.0-2.0, lower = more consistent
       llm_max_tokens: 1500,
 
@@ -133,24 +133,18 @@
   },
 
   // =========================================================================
-  // OLLAMA: LLM Service (REQUIRED for semantic)
+  // LLM (llama.cpp): LLM Service (REQUIRED for semantic)
   // =========================================================================
-  ollama: {
+  llm: {
     enabled: true,  // ✅ Must be true for semantic pipeline
-    host: "http://localhost",
-    port: 11434,
-    chat_model: "llama3.1:8b",
-    embedding_model: "nomic-embed-text",
+    base_url: "http://127.0.0.1:8080/v1",
+    embedding_base_url: "http://127.0.0.1:8081/v1",
+    chat_model: "qwen3.5-9b",
+    embedding_model: "multilingual-e5-small",
     timeout_seconds: 60,
     max_retries: 3,
     fallback_to_hash: false,
 
-    generation: {
-      temperature: 0.2,  // 0.0-2.0
-      top_p: 0.9,        // 0.0-1.0
-      max_tokens: 1000,
-      stream: false
-    }
   },
 
   // =========================================================================
@@ -188,7 +182,7 @@
   },
 
   // =========================================================================
-  // MONITORING: Quality Tracking
+  // Performance and quality depend on the selected pipeline and corpus.
   // =========================================================================
   monitoring: {
     enabled: true,

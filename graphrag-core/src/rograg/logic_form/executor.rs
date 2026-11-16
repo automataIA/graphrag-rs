@@ -311,21 +311,21 @@ impl LogicFormExecutor {
                     if let Some(date) = chunk.metadata.custom.get("date") {
                         bindings.push(VariableBinding {
                             variable: "T".to_string(),
-                            value: format!("{} occurred on {}", event_name, date),
+                            value: format!("{event_name} occurred on {date}"),
                             entity_id: Some(entity.id.to_string()),
                             confidence: 0.8,
                         });
                     } else if let Some(timestamp) = chunk.metadata.custom.get("timestamp") {
                         bindings.push(VariableBinding {
                             variable: "T".to_string(),
-                            value: format!("{} occurred at {}", event_name, timestamp),
+                            value: format!("{event_name} occurred at {timestamp}"),
                             entity_id: Some(entity.id.to_string()),
                             confidence: 0.8,
                         });
                     } else if let Some(time) = chunk.metadata.custom.get("time") {
                         bindings.push(VariableBinding {
                             variable: "T".to_string(),
-                            value: format!("{} happened at {}", event_name, time),
+                            value: format!("{event_name} happened at {time}"),
                             entity_id: Some(entity.id.to_string()),
                             confidence: 0.8,
                         });
@@ -408,8 +408,7 @@ impl LogicFormExecutor {
                         bindings.push(VariableBinding {
                             variable: "T".to_string(),
                             value: format!(
-                                "{} occurred {} (position: {:.2})",
-                                event_name, temporal_order, position
+                                "{event_name} occurred {temporal_order} (position: {position:.2})"
                             ),
                             entity_id: Some(entity.id.to_string()),
                             confidence: 0.5,
@@ -423,7 +422,7 @@ impl LogicFormExecutor {
         if bindings.is_empty() {
             bindings.push(VariableBinding {
                 variable: "T".to_string(),
-                value: format!("No temporal information found for {}", event_name),
+                value: format!("No temporal information found for {event_name}"),
                 entity_id: None,
                 confidence: 0.2,
             });
@@ -518,14 +517,13 @@ impl LogicFormExecutor {
                         let value = if chain.temporal_consistency {
                             if let Some(time_span) = chain.time_span {
                                 format!(
-                                    "Causal chain (temporally consistent, span={}s): {}",
-                                    time_span, chain_str
+                                    "Causal chain (temporally consistent, span={time_span}s): {chain_str}"
                                 )
                             } else {
-                                format!("Causal chain (temporally consistent): {}", chain_str)
+                                format!("Causal chain (temporally consistent): {chain_str}")
                             }
                         } else {
-                            format!("Causal chain: {}", chain_str)
+                            format!("Causal chain: {chain_str}")
                         };
 
                         bindings.push(VariableBinding {
@@ -616,8 +614,7 @@ impl LogicFormExecutor {
             bindings.push(VariableBinding {
                 variable: "C".to_string(),
                 value: format!(
-                    "No causal relationship found between {} and {}",
-                    cause_name, effect_name
+                    "No causal relationship found between {cause_name} and {effect_name}"
                 ),
                 entity_id: None,
                 confidence: 0.2,

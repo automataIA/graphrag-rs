@@ -32,6 +32,7 @@
 # Crates
 
 - [graphrag-core](crates/core.md)
+- [graphrag](crates/facade.md)
 - [graphrag-cli](crates/cli.md)
 - [graphrag-server](crates/server.md)
 - [graphrag-wasm](crates/wasm.md)
@@ -39,5 +40,6 @@
 # Reference
 
 - [API Reference (docs.rs)](reference/api-docs.md)
+- [Migrating from 0.2 to 0.3](reference/migration-0.2-to-0.3.md)
+- [0.3 Release Verification](reference/release-0.3.md)
 - [Troubleshooting](reference/troubleshooting.md)
-- [Changelog](reference/changelog.md)

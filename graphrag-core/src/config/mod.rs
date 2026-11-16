@@ -2,7 +2,7 @@
 //!
 //! Holds the runtime [`Config`] struct used by `GraphRAG`, plus the serde-friendly
 //! `SetConfig` schema (TOML / JSON5) that maps onto it. Both must stay in sync when
-//! adding fields — see the crate `CLAUDE.md` for the update checklist.
+//! adding fields; update the runtime and serde-facing config surfaces together.
 
 use crate::Result;
 use std::fs;
@@ -48,7 +48,7 @@ pub use setconfig::{
     SemanticRetrievalConfig,
     SetConfig,
 };
-pub use validation::{validate_config_file, Validatable, ValidationResult};
+pub use validation::{validate_config_file, validate_document_file, Validatable, ValidationResult};
 
 /// Configuration for the GraphRAG system
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -56,17 +56,8 @@ pub struct Config {
     /// Output directory for storing graphs and data
     pub output_dir: String,
 
-    /// Chunk size for text processing
-    pub chunk_size: usize,
-
-    /// Overlap between chunks
-    pub chunk_overlap: usize,
-
     /// Maximum entities per chunk
     pub max_entities_per_chunk: Option<usize>,
-
-    /// Top-k results for retrieval
-    pub top_k_results: Option<usize>,
 
     /// Similarity threshold for retrieval
     pub similarity_threshold: Option<f32>,
@@ -94,11 +85,24 @@ pub struct Config {
     /// Parallel processing configuration
     pub parallel: ParallelConfig,
 
-    /// Ollama integration configuration
-    pub ollama: crate::ollama::OllamaConfig,
+    /// LLM configuration (OpenAI-compatible: llama-server, Cerebras, Groq)
+    #[serde(default)]
+    pub llm: crate::llm::LlmConfig,
 
     /// GLiNER-Relex extractor configuration
     pub gliner: GlinerConfig,
+
+    /// Cross-encoder reranker configuration (opt-in)
+    #[serde(default)]
+    pub reranker: RerankerConfig,
+
+    /// Per-chapter LLM summaries stored as retrievable chunks (opt-in)
+    #[serde(default)]
+    pub chapter_summaries: ChapterSummariesConfig,
+
+    /// One LLM-written context line prepended to every chunk at index time (opt-in)
+    #[serde(default)]
+    pub chunk_context: ChunkContextConfig,
 
     /// Latest enhancements configuration
     pub enhancements: enhancements::EnhancementsConfig,
@@ -120,6 +124,93 @@ pub struct Config {
     /// Set to `true` when running inside a TUI to avoid corrupting the terminal.
     #[serde(default)]
     pub suppress_progress_bars: bool,
+}
+
+/// Cross-encoder reranker (llama.cpp `llama-server --reranking`, `/v1/rerank`).
+///
+/// Opt-in: when `enabled`, `ask` reranks a pool of candidate chunks and places the
+/// best `top_k` first in the answer context. Failures fall back to the default order.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct RerankerConfig {
+    /// Enable reranking in the ask path (default false)
+    pub enabled: bool,
+    /// Reranker server base URL (`/v1/rerank` is appended unless already present)
+    pub api_endpoint: String,
+    /// Reranker model alias
+    pub model: String,
+    /// Max distinct candidate chunks sent to the reranker
+    pub candidates: usize,
+    /// Number of reranked chunks placed first in the context
+    pub top_k: usize,
+    /// Name of the environment variable that holds the API key (never the key itself)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key_env: Option<String>,
+    /// Request timeout in seconds
+    pub timeout_seconds: u64,
+}
+
+impl Default for RerankerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            api_endpoint: "http://localhost:8082".to_string(),
+            model: "bge-reranker-v2-m3".to_string(),
+            candidates: 30,
+            top_k: 8,
+            api_key_env: None,
+            timeout_seconds: 30,
+        }
+    }
+}
+/// Per-chapter summaries written at index time (opt-in).
+///
+/// When `enabled` (and `llm.enabled`), `build_graph` makes one LLM call per chapter of the
+/// documents being indexed and stores each summary as an extra retrievable chunk.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct ChapterSummariesConfig {
+    /// Write chapter summaries at index time (default false)
+    pub enabled: bool,
+    /// Output token budget of one summary (default 400)
+    pub max_tokens: u32,
+    /// Max summary chunks added to the answer context, on top of the original chunks (default 2)
+    pub max_in_context: usize,
+}
+
+impl Default for ChapterSummariesConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            max_tokens: 400,
+            max_in_context: 2,
+        }
+    }
+}
+
+/// One context sentence per chunk written at index time (opt-in).
+///
+/// When `enabled` (and `llm.enabled`), `build_graph` makes one LLM call per chunk of the
+/// documents being indexed and prepends `[Contesto: <sentence>]` to the stored chunk text.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct ChunkContextConfig {
+    /// Write the context line of every chunk at index time (default false)
+    pub enabled: bool,
+    /// Preceding chunks of the same document shown to the model (default 4)
+    pub window: usize,
+    /// Output token budget of one context line (default 120)
+    pub max_tokens: u32,
+}
+
+impl Default for ChunkContextConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            window: 4,
+            max_tokens: 120,
+        }
+    }
 }
 
 /// GLiNER-Relex extractor configuration (joint NER + RE via ONNX Runtime)
@@ -147,6 +238,21 @@ pub struct GlinerConfig {
     /// sequential. Cap matches CPU cores or GPU stream count for best throughput.
     #[serde(default)]
     pub max_concurrent_chunks: Option<usize>,
+    /// GLiNER finds the entities, the LLM extracts only the relationships among them
+    /// (async `build_graph` only; requires `llm.enabled`). Ignores `relation_labels`.
+    #[serde(default)]
+    pub llm_relations: bool,
+    /// Extraction backend: "gline" (ONNX gline-rs, default) or "gliner2" (GLiNER2.5 via
+    /// pure-Rust candle, feature `gliner2`; `model_path` is then a model *directory*).
+    #[serde(default = "default_gliner_backend")]
+    pub backend: String,
+    /// Jev classification of entity types and relations (mode "g5", see [`JevConfig`])
+    #[serde(default)]
+    pub jev: JevConfig,
+}
+
+fn default_gliner_backend() -> String {
+    "gline".to_string()
 }
 
 impl Default for GlinerConfig {
@@ -167,6 +273,74 @@ impl Default for GlinerConfig {
             relation_threshold: 0.5,
             use_gpu: false,
             max_concurrent_chunks: None,
+            llm_relations: false,
+            backend: default_gliner_backend(),
+            jev: JevConfig::default(),
+        }
+    }
+}
+
+/// TypeSafe Jev classification of entity types and relations (`gliner.jev`, "g5" mode).
+///
+/// GLiNER finds the entities; Jev (`POST /v1/systemone`, Choice + Noul questions) classifies
+/// their types and the relations between ordered entity pairs against the ontology, keeping
+/// only relations explicitly stated in the chunk. Replaces GLiNER's own relations when
+/// enabled. Needs the `ureq` feature (HTTP client).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct JevConfig {
+    /// Enable the Jev stage
+    pub enabled: bool,
+    /// Jev endpoint
+    pub api_endpoint: String,
+    /// Model id (e.g. "jev-latest")
+    pub model: String,
+    /// *Name* of the env var holding the API key (never put the key in a config)
+    pub api_key_env: String,
+    /// Max entities per chunk sent to Jev (highest GLiNER confidence kept)
+    pub max_entities_per_chunk: usize,
+    /// Entity-existence filter (request E): candidates that are not specific, identifiable
+    /// referents are removed from the graph before pairs are built. `false` restores the
+    /// g5 flow (cap first, types inside request A)
+    pub filter_entities: bool,
+    /// Entity filter: minimum existence score (`noul`) for a candidate to be kept
+    pub min_entity: f32,
+    /// A pair gets the evidence request only if its `link` score is at least this
+    pub candidate_floor: f32,
+    /// Acceptance: minimum probability of the chosen relation type
+    pub min_type_prob: f32,
+    /// Acceptance: minimum `link` score
+    pub min_link: f32,
+    /// Acceptance: minimum `evidence` score
+    pub min_evidence: f32,
+    /// Entity type = Jev choice (otherwise the GLiNER/ontology type is kept)
+    pub classify_entity_types: bool,
+    /// Chunks processed concurrently
+    pub max_concurrent: usize,
+    /// JSONL raw log (default `<workspace dir>/jev_raw.jsonl` when auto_save is on, else none)
+    pub raw_log_path: Option<String>,
+    /// HTTP timeout per request, seconds
+    pub timeout_secs: u64,
+}
+
+impl Default for JevConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            api_endpoint: "https://api.typesafe.ai/v1/systemone".to_string(),
+            model: "jev-latest".to_string(),
+            api_key_env: "TYPESAFE_API_KEY".to_string(),
+            max_entities_per_chunk: 8,
+            filter_entities: true,
+            min_entity: 0.5,
+            candidate_floor: 0.2,
+            min_type_prob: 0.0,
+            min_link: 0.5,
+            min_evidence: 0.5,
+            classify_entity_types: true,
+            max_concurrent: 4,
+            raw_log_path: None,
+            timeout_secs: 120,
         }
     }
 }
@@ -965,7 +1139,7 @@ pub struct EmbeddingConfig {
     /// Dimension of the embedding vectors
     pub dimension: usize,
 
-    /// Embedding backend: "hash", "ollama", "huggingface", "openai", "voyage", "cohere", "jina", "mistral", "together", "onnx", "candle"
+    /// Embedding backend: "hash", "llama_cpp", "huggingface", "openai", "voyage", "cohere", "jina", "mistral", "together", "onnx", "candle"
     pub backend: String,
 
     /// Model identifier (provider-specific)
@@ -976,7 +1150,7 @@ pub struct EmbeddingConfig {
     /// - Jina: "jina-embeddings-v3"
     /// - Mistral: "mistral-embed"
     /// - Together: "BAAI/bge-large-en-v1.5"
-    /// - Ollama: "nomic-embed-text"
+    /// - llama.cpp: "multilingual-e5-small"
     #[serde(default)]
     pub model: Option<String>,
 
@@ -1069,6 +1243,16 @@ pub struct TextConfig {
     pub languages: Vec<String>,
 }
 
+impl Default for TextConfig {
+    fn default() -> Self {
+        Self {
+            chunk_size: default_chunk_size(),
+            chunk_overlap: default_chunk_overlap(),
+            languages: default_languages(),
+        }
+    }
+}
+
 /// Configuration for entity extraction
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EntityConfig {
@@ -1081,6 +1265,35 @@ pub struct EntityConfig {
     /// Whether to use LLM-based gleaning for entity extraction
     #[serde(default)]
     pub use_gleaning: bool,
+
+    /// Ask the extraction LLM whether each relationship is narrated or only said by a
+    /// character (`status` / `said_by`); `said` ones get a `[detto da X]` marker in their
+    /// description. Covers LLM single-pass, gleaning and the GLiNER-cascade relation stage.
+    /// Changes prompt and schema (new extraction-cache keys); needs a re-index. Default false.
+    #[serde(default)]
+    pub epistemic_status: bool,
+
+    /// Second, relation-only LLM call for the chunks the single-pass extraction left
+    /// under-extracted (at least 3 entities, at most 1 relationship). Applies only to LLM
+    /// single-pass extraction (not gleaning, GLiNER, cascade or pattern). One extra call only
+    /// for the selected chunks; needs a re-index to take effect. Default false.
+    #[serde(default)]
+    pub selective_gleaning: bool,
+
+    /// Selective gleaning: a chunk qualifies when the first pass found at least this many
+    /// entities. No effect when `selective_gleaning` is false. Default 3.
+    #[serde(default = "default_selective_min_entities")]
+    pub selective_min_entities: usize,
+
+    /// Selective gleaning: ...and at most this many relationships. No effect when
+    /// `selective_gleaning` is false. Default 1.
+    #[serde(default = "default_selective_max_relationships")]
+    pub selective_max_relationships: usize,
+
+    /// Output token cap for LLM entity/relation extraction calls. `None` (default) uses
+    /// `llm.max_tokens` (or 1500 when unset); answers always use `llm.max_tokens`.
+    #[serde(default)]
+    pub extraction_max_tokens: Option<usize>,
 
     /// Maximum number of gleaning rounds for refinement
     #[serde(default = "default_max_gleaning_rounds")]
@@ -1105,6 +1318,11 @@ pub struct EntityConfig {
     /// Facts longer than this will be rejected
     #[serde(default = "default_max_fact_tokens")]
     pub max_fact_tokens: usize,
+
+    /// Path to a TOML/JSON ontology file (see [`crate::ontology::Ontology`]).
+    /// `None` = built-in generic ontology restricted to `entity_types`.
+    #[serde(default)]
+    pub ontology_path: Option<String>,
 }
 
 /// Configuration for advanced GraphRAG features (Phases 2-3)
@@ -1208,7 +1426,7 @@ pub struct HierarchicalClusteringConfig {
     #[serde(default = "default_min_cluster_size")]
     pub min_cluster_size: usize,
 
-    /// Generate LLM summaries for clusters (requires Ollama)
+    /// Generate LLM summaries for clusters (requires the LLM)
     #[serde(default = "default_true")]
     pub generate_summaries: bool,
 }
@@ -1265,6 +1483,36 @@ pub struct RetrievalConfig {
 
     /// Search algorithm to use
     pub search_algorithm: String,
+
+    /// HyDE fusion (opt-in): in the ask path, one extra LLM call writes a hypothetical
+    /// passage. Hybrid search and the answer prompt keep the original question; the
+    /// reranker pool is extended with the candidates of "question + passage" and ranked
+    /// with both queries (the two rankings are interleaved by rank, original first: scores
+    /// of the two queries are not comparable). Needs `llm.enabled`, the
+    /// `llm` feature and `reranker.enabled` (otherwise HyDE is skipped with a warning).
+    #[serde(default)]
+    pub hyde: bool,
+
+    /// Graph facts (opt-in): in the ask path, the relationships of the seed entities
+    /// (entity search results + entities named in the question) are added to the answer
+    /// context as a "Fatti dal grafo" part that the context budget never drops.
+    #[serde(default)]
+    pub graph_facts: bool,
+
+    /// Map-reduce at query time (opt-in): in the ask path, one short LLM call per
+    /// candidate chunk (at most `map_reduce_chunks`) extracts the facts that help answer
+    /// the question; the notes become a "Fatti estratti dai passaggi" part of the answer
+    /// context. Costs `map_reduce_chunks` extra LLM calls per question. Needs `llm.enabled`.
+    #[serde(default)]
+    pub map_reduce: bool,
+
+    /// Max chunks mapped when `map_reduce` is on (default 60).
+    #[serde(default = "default_map_reduce_chunks")]
+    pub map_reduce_chunks: usize,
+}
+
+fn default_map_reduce_chunks() -> usize {
+    60
 }
 
 /// Configuration for parallel processing
@@ -1347,6 +1595,12 @@ fn default_relationship_confidence() -> f32 {
 }
 fn default_max_gleaning_rounds() -> usize {
     3
+}
+fn default_selective_min_entities() -> usize {
+    3
+}
+fn default_selective_max_relationships() -> usize {
+    1
 }
 
 fn default_validation_confidence() -> f32 {
@@ -1450,10 +1704,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             output_dir: "./output".to_string(),
-            chunk_size: default_chunk_size(),
-            chunk_overlap: default_chunk_overlap(),
             max_entities_per_chunk: Some(10),
-            top_k_results: Some(default_top_k()),
             similarity_threshold: Some(default_similarity_threshold()),
             approach: default_approach(),
             embeddings: EmbeddingConfig {
@@ -1482,15 +1733,25 @@ impl Default for Config {
                 min_confidence: default_min_confidence(),
                 entity_types: default_entity_types(),
                 use_gleaning: false,
+                epistemic_status: false,
+                selective_gleaning: false,
+                selective_min_entities: default_selective_min_entities(),
+                selective_max_relationships: default_selective_max_relationships(),
+                extraction_max_tokens: None,
                 max_gleaning_rounds: default_max_gleaning_rounds(),
                 enable_triple_reflection: false,
                 validation_min_confidence: default_validation_confidence(),
                 use_atomic_facts: false,
                 max_fact_tokens: default_max_fact_tokens(),
+                ontology_path: None,
             },
             retrieval: RetrievalConfig {
                 top_k: default_top_k(),
                 search_algorithm: default_search_algorithm(),
+                hyde: false,
+                graph_facts: false,
+                map_reduce: false,
+                map_reduce_chunks: default_map_reduce_chunks(),
             },
             parallel: ParallelConfig {
                 num_threads: default_num_threads(),
@@ -1501,8 +1762,11 @@ impl Default for Config {
                 parallel_graph_ops: true,
                 parallel_vector_ops: true,
             },
-            ollama: crate::ollama::OllamaConfig::default(),
+            llm: crate::llm::LlmConfig::default(),
             gliner: GlinerConfig::default(),
+            reranker: RerankerConfig::default(),
+            chapter_summaries: ChapterSummariesConfig::default(),
+            chunk_context: ChunkContextConfig::default(),
             enhancements: enhancements::EnhancementsConfig::default(),
             auto_save: AutoSaveConfig {
                 enabled: false,
@@ -1532,10 +1796,42 @@ impl Default for AutoSaveConfig {
 }
 
 impl Config {
+    /// Extraction ontology: the file at `entities.ontology_path` if set,
+    /// otherwise the built-in generic ontology restricted to the entity types
+    /// of the active extractor — `gliner.entity_labels` when GLiNER runs
+    /// (`gliner.enabled`, which takes precedence over the LLM extractors), else
+    /// `entities.entity_types`. An empty list keeps all generic types.
+    pub fn ontology(&self) -> crate::Result<crate::ontology::Ontology> {
+        if let Some(path) = &self.entities.ontology_path {
+            return crate::ontology::Ontology::from_path(path);
+        }
+        let generic = crate::ontology::Ontology::generic();
+        let types = if self.gliner.enabled {
+            // GLiNER labels are prompts for the model, not type names: map each onto its
+            // canonical built-in name (unknown labels stay as custom types), deduplicated.
+            let mut names: Vec<String> = Vec::new();
+            for label in &self.gliner.entity_labels {
+                let canonical = generic.normalize_entity_type(label);
+                let name = if canonical == "OTHER" {
+                    label.clone()
+                } else {
+                    canonical
+                };
+                if !names.contains(&name) {
+                    names.push(name);
+                }
+            }
+            names
+        } else {
+            self.entities.entity_types.clone()
+        };
+        Ok(generic.with_entity_types(&types))
+    }
+
     /// Turnkey config for a workspace directory. Persists graph + index to
     /// `workspace`. Uses hash-fallback embeddings and pattern-based entity
-    /// extraction by default — works offline, no Ollama required. Chain
-    /// `.with_ollama(...)` etc. to enable LLM features.
+    /// extraction by default — works offline, no LLM server required. Chain
+    /// `.with_llm()` etc. to enable LLM features.
     pub fn quick(workspace: impl AsRef<std::path::Path>) -> Self {
         let ws = workspace.as_ref();
         let ws_str = ws.to_string_lossy().into_owned();
@@ -1558,24 +1854,29 @@ impl Config {
         }
     }
 
-    /// Enable Ollama with sensible defaults (localhost:11434, llama3.2:3b).
-    pub fn with_ollama(mut self) -> Self {
-        self.ollama.enabled = true;
-        self.embeddings.backend = "ollama".to_string();
+    /// Enable the LLM with local llama-server defaults: chat on
+    /// `http://127.0.0.1:8080/v1`, multilingual-e5 embeddings on
+    /// `http://127.0.0.1:8081/v1`.
+    pub fn with_llm(mut self) -> Self {
+        self.llm.enabled = true;
+        self.embeddings.backend = "llama_cpp".to_string();
+        self.embeddings.dimension = 384;
+        self.embeddings.model = Some(self.llm.embedding_model.clone());
+        self.embeddings.api_endpoint = Some(self.llm.embeddings_url());
+        // llama.cpp embeddings must not silently degrade to hash vectors.
+        self.embeddings.fallback_to_hash = false;
         self
     }
 
-    /// Override Ollama host (e.g. `http://gpu-box:11434`).
-    pub fn with_ollama_host(mut self, host: impl Into<String>) -> Self {
-        self.ollama.host = host.into();
-        self.ollama.enabled = true;
+    /// Override the chat base URL (e.g. `http://gpu-box:8080/v1`) and enable the LLM.
+    pub fn with_llm_base_url(mut self, base_url: impl Into<String>) -> Self {
+        self.llm.base_url = base_url.into();
+        self.llm.enabled = true;
         self
     }
 
     /// Override chunk size and overlap (overlap defaults to 20 % of size).
     pub fn with_chunk_size(mut self, size: usize) -> Self {
-        self.chunk_size = size;
-        self.chunk_overlap = size / 5;
         self.text.chunk_size = size;
         self.text.chunk_overlap = size / 5;
         self
@@ -1648,14 +1949,210 @@ impl Default for ObjectiveWeightsConfig {
     }
 }
 
+fn config_home_dir() -> Option<std::path::PathBuf> {
+    #[cfg(windows)]
+    let variable = "USERPROFILE";
+    #[cfg(not(windows))]
+    let variable = "HOME";
+
+    std::env::var_os(variable)
+        .or_else(|| std::env::var_os("HOME"))
+        .map(std::path::PathBuf::from)
+}
+
+fn collect_environment_paths(
+    value: &serde_json::Value,
+    path: &mut Vec<String>,
+    paths: &mut Vec<(String, Vec<String>, serde_json::Value)>,
+) {
+    if let Some(object) = value.as_object() {
+        for (key, child) in object {
+            path.push(key.clone());
+            collect_environment_paths(child, path, paths);
+            path.pop();
+        }
+    } else if !path.is_empty() {
+        let name = path.join("_").to_ascii_uppercase();
+        paths.push((name, path.clone(), value.clone()));
+    }
+}
+
+fn value_at_path<'a, S: AsRef<str>>(
+    value: &'a serde_json::Value,
+    path: &[S],
+) -> Option<&'a serde_json::Value> {
+    let mut current = value;
+    for component in path {
+        current = current.as_object()?.get(component.as_ref())?;
+    }
+    Some(current)
+}
+
+fn set_value_at_path(
+    value: &mut serde_json::Value,
+    path: &[String],
+    replacement: serde_json::Value,
+) -> Result<()> {
+    let mut current = value;
+    for component in &path[..path.len().saturating_sub(1)] {
+        current = current
+            .as_object_mut()
+            .and_then(|object| object.get_mut(component))
+            .ok_or_else(|| crate::core::GraphRAGError::Config {
+                message: format!("Unknown configuration path: {}", path.join(".")),
+            })?;
+    }
+    let key = path
+        .last()
+        .ok_or_else(|| crate::core::GraphRAGError::Config {
+            message: "Environment configuration path cannot be empty".to_string(),
+        })?;
+    current
+        .as_object_mut()
+        .ok_or_else(|| crate::core::GraphRAGError::Config {
+            message: format!("Configuration path is not an object: {}", path.join(".")),
+        })?
+        .insert(key.clone(), replacement);
+    Ok(())
+}
+
+fn parse_environment_value(
+    raw: &str,
+    template: &serde_json::Value,
+    variable: &str,
+) -> Result<serde_json::Value> {
+    let invalid = || crate::core::GraphRAGError::Config {
+        message: format!("Invalid value for environment variable {variable}"),
+    };
+    match template {
+        serde_json::Value::Bool(_) => raw
+            .parse::<bool>()
+            .map(serde_json::Value::Bool)
+            .map_err(|_| invalid()),
+        serde_json::Value::Number(number) if number.is_u64() => raw
+            .parse::<u64>()
+            .map(|number| serde_json::Value::Number(number.into()))
+            .map_err(|_| invalid()),
+        serde_json::Value::Number(number) if number.is_i64() => raw
+            .parse::<i64>()
+            .map(|number| serde_json::Value::Number(number.into()))
+            .map_err(|_| invalid()),
+        serde_json::Value::Number(_) => raw
+            .parse::<f64>()
+            .ok()
+            .and_then(serde_json::Number::from_f64)
+            .map(serde_json::Value::Number)
+            .ok_or_else(invalid),
+        serde_json::Value::String(_) => Ok(serde_json::Value::String(raw.to_string())),
+        serde_json::Value::Array(_) | serde_json::Value::Object(_) => {
+            serde_json::from_str(raw).map_err(|_| invalid())
+        },
+        serde_json::Value::Null => {
+            if raw.eq_ignore_ascii_case("null") {
+                return Ok(serde_json::Value::Null);
+            }
+
+            // `Option<T>` serializes as `null` when its default is `None`, so
+            // the JSON value alone cannot tell us whether an environment
+            // override should be a string, number, boolean, or array.  The
+            // public environment surface uses these conventional suffixes
+            // for optional string fields; preserve their unquoted shell value
+            // and let serde validate the final field type.
+            const STRING_SUFFIXES: &[&str] = &[
+                "_BASE_DIR",
+                "_CACHE_DIR",
+                "_WORKSPACE_NAME",
+                "_MODEL",
+                "_ENDPOINT",
+                "_API_KEY",
+                "_PROMPT_TEMPLATE",
+                "_KEEP_ALIVE",
+                "_PATH",
+            ];
+            if STRING_SUFFIXES
+                .iter()
+                .any(|suffix| variable.ends_with(suffix))
+            {
+                return Ok(serde_json::Value::String(raw.to_string()));
+            }
+
+            serde_json::from_str(raw).map_err(|_| invalid())
+        },
+    }
+}
+
+fn apply_environment_overrides(config: &mut serde_json::Value) -> Result<()> {
+    let defaults = serde_json::to_value(Config::default()).map_err(|e| {
+        crate::core::GraphRAGError::Config {
+            message: format!("Failed to serialize default configuration: {e}"),
+        }
+    })?;
+    let mut paths = Vec::new();
+    collect_environment_paths(&defaults, &mut Vec::new(), &mut paths);
+
+    // These names predate the nested runtime schema and remain accepted as
+    // read-only environment adapters. All other names use the serialized
+    // field path joined with underscores; `__` is accepted as an explicit
+    // nesting separator for fields whose names contain underscores.
+    let legacy_paths = [
+        ("CHUNK_SIZE", &["text", "chunk_size"][..]),
+        ("CHUNK_OVERLAP", &["text", "chunk_overlap"][..]),
+        ("TOP_K_RESULTS", &["retrieval", "top_k"][..]),
+    ];
+    let mut overrides: Vec<(String, Vec<String>, serde_json::Value)> = Vec::new();
+    for (name, raw) in std::env::vars() {
+        let Some(suffix) = name.strip_prefix("GRAPHRAG_") else {
+            continue;
+        };
+        let normalized = suffix.replace("__", "_").to_ascii_uppercase();
+        let path_and_template = paths
+            .iter()
+            .find(|(candidate, _, _)| candidate == &normalized)
+            .map(|(_, path, template)| (path.clone(), template.clone()))
+            .or_else(|| {
+                legacy_paths
+                    .iter()
+                    .find(|(candidate, _)| *candidate == normalized.as_str())
+                    .and_then(|(_, path)| {
+                        value_at_path(&defaults, path).map(|template| {
+                            (
+                                path.iter().map(|s| s.to_string()).collect(),
+                                template.clone(),
+                            )
+                        })
+                    })
+            });
+        let Some((path, template)) = path_and_template else {
+            continue;
+        };
+        let parsed = parse_environment_value(&raw, &template, &name)?;
+        if let Some((previous_name, _, previous_value)) = overrides
+            .iter()
+            .find(|(_, previous_path, _)| *previous_path == path)
+        {
+            if previous_value != &parsed {
+                return Err(crate::core::GraphRAGError::Config {
+                    message: format!("Conflicting environment values: {previous_name} and {name}"),
+                });
+            }
+        } else {
+            overrides.push((name, path, parsed));
+        }
+    }
+    for (_, path, value) in overrides {
+        set_value_at_path(config, &path, value)?;
+    }
+    Ok(())
+}
+
 impl Config {
-    /// Load configuration with hierarchical merging (requires `hierarchical-config` feature)
+    /// Load configuration with hierarchical merging.
     ///
     /// Configuration sources are merged in order of priority (lowest to highest):
     /// 1. Built-in defaults
     /// 2. User config: `~/.graphrag/config.toml`
     /// 3. Project config: `./graphrag.toml`
-    /// 4. Environment variables: `GRAPHRAG_*` (e.g., `GRAPHRAG_OLLAMA_HOST`)
+    /// 4. Environment variables: `GRAPHRAG_*` (e.g., `GRAPHRAG_LLM_BASE_URL`)
     ///
     /// # Example
     /// ```rust,no_run
@@ -1665,49 +2162,48 @@ impl Config {
     /// let config = Config::load()?;
     /// # Ok::<(), graphrag_core::GraphRAGError>(())
     /// ```
-    #[cfg(feature = "hierarchical-config")]
     pub fn load() -> Result<Self> {
-        use figment::{
-            providers::{Env, Format, Serialized, Toml},
-            Figment,
+        // Parse each file as a partial value, normalizing legacy aliases before
+        // merging. This preserves defaults from lower-priority layers instead
+        // of replacing them with a deserialized struct's implicit defaults.
+        let mut merged = serde_json::to_value(Self::default()).map_err(|e| {
+            crate::core::GraphRAGError::Config {
+                message: format!("Failed to serialize default configuration: {e}"),
+            }
+        })?;
+        let mut merge_file = |path: &std::path::Path| -> Result<()> {
+            if !path.exists() {
+                return Ok(());
+            }
+            let content = fs::read_to_string(path)?;
+            let toml_value: toml::Value =
+                toml::from_str(&content).map_err(|e| crate::core::GraphRAGError::Config {
+                    message: format!("Failed to parse TOML config {}: {e}", path.display()),
+                })?;
+            let mut value = serde_json::to_value(toml_value).map_err(|e| {
+                crate::core::GraphRAGError::Config {
+                    message: format!("Failed to convert TOML config {}: {e}", path.display()),
+                }
+            })?;
+            crate::config::json_parser::normalize_legacy_runtime_keys(&mut value)?;
+            crate::config::json_parser::merge_json(&mut merged, value);
+            Ok(())
         };
 
-        // Build the configuration chain
-        let mut figment = Figment::new()
-            // 1. Start with defaults
-            .merge(Serialized::defaults(Config::default()));
-
-        // 2. User-level config (~/.graphrag/config.toml)
-        if let Some(home) = dirs::home_dir() {
-            let user_config = home.join(".graphrag").join("config.toml");
-            if user_config.exists() {
-                figment = figment.merge(Toml::file(user_config));
-            }
+        if let Some(home) = config_home_dir() {
+            merge_file(&home.join(".graphrag").join("config.toml"))?;
         }
+        merge_file(std::path::Path::new("graphrag.toml"))?;
 
-        // 3. Project-level config (./graphrag.toml)
-        let project_config = std::path::Path::new("graphrag.toml");
-        if project_config.exists() {
-            figment = figment.merge(Toml::file(project_config));
+        apply_environment_overrides(&mut merged)?;
+        let config = crate::config::json_parser::from_json_value(merged)?;
+        let validation = crate::config::Validatable::validate(&config);
+        if !validation.is_valid {
+            return Err(crate::core::GraphRAGError::Config {
+                message: validation.errors.join("; "),
+            });
         }
-
-        // 4. Environment variables (GRAPHRAG_*)
-        // Maps GRAPHRAG_OLLAMA_HOST -> ollama.host
-        figment = figment.merge(Env::prefixed("GRAPHRAG_").split("_"));
-
-        figment
-            .extract()
-            .map_err(|e| crate::core::GraphRAGError::Config {
-                message: format!("Failed to load hierarchical configuration: {}", e),
-            })
-    }
-
-    /// Load configuration with hierarchical merging (stub for when feature is disabled)
-    ///
-    /// When the `hierarchical-config` feature is not enabled, this falls back to `Config::default()`.
-    #[cfg(not(feature = "hierarchical-config"))]
-    pub fn load() -> Result<Self> {
-        Ok(Config::default())
+        Ok(config)
     }
 
     /// Load configuration from a TOML file with environment variable overrides
@@ -1724,10 +2220,99 @@ impl Config {
     /// ```
     pub fn from_toml_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
         let content = fs::read_to_string(path.as_ref())?;
-        let config: Config =
-            toml::from_str(&content).map_err(|e| crate::core::GraphRAGError::Config {
-                message: format!("Failed to parse TOML config: {}", e),
-            })?;
-        Ok(config)
+        Self::from_toml_str(&content)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_environment_value, Config};
+
+    fn gliner_config(labels: &[&str]) -> Config {
+        let mut config = Config::default();
+        config.gliner.enabled = true;
+        config.llm.enabled = false;
+        config.gliner.entity_labels = labels.iter().map(|s| s.to_string()).collect();
+        config
+    }
+
+    #[test]
+    fn gliner_labels_map_to_canonical_ontology_types() {
+        let ontology = gliner_config(&["character", "place", "event"])
+            .ontology()
+            .unwrap();
+        assert_eq!(
+            ontology.entity_type_names(),
+            ["PERSON", "LOCATION", "EVENT"]
+        );
+        assert_eq!(ontology.normalize_entity_type("character"), "PERSON");
+        assert_eq!(ontology.normalize_entity_type("place"), "LOCATION");
+        // the id no longer depends on the alias chosen as GLiNER prompt
+        let canonical = gliner_config(&["person", "location", "event"])
+            .ontology()
+            .unwrap();
+        assert_eq!(ontology.id(), canonical.id());
+    }
+
+    #[test]
+    fn gliner_labels_dedupe_after_canonicalisation() {
+        let ontology = gliner_config(&["person", "persona", "character"])
+            .ontology()
+            .unwrap();
+        assert_eq!(ontology.entity_type_names(), ["PERSON"]);
+    }
+
+    #[test]
+    fn gliner_unknown_label_stays_a_custom_type() {
+        let ontology = gliner_config(&["character", "animale_custom"])
+            .ontology()
+            .unwrap();
+        assert_eq!(ontology.entity_type_names(), ["PERSON", "ANIMALE_CUSTOM"]);
+    }
+
+    #[test]
+    fn non_gliner_entity_types_keep_renaming_builtin_types() {
+        let mut config = Config::default();
+        config.entities.entity_types = vec!["character".into()];
+        let ontology = config.ontology().unwrap();
+        assert_eq!(ontology.entity_type_names(), ["CHARACTER"]);
+    }
+
+    #[test]
+    fn quick_with_llm_config_is_valid() {
+        use crate::config::Validatable;
+        let config = Config::quick("./graphrag-data").with_llm();
+        let validation = config.validate();
+        assert!(validation.is_valid, "{:?}", validation.errors);
+        assert!(!config.embeddings.fallback_to_hash);
+        assert_eq!(config.embeddings.backend, "llama_cpp");
+    }
+
+    #[test]
+    fn optional_string_environment_values_accept_unquoted_paths() {
+        let value = parse_environment_value(
+            "/tmp/workspaces",
+            &serde_json::Value::Null,
+            "GRAPHRAG_AUTO_SAVE_BASE_DIR",
+        )
+        .expect("optional string environment value should parse");
+        assert_eq!(value, serde_json::Value::String("/tmp/workspaces".into()));
+
+        let explicit_null = parse_environment_value(
+            "null",
+            &serde_json::Value::Null,
+            "GRAPHRAG_AUTO_SAVE_BASE_DIR",
+        )
+        .expect("explicit null should parse");
+        assert_eq!(explicit_null, serde_json::Value::Null);
+    }
+
+    #[test]
+    fn default_text_settings_are_nonzero_and_semantically_valid() {
+        let config = Config::default();
+        assert!(config.text.chunk_size > 0);
+        assert!(config.text.chunk_overlap < config.text.chunk_size);
+        assert!(config.retrieval.top_k > 0);
+        assert!(crate::config::Validatable::validate(&config).is_valid);
     }
 }

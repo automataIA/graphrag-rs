@@ -46,8 +46,8 @@ impl HtmlLayoutParser {
         for (line_num, line) in lines.iter().enumerate() {
             // Look for heading tags h1-h6
             for level in 1..=6 {
-                let open_tag = format!("<h{}", level);
-                let close_tag = format!("</h{}>", level);
+                let open_tag = format!("<h{level}");
+                let close_tag = format!("</h{level}>");
 
                 if let Some(start_idx) = line.to_lowercase().find(&open_tag) {
                     if let Some(end_idx) = line.to_lowercase().find(&close_tag) {

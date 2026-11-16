@@ -1,0 +1,9 @@
+# Versions used by the pinned phase-6 conversion/parity run.
+gguf==0.19.0
+numpy==1.26.4
+safetensors==0.8.0
+tokenizers==0.22.2
+torch==2.11.0+cpu
+transformers==4.57.6
+protobuf==7.36.2
+sentencepiece==0.2.3

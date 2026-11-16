@@ -126,12 +126,12 @@ impl EmbeddingProviderConfig {
     pub fn from_toml_file(path: impl Into<PathBuf>) -> Result<Self> {
         let path = path.into();
         let content = std::fs::read_to_string(&path).map_err(|e| GraphRAGError::Config {
-            message: format!("Failed to read config file {:?}: {}", path, e),
+            message: format!("Failed to read config file {path:?}: {e}"),
         })?;
 
         let config: EmbeddingsTomlConfig =
             toml::from_str(&content).map_err(|e| GraphRAGError::Config {
-                message: format!("Failed to parse TOML config: {}", e),
+                message: format!("Failed to parse TOML config: {e}"),
             })?;
 
         Ok(config.embeddings)
@@ -145,11 +145,11 @@ impl EmbeddingProviderConfig {
         };
 
         let toml_string = toml::to_string_pretty(&config).map_err(|e| GraphRAGError::Config {
-            message: format!("Failed to serialize TOML: {}", e),
+            message: format!("Failed to serialize TOML: {e}"),
         })?;
 
         std::fs::write(&path, toml_string).map_err(|e| GraphRAGError::Config {
-            message: format!("Failed to write config file {:?}: {}", path, e),
+            message: format!("Failed to write config file {path:?}: {e}"),
         })?;
 
         Ok(())
@@ -312,7 +312,7 @@ mod tests {
                 ..Default::default()
             };
             let result = config.to_embedding_config().unwrap();
-            assert_eq!(result.provider, expected, "Failed for alias: {}", alias);
+            assert_eq!(result.provider, expected, "Failed for alias: {alias}");
         }
     }
 
@@ -343,14 +343,14 @@ mod tests {
         assert!(!examples.is_empty());
 
         for (name, config) in examples {
-            println!("Testing example: {}", name);
+            println!("Testing example: {name}");
             assert!(!config.provider.is_empty());
             assert!(!config.model.is_empty());
             assert!(config.batch_size > 0);
 
             // Should convert successfully
             let embedding_config = config.to_embedding_config();
-            assert!(embedding_config.is_ok(), "Failed for: {}", name);
+            assert!(embedding_config.is_ok(), "Failed for: {name}");
         }
     }
 }

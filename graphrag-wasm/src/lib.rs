@@ -29,8 +29,8 @@ use wasm_bindgen::prelude::*;
 
 // WASM backend modules
 pub mod embedder;
+pub mod llama_http; // llama.cpp OpenAI-compatible HTTP client (alternative to WebLLM)
 pub mod llm_provider; // Unified LLM provider abstraction
-pub mod ollama_http; // Ollama HTTP client (alternative to WebLLM)
 pub mod storage;
 pub mod vector_search; // Pure Rust vector search (replaces JavaScript Voy)
 pub mod voy_bindings; // Voy vector search bindings
@@ -49,8 +49,8 @@ pub mod components;
 // Re-export ONNX types for easy access
 pub use onnx_embedder::{check_onnx_runtime, WasmOnnxEmbedder};
 
-// Re-export Ollama HTTP client
-pub use ollama_http::{OllamaHttpClient, OllamaHttpConfig};
+// Re-export llama.cpp HTTP client
+pub use llama_http::{LlamaCppHttpClient, LlamaCppHttpConfig};
 
 // Re-export unified LLM provider
 pub use llm_provider::{LlmProviderConfig, LlmProviderType, UnifiedLlmClient};

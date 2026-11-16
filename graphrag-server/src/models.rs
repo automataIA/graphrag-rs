@@ -160,7 +160,7 @@ pub struct DocumentSummary {
 // ============================================================================
 
 /// Graph statistics
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ApiComponent)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ApiComponent)]
 #[serde(rename_all = "camelCase")]
 pub struct GraphStatsResponse {
     /// Number of documents
@@ -316,6 +316,7 @@ pub struct ApiKeyRequest {
 
 /// API Error types with OpenAPI documentation
 #[derive(Debug, Clone, Serialize, Deserialize, ApiErrorComponent)]
+#[allow(clippy::duplicated_attributes)]
 #[openapi_error(
     status(code = 400, description = "Bad Request - Invalid input or parameters"),
     status(
@@ -345,10 +346,10 @@ pub enum ApiError {
 impl fmt::Display for ApiError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ApiError::BadRequest(msg) => write!(f, "Bad Request: {}", msg),
-            ApiError::Unauthorized(msg) => write!(f, "Unauthorized: {}", msg),
-            ApiError::NotFound(msg) => write!(f, "Not Found: {}", msg),
-            ApiError::InternalError(msg) => write!(f, "Internal Server Error: {}", msg),
+            ApiError::BadRequest(msg) => write!(f, "Bad Request: {msg}"),
+            ApiError::Unauthorized(msg) => write!(f, "Unauthorized: {msg}"),
+            ApiError::NotFound(msg) => write!(f, "Not Found: {msg}"),
+            ApiError::InternalError(msg) => write!(f, "Internal Server Error: {msg}"),
         }
     }
 }

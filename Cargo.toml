@@ -9,11 +9,10 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
-# Verified MSRV: the `jsonfixer` dependency uses edition 2024, which requires
-# rustc >= 1.85. Build-verified on 1.85 for graphrag-core and graphrag-cli.
-rust-version = "1.85"
+# Leptos 0.8 and its transitive UI stack require Rust 1.88.
+rust-version = "1.88"
 authors = ["GraphRAG-RS Contributors"]
 license = "MIT"
 repository = "https://github.com/automataIA/graphrag-rs"
@@ -79,7 +78,7 @@ indexmap = { version = "2.0", features = ["serde"] }
 sprs = "0.11"
 nalgebra = "0.32"
 parking_lot = "0.12"
-lru = "0.12"
+lru = "0.18.4"
 mimalloc = { version = "0.1", default-features = false }
 rustc-hash = "2.0"
 
@@ -112,7 +111,6 @@ termcolor = "1.4"
 reedline = "0.37"
 
 # LLM integrations
-ollama-rs = "0.2"
 jsonfixer = "0.1" # JSON repair for malformed LLM output
 
 # HTTP client

@@ -5,12 +5,12 @@
 //!
 //! 1. 🆓 Zero Costi LLM - $0 su TUTTO (indexing + query)
 //! 2. 📦 Zero Dipendenze Pesanti - NO SpaCy, solo regex + TF-IDF
-//! 3. 🦀 Rust-Native Performance - 56x più veloce, 24x meno memoria
+//! 3. 🦀 Rust-native local processing with a small dependency footprint
 //!
 //! Configuration: config/templates/symposium_graphrag_rs_philosophy.graphrag.json5
 //!
 //! Filosofia GraphRAG-rs:
-//!   ✅ Zero Costi Operativi > Massima Accuratezza
+//!   ✅ Zero Costi Operativi > Servizi Esterni
 //!   ✅ Privacy & Offline > Cloud Convenience
 //!   ✅ Footprint Minimale > Feature Completeness
 //!   ✅ Performance Real-Time > Semantic Depth
@@ -19,11 +19,11 @@
 //! cargo run --example symposium_graphrag_rs_philosophy --features async,json5-support
 //!
 //! Expected:
-//! - Processing time: 5-10 secondi (100x più veloce di LLM!)
+//! - Processing time: measured by this local run
 //! - Indexing cost: $0 (NO API calls)
 //! - Query cost: $0 (NO API calls)
-//! - Query time: 50ms (16x più veloce di LLM)
-//! - Quality: ~80% (accettabile per $0 costi!)
+//! - Query time: measured by this local run
+//! - Quality: evaluate on the target corpus
 
 use graphrag_core::GraphRAG;
 use std::time::Instant;
@@ -33,18 +33,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🦀 Plato's Symposium: GraphRAG-rs Philosophy Approach");
     println!("{}", "=".repeat(70));
     println!("📋 Configuration: symposium_graphrag_rs_philosophy.graphrag.json5");
-    println!("🎯 Approach: 100% Algorithmic (NO LLM mai!)");
+    println!("🎯 Approach: Algorithmic (no LLM for extraction or retrieval)");
     println!("💰 Cost: $0 indexing, $0 query (privacy totale)");
     println!("⏱️ Time: 5-10 secondi processing, 50ms per query\n");
 
     println!("✨ Filosofia GraphRAG-rs (da DESIGN_CHOICES_ITALIANO.md):");
-    println!("   1. Zero Costi Operativi > Massima Accuratezza");
+    println!("   1. Zero Costi Operativi > Servizi Esterni");
     println!("   2. Privacy & Offline > Cloud Convenience");
     println!("   3. Footprint Minimale > Feature Completeness");
     println!("   4. Performance Real-Time > Semantic Depth\n");
 
     // === PHASE 1: Load Configuration and Process Document ===
-    println!("⚙️ Phase 1: Building knowledge graph (100% algorithmic)...");
+    println!("⚙️ Phase 1: Building knowledge graph (algorithmic extraction)...");
     println!("   📋 Config: config/templates/symposium_graphrag_rs_philosophy.graphrag.json5");
     println!("   📖 Document: docs-example/Symposium.txt");
     println!("\n   💡 Note: Progress bars will show processing status");
@@ -71,7 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "   ⏱️ Processing time: {:.2}s (target: 5-10s)",
         processing_time.as_secs_f64()
     );
-    println!("   💰 API calls made: 0 (100% offline!)");
+    println!("   💰 API calls made: 0 (local path)");
 
     // === PHASE 2: Knowledge Graph Statistics ===
     println!("\n📊 Phase 2: Knowledge Graph Statistics");
@@ -82,10 +82,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let entity_count = graph.entities().count();
         let relationship_count = graph.relationships().count();
 
-        println!("   - Documents: {}", doc_count);
-        println!("   - Chunks: {}", chunk_count);
-        println!("   - Entities: {} (regex + capitalization)", entity_count);
-        println!("   - Relationships: {} (co-occurrence)", relationship_count);
+        println!("   - Documents: {doc_count}");
+        println!("   - Chunks: {chunk_count}");
+        println!("   - Entities: {entity_count} (regex + capitalization)");
+        println!("   - Relationships: {relationship_count} (co-occurrence)");
 
         // Show sample entities
         println!("\n   📝 Sample Entities (extracted with regex patterns):");
@@ -108,12 +108,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "What is the ladder of love and how does it lead to wisdom?",
     ];
 
-    println!("\n💡 Query Processing (100% Algorithmic - NO LLM):");
+    println!("\n💡 Query Processing (algorithmic retrieval - NO LLM):");
     println!("   1. Regex estrae concetti chiave dalla query");
     println!("   2. Graph trova entità correlate (co-occurrence)");
     println!("   3. BM25 calcola relevance score per ogni chunk");
     println!("   4. Ritorna top-K chunks più rilevanti");
-    println!("   Tempo: ~50ms (vs 800ms LLM) - 16x più veloce!\n");
+    println!("   Tempo: misurato dal run locale\n");
 
     for (i, query) in queries.iter().enumerate() {
         println!("\n📋 Query {}/{}: \"{}\"", i + 1, queries.len(), query);
@@ -122,7 +122,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let query_start = Instant::now();
 
         // Query usando solo BM25 + graph (NO LLM!)
-        // Nota: con ollama.enabled = false, ritorna formatted chunks
+        // Nota: con llm.enabled = false, ritorna formatted chunks
         match graphrag.ask(query).await {
             Ok(answer) => {
                 let query_time = query_start.elapsed();
@@ -146,10 +146,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     query_time.as_millis()
                 );
                 println!("   💰 Query cost: $0 (NO API calls!)");
-                println!("   🔒 Privacy: 100% (tutto locale)");
+                println!("   🔒 Privacy: local execution");
             },
             Err(e) => {
-                eprintln!("\n   ❌ Query failed: {}", e);
+                eprintln!("\n   ❌ Query failed: {e}");
             },
         }
 
@@ -177,17 +177,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("⏱️ Performance (da DESIGN_CHOICES_ITALIANO.md):");
     println!(
-        "   - Indexing: {:.2}s (actual) vs 3-5 min LLM (100x faster!)",
+        "   - Indexing: {:.2}s (actual local run)",
         processing_time.as_secs_f64()
     );
-    println!("   - Query: ~50ms vs 2-3s LLM (16x faster!)");
-    println!("   - Memory: ~50MB vs 1.2GB Python+SpaCy (24x less!)");
-    println!("   - Binary: 10MB vs 3.5GB deployment (350x smaller!)\n");
+    println!("   - Query latency: measure on the target deployment");
+    println!("   - Memory: measure on the target deployment");
+    println!("   - Binary: measure on the target deployment\n");
 
-    println!("🎯 Quality Metrics:");
-    println!("   - Entity accuracy: ~80% (vs 95% SpaCy)");
-    println!("   - Entity types: 4 (vs 18 SpaCy)");
-    println!("   - Trade-off: -15% accuracy per $0 costi ✅");
+    println!("🎯 Observed behavior:");
+    println!("   - Entity extraction: pattern-based");
+    println!("   - Entity types: determined by configured patterns");
+    println!("   - Trade-off: semantic depth depends on the extraction strategy");
     println!("   - Semantic understanding: Pattern-based (no deep semantics)");
     println!("   - Response quality: Formatted passages (no LLM generation)\n");
 
@@ -196,20 +196,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", "=".repeat(70));
 
     println!("\n✨ Cosa Sacrifichiamo (da DESIGN_CHOICES_ITALIANO.md):");
-    println!("   ❌ 15% accuratezza (80% vs 95%)");
-    println!("   ❌ Entity types avanzati (4 vs 18)");
+    println!("   ❌ Measured accuracy depends on the target corpus");
+    println!("   ❌ Advanced entity types");
     println!("   ❌ Comprensione semantica LLM");
     println!("   ❌ Risposte naturali LLM-generated\n");
 
     println!("✨ Cosa Guadagniamo:");
     println!("   ✅ $0 costo operativo (vs $5-10 indexing + $0.50/query)");
-    println!("   ✅ 10MB binary (vs 3.5GB deployment)");
-    println!("   ✅ 50ms query (vs 2-3s LLM) - 16x più veloce!");
-    println!("   ✅ 50MB RAM (vs 1.2GB) - 24x meno memoria!");
+    println!("   ✅ Small native binary and local execution");
+    println!("   ✅ Query latency can be measured on the target deployment");
+    println!("   ✅ Memory use can be measured on the target deployment");
     println!("   ✅ Privacy totale (NO API calls mai)");
     println!("   ✅ Offline-first (funziona senza internet)");
     println!("   ✅ Deploy ovunque (Raspberry Pi, WASM, IoT)");
-    println!("   ✅ Real-time performance (<100ms)");
+    println!("   ✅ Performance can be measured on the target deployment");
     println!("   ✅ Memory safety (Rust guarantees)\n");
 
     println!("🎯 Use Cases Ideali (da DESIGN_CHOICES_ITALIANO.md):");
@@ -222,8 +222,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   • Embedded systems con memoria limitata\n");
 
     println!("⚠️ NON Usare Per (meglio LLM approach):");
-    println!("   • Medicina/legale dove serve 99% accuracy");
-    println!("   • Budget disponibile ($10+/mese) e serve massima qualità");
+    println!("   • Medicina/legale dove serve validated accuracy");
+    println!("   • Casi in cui serve una valutazione semantica approfondita");
     println!("   • Ricerca accademica che richiede deep semantics\n");
 
     // === PHASE 6: Comparison Table ===
@@ -239,18 +239,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         processing_time.as_secs_f64()
     );
     println!("| Tempo query               | 2-3s         | 50ms ✅                |");
-    println!("| Accuracy                  | 95%          | 80% (-15%)             |");
-    println!("| Entity types              | 18           | 4                      |");
-    println!("| Memory usage              | 1.2GB        | 50MB ✅                |");
-    println!("| Binary size               | 3.5GB        | 10MB ✅                |");
-    println!("| Privacy                   | ⚠️ API       | ✅ Totale              |");
-    println!("| Offline                   | ⚠️           | ✅ 100%                |");
-    println!("| Raspberry Pi deploy       | ⚠️ Slow      | ✅ Perfetto            |");
-    println!("| WebAssembly               | ❌           | ✅                     |");
+    println!("| Accuracy                  | Measure per corpus | Measure per corpus |");
+    println!("| Entity types              | Provider-dependent | Pattern-based |");
+    println!("| Memory usage              | Deployment-dependent | Deployment-dependent |");
+    println!("| Binary size               | Deployment-dependent | Deployment-dependent |");
+    println!("| Privacy                   | Depends on provider | Local path |");
+    println!("| Offline                   | Provider-dependent | Supported by this path |");
+    println!("| Raspberry Pi deploy       | Evaluate per build | Evaluate per build |");
+    println!("| WebAssembly               | Provider-dependent | Feature-dependent |");
 
     println!("\n\n🦀 GraphRAG-rs Philosophy Demo Completed!");
     println!("📝 Configuration: config/templates/symposium_graphrag_rs_philosophy.graphrag.json5");
-    println!("📊 Approach: 100% Algorithmic (NO LLM)");
+    println!("📊 Approach: Algorithmic (NO LLM)");
     println!("💰 Total Cost: $0 (indexing + queries)");
     println!("⏱️ Total Time: {:.2}s", processing_time.as_secs_f64());
     println!("\n💡 Vedi docs/DESIGN_CHOICES_ITALIANO.md per dettagli sulla filosofia");

@@ -14,7 +14,7 @@ use crate::{
         llm_extractor::LLMEntityExtractor,
         prompts::{EntityData, RelationshipData},
     },
-    ollama::OllamaClient,
+    llm::LlmClient,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -36,6 +36,10 @@ pub struct GleaningConfig {
     pub temperature: f32,
     /// Maximum tokens for LLM responses
     pub max_tokens: usize,
+    /// Extraction ontology; `None` = generic ontology restricted to `entity_types`
+    pub ontology: Option<crate::ontology::Ontology>,
+    /// Ask for `status` / `said_by` on relationships (`entity_extraction.epistemic_status`)
+    pub epistemic_status: bool,
 }
 
 impl Default for GleaningConfig {
@@ -54,6 +58,8 @@ impl Default for GleaningConfig {
             ],
             temperature: 0.0, // Zero temperature for deterministic JSON extraction
             max_tokens: 1500,
+            ontology: None,
+            epistemic_status: false,
         }
     }
 }
@@ -85,22 +91,28 @@ impl GleaningEntityExtractor {
     /// Create a new gleaning entity extractor with LLM client
     ///
     /// # Arguments
-    /// * `ollama_client` - Ollama client for LLM inference (REQUIRED)
+    /// * `llm_client` - LLM client for LLM inference (REQUIRED)
     /// * `config` - Gleaning configuration
-    pub fn new(ollama_client: OllamaClient, config: GleaningConfig) -> Self {
-        // Extract keep_alive before ollama_client is moved into the extractor
-        let keep_alive = ollama_client.config().keep_alive.clone();
-
+    pub fn new(llm_client: LlmClient, config: GleaningConfig) -> Self {
         // Create LLM extractor with configured entity types
-        let llm_extractor = LLMEntityExtractor::new(ollama_client, config.entity_types.clone())
+        let mut llm_extractor = LLMEntityExtractor::new(llm_client, config.entity_types.clone())
             .with_temperature(config.temperature)
             .with_max_tokens(config.max_tokens)
-            .with_keep_alive(keep_alive);
+            .with_epistemic_status(config.epistemic_status);
+        if let Some(ontology) = &config.ontology {
+            llm_extractor = llm_extractor.with_ontology(ontology.clone());
+        }
 
         Self {
             llm_extractor,
             config,
         }
+    }
+
+    /// Cache raw extraction responses on disk (see [`LLMEntityExtractor::with_cache`]).
+    pub fn with_cache(mut self, cache: super::ExtractionCache) -> Self {
+        self.llm_extractor = self.llm_extractor.with_cache(cache);
+        self
     }
 
     /// Extract entities with iterative refinement (gleaning) using TRUE LLM calls
@@ -219,7 +231,7 @@ impl GleaningEntityExtractor {
         let final_entities =
             self.convert_data_to_entities(&all_entity_data, &chunk.id, &chunk.content)?;
         let final_relationships =
-            self.convert_data_to_relationships(&all_relationship_data, &final_entities)?;
+            self.convert_data_to_relationships(&all_relationship_data, &final_entities, &chunk.id)?;
 
         // Deduplicate relationships
         let deduplicated_relationships = self.deduplicate_relationships(final_relationships);
@@ -313,8 +325,11 @@ impl GleaningEntityExtractor {
             .map(|r| RelationshipData {
                 source: r.source.0.clone(),
                 target: r.target.0.clone(),
-                description: r.relation_type.clone(),
+                description: r.description.clone().unwrap_or_default(),
+                relation_type: r.relation_type.clone(),
                 strength: r.confidence as f64,
+                status: String::new(),
+                said_by: String::new(),
             })
             .collect()
     }
@@ -331,11 +346,12 @@ impl GleaningEntityExtractor {
 
         for entity_item in entity_data {
             // Generate entity ID
-            let entity_id = crate::core::EntityId::new(format!(
-                "{}_{}",
-                entity_item.entity_type,
-                self.normalize_name(&entity_item.name)
-            ));
+            let entity_type = self
+                .llm_extractor
+                .ontology()
+                .normalize_entity_type(&entity_item.entity_type);
+            let entity_id =
+                crate::core::EntityId::from_type_and_name(&entity_type, &entity_item.name);
 
             // Find mentions in chunk
             let mentions = self.find_mentions(&entity_item.name, chunk_id, chunk_text);
@@ -344,7 +360,7 @@ impl GleaningEntityExtractor {
             let entity = Entity::new(
                 entity_id,
                 entity_item.name.clone(),
-                entity_item.entity_type.clone(),
+                entity_type,
                 0.9, // High confidence since LLM-extracted
             )
             .with_mentions(mentions);
@@ -404,11 +420,17 @@ impl GleaningEntityExtractor {
         &self,
         relationship_data: &[RelationshipData],
         entities: &[Entity],
+        chunk_id: &crate::core::ChunkId,
     ) -> Result<Vec<Relationship>> {
         let mut relationships = Vec::new();
 
-        // Build entity name to entity mapping
+        // Build lookup by lowercase name AND by entity ID: relationships carried over
+        // from earlier rounds (`convert_relationships_to_data`) reference entity IDs,
+        // while freshly parsed ones reference names.
         let mut name_to_entity: HashMap<String, &Entity> = HashMap::new();
+        for entity in entities {
+            name_to_entity.insert(entity.id.0.to_lowercase(), entity);
+        }
         for entity in entities {
             name_to_entity.insert(entity.name.to_lowercase(), entity);
         }
@@ -419,12 +441,17 @@ impl GleaningEntityExtractor {
             let target_entity = name_to_entity.get(&rel_item.target.to_lowercase());
 
             if let (Some(source), Some(target)) = (source_entity, target_entity) {
+                let (relation_type, description) = self
+                    .llm_extractor
+                    .ontology()
+                    .normalize_relation(&rel_item.relation_type, &rel_item.description);
                 let relationship = Relationship {
                     source: source.id.clone(),
                     target: target.id.clone(),
-                    relation_type: rel_item.description.clone(),
-                    confidence: rel_item.strength as f32,
-                    context: vec![],
+                    relation_type,
+                    description,
+                    confidence: (rel_item.strength as f32).clamp(0.0, 1.0),
+                    context: vec![chunk_id.clone()],
                     embedding: None,
                     temporal_type: None,
                     temporal_range: None,
@@ -464,16 +491,6 @@ impl GleaningEntityExtractor {
         }
 
         deduplicated
-    }
-
-    /// Normalize entity name for ID generation
-    #[cfg(feature = "async")]
-    fn normalize_name(&self, name: &str) -> String {
-        name.to_lowercase()
-            .chars()
-            .filter(|c| c.is_alphanumeric() || *c == '_')
-            .collect::<String>()
-            .replace(' ', "_")
     }
 
     /// Get extraction statistics
@@ -526,12 +543,12 @@ impl GleaningStatistics {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "async"))]
 mod tests {
     use super::*;
     use crate::{
         core::{ChunkId, DocumentId, TextChunk},
-        ollama::OllamaConfig,
+        llm::LlmConfig,
     };
 
     fn create_test_chunk() -> TextChunk {
@@ -546,11 +563,11 @@ mod tests {
 
     #[test]
     fn test_gleaning_extractor_creation() {
-        let ollama_config = OllamaConfig::default();
-        let ollama_client = OllamaClient::new(ollama_config);
+        let llm_config = LlmConfig::default();
+        let llm_client = LlmClient::new(llm_config);
         let config = GleaningConfig::default();
 
-        let extractor = GleaningEntityExtractor::new(ollama_client, config);
+        let extractor = GleaningEntityExtractor::new(llm_client, config);
 
         let stats = extractor.get_statistics();
         assert_eq!(stats.config.max_gleaning_rounds, 4);
@@ -559,10 +576,10 @@ mod tests {
 
     #[test]
     fn test_merge_entity_data() {
-        let ollama_config = OllamaConfig::default();
-        let ollama_client = OllamaClient::new(ollama_config);
+        let llm_config = LlmConfig::default();
+        let llm_client = LlmClient::new(llm_config);
         let config = GleaningConfig::default();
-        let extractor = GleaningEntityExtractor::new(ollama_client, config);
+        let extractor = GleaningEntityExtractor::new(llm_client, config);
 
         let existing = vec![EntityData {
             name: "Tom Sawyer".to_string(),
@@ -592,10 +609,10 @@ mod tests {
 
     #[test]
     fn test_find_mentions() {
-        let ollama_config = OllamaConfig::default();
-        let ollama_client = OllamaClient::new(ollama_config);
+        let llm_config = LlmConfig::default();
+        let llm_client = LlmClient::new(llm_config);
         let config = GleaningConfig::default();
-        let extractor = GleaningEntityExtractor::new(ollama_client, config);
+        let extractor = GleaningEntityExtractor::new(llm_client, config);
 
         let chunk = create_test_chunk();
         let mentions = extractor.find_mentions("Tom", &chunk.id, &chunk.content);
@@ -606,10 +623,10 @@ mod tests {
 
     #[test]
     fn test_deduplicate_relationships() {
-        let ollama_config = OllamaConfig::default();
-        let ollama_client = OllamaClient::new(ollama_config);
+        let llm_config = LlmConfig::default();
+        let llm_client = LlmClient::new(llm_config);
         let config = GleaningConfig::default();
-        let extractor = GleaningEntityExtractor::new(ollama_client, config);
+        let extractor = GleaningEntityExtractor::new(llm_client, config);
 
         let relationships = vec![
             Relationship::new(
@@ -635,5 +652,106 @@ mod tests {
         let deduplicated = extractor.deduplicate_relationships(relationships);
 
         assert_eq!(deduplicated.len(), 2); // Duplicate FRIENDS_WITH removed
+    }
+
+    #[test]
+    fn test_relationships_survive_gleaning_roundtrip_and_get_chunk_context() {
+        let extractor = GleaningEntityExtractor::new(
+            LlmClient::new(LlmConfig::default()),
+            GleaningConfig::default(),
+        );
+        let chunk = create_test_chunk();
+
+        let entity_data = vec![
+            EntityData {
+                name: "Tom Sawyer".to_string(),
+                entity_type: "PERSON".to_string(),
+                description: "A boy".to_string(),
+            },
+            EntityData {
+                name: "Huckleberry Finn".to_string(),
+                entity_type: "PERSON".to_string(),
+                description: "His friend".to_string(),
+            },
+        ];
+        let entities = extractor
+            .convert_data_to_entities(&entity_data, &chunk.id, &chunk.content)
+            .unwrap();
+
+        // A relationship from an earlier round is tracked by entity IDs.
+        let earlier = vec![Relationship::new(
+            entities[0].id.clone(),
+            entities[1].id.clone(),
+            "FRIENDS_WITH".to_string(),
+            0.9,
+        )];
+        let data = extractor.convert_relationships_to_data(&earlier);
+        let back = extractor
+            .convert_data_to_relationships(&data, &entities, &chunk.id)
+            .unwrap();
+
+        assert_eq!(
+            back.len(),
+            1,
+            "earlier-round relationship must not be dropped"
+        );
+        assert_eq!(back[0].source, entities[0].id);
+        assert_eq!(back[0].target, entities[1].id);
+        assert_eq!(back[0].context, vec![chunk.id.clone()]);
+
+        // Name-based references (freshly parsed rounds) still resolve.
+        let by_name = vec![RelationshipData {
+            source: "tom sawyer".to_string(),
+            target: "Huckleberry Finn".to_string(),
+            description: "FRIENDS_WITH".to_string(),
+            relation_type: String::new(),
+            strength: 0.8,
+            status: String::new(),
+            said_by: String::new(),
+        }];
+        let back = extractor
+            .convert_data_to_relationships(&by_name, &entities, &chunk.id)
+            .unwrap();
+        assert_eq!(back.len(), 1);
+    }
+
+    #[test]
+    fn said_marker_survives_gleaning_round_trip_once() {
+        let extractor = GleaningEntityExtractor::new(
+            LlmClient::new(LlmConfig::default()),
+            GleaningConfig {
+                epistemic_status: true,
+                ..GleaningConfig::default()
+            },
+        );
+        let chunk = create_test_chunk();
+        let entities = extractor
+            .convert_data_to_entities(
+                &["Tom Sawyer", "Huckleberry Finn"].map(|n| EntityData {
+                    name: n.to_string(),
+                    entity_type: "PERSON".to_string(),
+                    description: String::new(),
+                }),
+                &chunk.id,
+                &chunk.content,
+            )
+            .unwrap();
+        let rel = Relationship {
+            source: entities[0].id.clone(),
+            target: entities[1].id.clone(),
+            relation_type: "FRIEND_OF".to_string(),
+            description: Some("[detto da Tom] mente".to_string()),
+            confidence: 0.8,
+            context: vec![chunk.id.clone()],
+            embedding: None,
+            temporal_type: None,
+            temporal_range: None,
+            causal_strength: None,
+        };
+        let data = extractor.convert_relationships_to_data(&[rel]);
+        let back = extractor
+            .convert_data_to_relationships(&data, &entities, &chunk.id)
+            .unwrap();
+        assert_eq!(back[0].description.as_deref(), Some("[detto da Tom] mente"));
     }
 }

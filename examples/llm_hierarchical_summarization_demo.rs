@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Example LLM client implementation
-/// In a real implementation, this would connect to Ollama, OpenAI, or another LLM provider
+/// In a real implementation, this would connect to llama.cpp, Groq, Cerebras or another OpenAI-compatible provider
 struct ExampleLLMClient {
     model_name: String,
 }

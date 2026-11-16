@@ -82,7 +82,7 @@ impl GraphIndexer {
                 .all(|w| w.chars().next().is_some_and(|c| c.is_uppercase()))
             {
                 entities.push(ExtractedEntity {
-                    id: format!("entity_{}", entity_id),
+                    id: format!("entity_{entity_id}"),
                     name: phrase.clone(),
                     entity_type: self.guess_entity_type(&phrase),
                     confidence: 0.6,
@@ -95,7 +95,7 @@ impl GraphIndexer {
         for word in words {
             if word.len() > 2 && word.chars().next().is_some_and(|c| c.is_uppercase()) {
                 entities.push(ExtractedEntity {
-                    id: format!("entity_{}", entity_id),
+                    id: format!("entity_{entity_id}"),
                     name: word.to_string(),
                     entity_type: self.guess_entity_type(word),
                     confidence: 0.5,

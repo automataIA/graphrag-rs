@@ -326,19 +326,27 @@ impl QueryAnalyzer {
 /// Query analysis result
 #[derive(Debug, Clone)]
 pub struct QueryAnalysis {
+    /// Query asks about a specific entity
     pub is_entity_focused: bool,
+    /// Query asks about relationships between entities
     pub is_relationship_focused: bool,
+    /// Query asks for surrounding context
     pub is_context_focused: bool,
+    /// Query needs a search step
     pub requires_search: bool,
+    /// Estimated query complexity
     pub complexity: QueryComplexity,
 }
 
 /// Query complexity levels
 #[derive(Debug, Clone, PartialEq)]
 pub enum QueryComplexity {
-    Low,    // Simple entity lookup
-    Medium, // Entity with context
-    High,   // Multi-entity relationships
+    /// Simple entity lookup
+    Low,
+    /// Entity with context
+    Medium,
+    /// Multi-entity relationships
+    High,
 }
 
 #[cfg(test)]

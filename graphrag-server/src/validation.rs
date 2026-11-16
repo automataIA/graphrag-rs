@@ -37,10 +37,7 @@ pub fn validate_query(query: &str) -> Result<(), ValidationError> {
 
     if query.len() > MAX_QUERY_LENGTH {
         return Err(ValidationError {
-            error: format!(
-                "Query exceeds maximum length of {} characters",
-                MAX_QUERY_LENGTH
-            ),
+            error: format!("Query exceeds maximum length of {MAX_QUERY_LENGTH} characters"),
             field: Some("query".to_string()),
             max_length: Some(MAX_QUERY_LENGTH),
         });
@@ -70,10 +67,7 @@ pub fn validate_title(title: &str) -> Result<(), ValidationError> {
 
     if title.len() > MAX_TITLE_LENGTH {
         return Err(ValidationError {
-            error: format!(
-                "Title exceeds maximum length of {} characters",
-                MAX_TITLE_LENGTH
-            ),
+            error: format!("Title exceeds maximum length of {MAX_TITLE_LENGTH} characters"),
             field: Some("title".to_string()),
             max_length: Some(MAX_TITLE_LENGTH),
         });
@@ -94,10 +88,7 @@ pub fn validate_content(content: &str) -> Result<(), ValidationError> {
 
     if content.len() > MAX_CONTENT_LENGTH {
         return Err(ValidationError {
-            error: format!(
-                "Content exceeds maximum length of {} characters",
-                MAX_CONTENT_LENGTH
-            ),
+            error: format!("Content exceeds maximum length of {MAX_CONTENT_LENGTH} characters"),
             field: Some("content".to_string()),
             max_length: Some(MAX_CONTENT_LENGTH),
         });
@@ -118,7 +109,7 @@ pub fn validate_top_k(top_k: usize) -> Result<(), ValidationError> {
 
     if top_k > MAX_TOP_K {
         return Err(ValidationError {
-            error: format!("top_k exceeds maximum value of {}", MAX_TOP_K),
+            error: format!("top_k exceeds maximum value of {MAX_TOP_K}"),
             field: Some("top_k".to_string()),
             max_length: Some(MAX_TOP_K),
         });

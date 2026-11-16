@@ -303,7 +303,7 @@ impl ExtractiveSummarizer {
             }
         }
 
-        format!("{}...", &sentence[..end].trim())
+        format!("{}...", sentence[..end].trim())
     }
 
     /// Load stopwords

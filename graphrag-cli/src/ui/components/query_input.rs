@@ -3,8 +3,8 @@
 //! Single input box that automatically detects slash commands
 
 use crate::{action::Action, theme::Theme};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
+    crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
     layout::Rect,
     style::{Modifier, Style},
     widgets::{Block, Borders},

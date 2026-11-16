@@ -2,17 +2,25 @@
 //!
 //! Pulls entities and relationships out of text chunks. The active extractor is chosen
 //! at runtime from `Config`: pattern-based regex, multi-round LLM gleaning, single-pass
-//! LLM, or GLiNER joint NER+RE (feature `gliner`).
+//! LLM, or GLiNER joint NER+RE (feature `gliner`) or GLiNER2.5 (feature `gliner2`).
 
 /// ATOM atomic fact extraction module (Phase 1.3)
 pub mod atomic_fact_extractor;
 /// Bidirectional entity-chunk index for fast lookups
 pub mod bidirectional_index;
+/// On-disk cache of raw LLM extraction responses
+pub mod extraction_cache;
 /// Gleaning-based entity extraction module
 pub mod gleaning_extractor;
+/// GLiNER2.5 joint NER + RE extractor via candle (feature-gated: `gliner2`)
+#[cfg(feature = "gliner2")]
+mod gliner2_extractor;
 /// GLiNER-Relex joint NER + RE extractor (feature-gated: `gliner`)
 #[cfg(feature = "gliner")]
 mod gliner_extractor;
+/// TypeSafe Jev classification of entity types and relations (needs `ureq`)
+#[cfg(feature = "ureq")]
+pub mod jev;
 /// LLM-based entity extractor (TRUE LLM extraction, not pattern-based)
 pub mod llm_extractor;
 /// LLM-based relationship extraction module
@@ -26,7 +34,10 @@ pub mod string_similarity_linker;
 
 pub use atomic_fact_extractor::{AtomicFact, AtomicFactExtractor};
 pub use bidirectional_index::{BidirectionalIndex, IndexStatistics};
+pub use extraction_cache::ExtractionCache;
 pub use gleaning_extractor::{ExtractionCompletionStatus, GleaningConfig, GleaningEntityExtractor};
+#[cfg(feature = "gliner2")]
+pub use gliner2_extractor::Gliner2Extractor;
 #[cfg(feature = "gliner")]
 pub use gliner_extractor::GLiNERExtractor;
 pub use llm_extractor::LLMEntityExtractor;
@@ -608,7 +619,7 @@ impl EntityExtractor {
         chunk_id: &ChunkId,
         text: &str,
     ) -> Result<Entity> {
-        let entity_id = EntityId::new(format!("{}_{}", entity_type, self.normalize_name(&name)));
+        let entity_id = EntityId::from_type_and_name(entity_type, &name);
 
         // Find all occurrences of the name in text for mentions
         let mut mentions = Vec::new();
@@ -773,15 +784,6 @@ impl EntityExtractor {
             "Chicago",
         ];
         KNOWN_LOCATIONS.iter().any(|&loc| name.contains(loc))
-    }
-
-    /// Normalize entity name for ID generation
-    fn normalize_name(&self, name: &str) -> String {
-        name.to_lowercase()
-            .chars()
-            .filter(|c| c.is_alphanumeric() || *c == '_')
-            .collect::<String>()
-            .replace(' ', "_")
     }
 
     /// Deduplicate entities by name and type

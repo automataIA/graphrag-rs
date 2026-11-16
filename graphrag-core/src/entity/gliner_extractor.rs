@@ -10,8 +10,13 @@
 use composable::Composable;
 use gliner::model::{
     input::{relation::schema::RelationSchema, text::TextInput},
+    output::decoded::SpanOutput,
     params::Parameters,
-    pipeline::{relation::RelationPipeline, span::SpanPipeline, token::TokenPipeline},
+    pipeline::{
+        relation::RelationPipeline,
+        span::{SpanMode, SpanPipeline},
+        token::{TokenMode, TokenPipeline},
+    },
 };
 use orp::{model::Model, params::RuntimeParameters, pipeline::Pipeline};
 use parking_lot::RwLock;
@@ -21,6 +26,29 @@ use crate::{
     config::GlinerConfig,
     core::{error::GraphRAGError, Entity, EntityId, EntityMention, Relationship, TextChunk},
 };
+
+/// NER pipeline (splitter + tokenizer) shared by every chunk of an extractor.
+enum NerPipeline {
+    Span(SpanMode),
+    Token(TokenMode),
+}
+
+impl NerPipeline {
+    fn infer(
+        &self,
+        model: &Model,
+        input: TextInput,
+        params: &Parameters,
+    ) -> Result<SpanOutput, GraphRAGError> {
+        match self {
+            Self::Span(p) => model.inference(input, p, params),
+            Self::Token(p) => model.inference(input, p, params),
+        }
+        .map_err(|e| GraphRAGError::EntityExtraction {
+            message: format!("GLiNER inference error: {e}"),
+        })
+    }
+}
 
 /// Joint NER + RE extractor backed by GLiNER-Relex via ONNX Runtime.
 ///
@@ -33,6 +61,10 @@ pub struct GLiNERExtractor {
     config: GlinerConfig,
     /// Lazy-loaded ONNX model.  `None` until the first extraction call.
     model: Arc<RwLock<Option<Model>>>,
+    /// Ontology that GLiNER labels are normalized onto (`None` = raw labels)
+    ontology: Option<crate::ontology::Ontology>,
+    /// Lazily built NER pipeline: the tokenizer file is parsed once, not per chunk.
+    pipeline: Arc<RwLock<Option<Arc<NerPipeline>>>>,
 }
 
 impl std::fmt::Debug for GLiNERExtractor {
@@ -61,7 +93,16 @@ impl GLiNERExtractor {
         Ok(Self {
             config,
             model: Arc::new(RwLock::new(None)),
+            ontology: None,
+            pipeline: Arc::new(RwLock::new(None)),
         })
+    }
+
+    /// Map GLiNER entity/relation labels onto `ontology` (e.g. `person` →
+    /// `PERSON`, `related to` → `OTHER` with the label kept as description).
+    pub fn with_ontology(mut self, ontology: crate::ontology::Ontology) -> Self {
+        self.ontology = Some(ontology);
+        self
     }
 
     /// Resolve the tokenizer path: use `config.tokenizer_path` if set,
@@ -102,6 +143,35 @@ impl GLiNERExtractor {
         Ok(())
     }
 
+    /// gline-rs decoding parameters: its default threshold (0.5) would make a lower
+    /// `entity_threshold` ineffective, so the configured one is passed through.
+    fn ner_parameters(config: &GlinerConfig) -> Parameters {
+        Parameters::default().with_threshold(config.entity_threshold)
+    }
+
+    /// NER pipeline for the configured mode, built on first use and shared afterwards.
+    /// A failed build (unreadable tokenizer) is reported and not cached.
+    fn ner_pipeline(&self) -> Result<Arc<NerPipeline>, GraphRAGError> {
+        if let Some(p) = self.pipeline.read().as_ref() {
+            return Ok(Arc::clone(p));
+        }
+        let mut guard = self.pipeline.write();
+        if let Some(p) = guard.as_ref() {
+            return Ok(Arc::clone(p));
+        }
+        let tokenizer = Self::resolve_tokenizer_path(&self.config);
+        let pipeline = match self.config.mode.to_lowercase().as_str() {
+            "token" => TokenPipeline::new(&tokenizer).map(NerPipeline::Token),
+            _ => SpanPipeline::new(&tokenizer).map(NerPipeline::Span),
+        }
+        .map_err(|e| GraphRAGError::EntityExtraction {
+            message: format!("GLiNER pipeline error: {e}"),
+        })?;
+        let pipeline = Arc::new(pipeline);
+        *guard = Some(Arc::clone(&pipeline));
+        Ok(pipeline)
+    }
+
     /// Perform joint NER + RE on a single text chunk (synchronous / blocking).
     ///
     /// In async contexts, wrap with `tokio::task::spawn_blocking`:
@@ -121,7 +191,8 @@ impl GLiNERExtractor {
         let guard = self.model.read();
         let model = guard.as_ref().expect("model loaded");
         let tokenizer = Self::resolve_tokenizer_path(&self.config);
-        let params = Parameters::default();
+        let params = Self::ner_parameters(&self.config);
+        let pipeline = self.ner_pipeline()?;
 
         let entity_refs: Vec<&str> = self
             .config
@@ -137,26 +208,7 @@ impl GLiNERExtractor {
         })?;
 
         // ── Stage 1: NER ──────────────────────────────────────────────────────
-        let span_output = match self.config.mode.to_lowercase().as_str() {
-            "token" => TokenPipeline::new(&tokenizer)
-                .map_err(|e| GraphRAGError::EntityExtraction {
-                    message: format!("GLiNER TokenPipeline error: {e}"),
-                })?
-                .to_composable(model, &params)
-                .apply(input)
-                .map_err(|e| GraphRAGError::EntityExtraction {
-                    message: format!("GLiNER token inference error: {e}"),
-                })?,
-            _ => SpanPipeline::new(&tokenizer)
-                .map_err(|e| GraphRAGError::EntityExtraction {
-                    message: format!("GLiNER SpanPipeline error: {e}"),
-                })?
-                .to_composable(model, &params)
-                .apply(input)
-                .map_err(|e| GraphRAGError::EntityExtraction {
-                    message: format!("GLiNER span inference error: {e}"),
-                })?,
-        };
+        let span_output = pipeline.infer(model, input, &params)?;
 
         // Convert spans → Entity (dedup by (text, class))
         let mut entities: Vec<Entity> = Vec::new();
@@ -166,16 +218,20 @@ impl GLiNERExtractor {
                 if span.probability() < self.config.entity_threshold {
                     continue;
                 }
-                let key = (span.text().to_string(), span.class().to_string());
+                let class = match &self.ontology {
+                    Some(o) => o.normalize_entity_type(span.class()),
+                    None => span.class().to_string(),
+                };
+                let key = (span.text().to_string(), class.clone());
                 if !seen.insert(key) {
                     continue;
                 }
-                let entity_id = Self::make_entity_id(span.class(), span.text());
+                let entity_id = Self::make_entity_id(&class, span.text());
                 entities.push(
                     Entity::new(
                         entity_id,
                         span.text().to_string(),
-                        span.class().to_string(),
+                        class,
                         span.probability(),
                     )
                     .with_mentions(vec![EntityMention {
@@ -192,7 +248,10 @@ impl GLiNERExtractor {
 
         // ── Stage 2: RE (optional) ────────────────────────────────────────────
         let mut relationships: Vec<Relationship> = Vec::new();
-        if !self.config.relation_labels.is_empty() {
+        // gline-rs RE rejects an input with no entity spans ("empty texts and/or entities"),
+        // and a relation needs two distinct entities anyway.
+        let span_count = span_output.spans.first().map_or(0, |s| s.len());
+        if !self.config.relation_labels.is_empty() && span_count >= 2 {
             let mut schema = RelationSchema::new();
             for rel in &self.config.relation_labels {
                 schema.push(rel.as_str());
@@ -217,16 +276,15 @@ impl GLiNERExtractor {
                     let tgt = Self::find_entity_id(&entities, rel.object());
                     if let (Some(src_id), Some(tgt_id)) = (src, tgt) {
                         if src_id != tgt_id {
-                            relationships.push(Relationship::new(
-                                src_id,
-                                tgt_id,
-                                rel.class().to_string(),
-                                rel.probability(),
-                            ));
-                            // Add chunk context to last inserted relationship
-                            if let Some(r) = relationships.last_mut() {
-                                r.context.push(chunk.id.clone());
-                            }
+                            let (relation_type, description) = match &self.ontology {
+                                Some(o) => o.normalize_relation(rel.class(), ""),
+                                None => (rel.class().to_string(), None),
+                            };
+                            let mut relationship =
+                                Relationship::new(src_id, tgt_id, relation_type, rel.probability());
+                            relationship.description = description;
+                            relationship.context.push(chunk.id.clone());
+                            relationships.push(relationship);
                         }
                     }
                 }
@@ -238,8 +296,7 @@ impl GLiNERExtractor {
 
     /// Build a deterministic entity ID from type and name.
     fn make_entity_id(entity_type: &str, name: &str) -> EntityId {
-        let normalized = name.to_lowercase().replace(' ', "_");
-        EntityId::new(format!("{}_{}", entity_type.to_lowercase(), normalized))
+        EntityId::from_type_and_name(entity_type, name)
     }
 
     /// Find an entity by exact name match and return its ID.
@@ -272,6 +329,59 @@ mod tests {
         assert!(!cfg.enabled);
         assert_eq!(cfg.entity_threshold, 0.4);
         assert_eq!(cfg.mode, "span");
+    }
+
+    #[test]
+    fn ner_threshold_below_default_is_passed_to_gline() {
+        // gline-rs defaults to 0.5; a lower `entity_threshold` must reach the decoder
+        let cfg = GlinerConfig {
+            entity_threshold: 0.3,
+            ..GlinerConfig::default()
+        };
+        assert_eq!(GLiNERExtractor::ner_parameters(&cfg).threshold, 0.3);
+        let cfg = GlinerConfig {
+            entity_threshold: 0.7,
+            ..GlinerConfig::default()
+        };
+        assert_eq!(GLiNERExtractor::ner_parameters(&cfg).threshold, 0.7);
+    }
+
+    /// Smallest tokenizer.json the `tokenizers` crate accepts.
+    const TINY_TOKENIZER: &str = r#"{"version":"1.0","truncation":null,"padding":null,"added_tokens":[],"normalizer":null,"pre_tokenizer":null,"post_processor":null,"decoder":null,"model":{"type":"WordLevel","vocab":{"[UNK]":0},"unk_token":"[UNK]"}}"#;
+
+    fn tiny_extractor(mode: &str, dir: &std::path::Path) -> GLiNERExtractor {
+        std::fs::write(dir.join("model.onnx"), b"").unwrap();
+        std::fs::write(dir.join("tokenizer.json"), TINY_TOKENIZER).unwrap();
+        GLiNERExtractor::new(GlinerConfig {
+            model_path: dir.join("model.onnx").to_string_lossy().into_owned(),
+            mode: mode.to_string(),
+            ..GlinerConfig::default()
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn ner_pipeline_is_built_once_per_extractor() {
+        let dir = tempfile::tempdir().unwrap();
+        for mode in ["span", "token"] {
+            let ext = tiny_extractor(mode, dir.path());
+            let first = ext.ner_pipeline().unwrap();
+            let second = ext.ner_pipeline().unwrap();
+            assert!(Arc::ptr_eq(&first, &second), "{mode}: tokenizer re-read");
+        }
+    }
+
+    #[test]
+    fn ner_pipeline_error_is_reported_and_not_cached() {
+        let dir = tempfile::tempdir().unwrap();
+        let ext = tiny_extractor("span", dir.path());
+        std::fs::write(dir.path().join("tokenizer.json"), "not json").unwrap();
+        assert!(ext.ner_pipeline().is_err());
+        std::fs::write(dir.path().join("tokenizer.json"), TINY_TOKENIZER).unwrap();
+        assert!(
+            ext.ner_pipeline().is_ok(),
+            "a failed build must not be cached"
+        );
     }
 
     #[test]

@@ -3,9 +3,10 @@
 //! This module is only available when the "pagerank" feature is enabled.
 #![cfg(feature = "pagerank")]
 
+#[cfg(feature = "async")]
+use crate::{core::traits::Retriever, core::GraphRAGError};
 use crate::{
-    core::traits::Retriever,
-    core::{ChunkId, EntityId, GraphRAGError, KnowledgeGraph, Result},
+    core::{ChunkId, EntityId, KnowledgeGraph, Result},
     graph::pagerank::{MultiModalScores, PageRankConfig, PersonalizedPageRank, ScoreWeights},
     vector::VectorIndex,
 };
@@ -582,6 +583,7 @@ fn extract_query_concepts(query: &str) -> Vec<String> {
 }
 
 /// Implementation of the Retriever trait for PageRankRetrievalSystem
+#[cfg(feature = "async")]
 impl Retriever for PageRankRetrievalSystem {
     type Query = String;
     type Result = ScoredResult;
@@ -710,6 +712,7 @@ mod tests {
 
         // Add test relationship
         let relationship = Relationship {
+            description: None,
             source: EntityId::new("entity1".to_string()),
             target: EntityId::new("entity2".to_string()),
             relation_type: "PRODUCES".to_string(),

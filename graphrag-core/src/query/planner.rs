@@ -1,10 +1,10 @@
 use crate::core::Result;
-use crate::ollama::OllamaClient;
+use crate::llm::LlmClient;
 use serde::{Deserialize, Serialize};
 
 /// Planner for breaking down complex queries
 pub struct QueryPlanner {
-    client: OllamaClient,
+    client: LlmClient,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -14,7 +14,7 @@ struct DecompositionResponse {
 
 impl QueryPlanner {
     /// Create a new query planner
-    pub fn new(client: OllamaClient) -> Self {
+    pub fn new(client: LlmClient) -> Self {
         Self { client }
     }
 
@@ -28,10 +28,9 @@ impl QueryPlanner {
             Return ONLY a raw JSON object with a single key 'sub_queries' containing the list of strings. \
             Do not include any explanation, markdown formatting, or preamble. \
             \
-            Query: '{}' \
+            Query: '{query}' \
             \
-            JSON Response:",
-            query
+            JSON Response:"
         );
 
         let response_text = self.client.generate(&prompt).await?;
@@ -47,10 +46,7 @@ impl QueryPlanner {
         // Parse JSON response
         let response: DecompositionResponse = serde_json::from_str(cleaned_json).map_err(|e| {
             crate::core::GraphRAGError::Generation {
-                message: format!(
-                    "Failed to parse planner response: {}. Text: {}",
-                    e, cleaned_json
-                ),
+                message: format!("Failed to parse planner response: {e}. Text: {cleaned_json}"),
             }
         })?;
 

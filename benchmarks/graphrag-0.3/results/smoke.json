@@ -1,0 +1,435 @@
+{
+  "manifest": {
+    "schema_version": "graphrag-0.3-smoke-v1",
+    "config_version": "graphrag-0.3-benchmark-config-v1",
+    "runner_version": "graphrag-core-example-v1",
+    "corpus_id": "graphrag-03-local-v1",
+    "corpus_sha256": "99df7cb7511d122252e0179135af03100c1f32565433f6a7f91ebd76d098a008",
+    "questions_sha256": "b61601151593734f9b79d501067acc6b23a1511aede9afb1accde7b8e625280e",
+    "config_sha256": "ede317c2788bf0d0297cef8d32255176eea50a55eac7594d83c121a4794bacce",
+    "e5_gguf_path": "/home/dio/modelli/graphrag-03/multilingual-e5-small-f16-probe.gguf",
+    "e5_gguf_sha256": "c6c25a211c5d11f7439b527d4e831d8952a3aace4e2c5740b156c95c1f698112",
+    "ornith_gguf_path": "/home/dio/modelli/Ornith-1.5-9B-MTP-Q6_K.gguf",
+    "ornith_gguf_sha256": "79a9925bb7771dea3530d57b185e97b9713a73a7c06bdb9804f7d019aa42f480",
+    "modes": [
+      "lexical",
+      "vector",
+      "hybrid",
+      "graph"
+    ],
+    "top_k": 3,
+    "context_limit_chars": 1024,
+    "hybrid_fusion": "weighted reciprocal-rank fusion, k=60, lexical_weight=1, vector_weight=1",
+    "seed": 42,
+    "seed_semantics": "server-side/provider seed",
+    "run_count": 1,
+    "e5_model": "multilingual-e5-small",
+    "e5_endpoint": "http://127.0.0.1:18081/v1/embeddings",
+    "ornith_model": "Ornith-1.5-9B-MTP-Q6_K",
+    "ornith_endpoint": "http://127.0.0.1:18080/v1/chat/completions",
+    "provider_revisions": {
+      "e5_source": "614241f622f53c4eeff9890bdc4f31cfecc418b3",
+      "llama_cpp": "cc231cb0da565440cf6a3e5b55dfeba477972cb6"
+    }
+  },
+  "runs": [
+    {
+      "run": 1,
+      "mode": "lexical",
+      "retrieval": [
+        {
+          "question_id": "q-01",
+          "source_ids": [
+            "chunk-ada"
+          ],
+          "scores": [
+            1.3784171342849731
+          ],
+          "latency_ms": 0.040966,
+          "retrieved": [
+            {
+              "source_id": "chunk-ada",
+              "score": 1.3784171342849731,
+              "content": "Ada Lovelace wrote the first published algorithm for Charles Babbage's Analytical Engine. Her notes were published in London in 1843."
+            }
+          ]
+        }
+      ],
+      "answers": [
+        {
+          "question_id": "q-01",
+          "answer": "Ada Lovelace wrote the first published algorithm.",
+          "context_source_ids": [
+            "chunk-ada"
+          ],
+          "usage": {
+            "prompt_tokens": 80,
+            "completion_tokens": 11,
+            "total_tokens": 91
+          },
+          "latency_ms": 238.400878
+        }
+      ],
+      "report": {
+        "question_count": 1,
+        "top_k": 3,
+        "questions": [
+          {
+            "question_id": "q-01",
+            "retrieval": {
+              "recall_at_k": 1.0,
+              "reciprocal_rank": 1.0,
+              "retrieved_source_precision": 1.0,
+              "latency_ms": 0.040966
+            },
+            "answer": {
+              "expected_term_coverage": 1.0,
+              "abstained": null,
+              "usage": {
+                "prompt_tokens": 80,
+                "completion_tokens": 11,
+                "total_tokens": 91
+              },
+              "latency_ms": 238.400878
+            }
+          }
+        ],
+        "aggregate": {
+          "mean_recall_at_k": 1.0,
+          "mean_reciprocal_rank": 1.0,
+          "mean_retrieved_source_precision": 1.0,
+          "mean_expected_term_coverage": 1.0,
+          "abstention_rate": null,
+          "mean_retrieval_latency_ms": 0.040966,
+          "mean_answer_latency_ms": 238.400878,
+          "measured_usage_count": 1,
+          "missing_usage_count": 0,
+          "measured_prompt_tokens": 80,
+          "measured_completion_tokens": 11,
+          "measured_total_tokens": 91
+        }
+      }
+    },
+    {
+      "run": 1,
+      "mode": "vector",
+      "retrieval": [
+        {
+          "question_id": "q-01",
+          "source_ids": [
+            "chunk-ada",
+            "chunk-babbage",
+            "chunk-e5"
+          ],
+          "scores": [
+            0.8896185872052517,
+            0.7938476086019945,
+            0.7520634926309568
+          ],
+          "latency_ms": 3.7373149999999997,
+          "retrieved": [
+            {
+              "source_id": "chunk-ada",
+              "score": 0.8896185872052517,
+              "content": "Ada Lovelace wrote the first published algorithm for Charles Babbage's Analytical Engine. Her notes were published in London in 1843."
+            },
+            {
+              "source_id": "chunk-babbage",
+              "score": 0.7938476086019945,
+              "content": "Charles Babbage designed the Analytical Engine and collaborated with Ada Lovelace on its mathematical program."
+            },
+            {
+              "source_id": "chunk-e5",
+              "score": 0.7520634926309568,
+              "content": "The multilingual-e5-small embedding model returns vectors with dimension 384 and accepts at most 512 tokens. Query text uses the query prefix."
+            }
+          ]
+        }
+      ],
+      "answers": [
+        {
+          "question_id": "q-01",
+          "answer": "Ada Lovelace wrote the first published algorithm.",
+          "context_source_ids": [
+            "chunk-ada",
+            "chunk-babbage",
+            "chunk-e5"
+          ],
+          "usage": {
+            "prompt_tokens": 145,
+            "completion_tokens": 11,
+            "total_tokens": 156
+          },
+          "latency_ms": 248.435132
+        }
+      ],
+      "report": {
+        "question_count": 1,
+        "top_k": 3,
+        "questions": [
+          {
+            "question_id": "q-01",
+            "retrieval": {
+              "recall_at_k": 1.0,
+              "reciprocal_rank": 1.0,
+              "retrieved_source_precision": 0.3333333333333333,
+              "latency_ms": 3.7373149999999997
+            },
+            "answer": {
+              "expected_term_coverage": 1.0,
+              "abstained": null,
+              "usage": {
+                "prompt_tokens": 145,
+                "completion_tokens": 11,
+                "total_tokens": 156
+              },
+              "latency_ms": 248.435132
+            }
+          }
+        ],
+        "aggregate": {
+          "mean_recall_at_k": 1.0,
+          "mean_reciprocal_rank": 1.0,
+          "mean_retrieved_source_precision": 0.3333333333333333,
+          "mean_expected_term_coverage": 1.0,
+          "abstention_rate": null,
+          "mean_retrieval_latency_ms": 3.7373149999999997,
+          "mean_answer_latency_ms": 248.435132,
+          "measured_usage_count": 1,
+          "missing_usage_count": 0,
+          "measured_prompt_tokens": 145,
+          "measured_completion_tokens": 11,
+          "measured_total_tokens": 156
+        }
+      }
+    },
+    {
+      "run": 1,
+      "mode": "hybrid",
+      "retrieval": [
+        {
+          "question_id": "q-01",
+          "source_ids": [
+            "chunk-ada",
+            "chunk-babbage",
+            "chunk-e5"
+          ],
+          "scores": [
+            0.03278688524590164,
+            0.016129032258064516,
+            0.015873015873015872
+          ],
+          "latency_ms": 3.7919469999999995,
+          "retrieved": [
+            {
+              "source_id": "chunk-ada",
+              "score": 0.03278688524590164,
+              "content": "Ada Lovelace wrote the first published algorithm for Charles Babbage's Analytical Engine. Her notes were published in London in 1843."
+            },
+            {
+              "source_id": "chunk-babbage",
+              "score": 0.016129032258064516,
+              "content": "Charles Babbage designed the Analytical Engine and collaborated with Ada Lovelace on its mathematical program."
+            },
+            {
+              "source_id": "chunk-e5",
+              "score": 0.015873015873015872,
+              "content": "The multilingual-e5-small embedding model returns vectors with dimension 384 and accepts at most 512 tokens. Query text uses the query prefix."
+            }
+          ]
+        }
+      ],
+      "answers": [
+        {
+          "question_id": "q-01",
+          "answer": "Ada Lovelace wrote the first published algorithm.",
+          "context_source_ids": [
+            "chunk-ada",
+            "chunk-babbage",
+            "chunk-e5"
+          ],
+          "usage": {
+            "prompt_tokens": 145,
+            "completion_tokens": 11,
+            "total_tokens": 156
+          },
+          "latency_ms": 211.48943
+        }
+      ],
+      "report": {
+        "question_count": 1,
+        "top_k": 3,
+        "questions": [
+          {
+            "question_id": "q-01",
+            "retrieval": {
+              "recall_at_k": 1.0,
+              "reciprocal_rank": 1.0,
+              "retrieved_source_precision": 0.3333333333333333,
+              "latency_ms": 3.7919469999999995
+            },
+            "answer": {
+              "expected_term_coverage": 1.0,
+              "abstained": null,
+              "usage": {
+                "prompt_tokens": 145,
+                "completion_tokens": 11,
+                "total_tokens": 156
+              },
+              "latency_ms": 211.48943
+            }
+          }
+        ],
+        "aggregate": {
+          "mean_recall_at_k": 1.0,
+          "mean_reciprocal_rank": 1.0,
+          "mean_retrieved_source_precision": 0.3333333333333333,
+          "mean_expected_term_coverage": 1.0,
+          "abstention_rate": null,
+          "mean_retrieval_latency_ms": 3.7919469999999995,
+          "mean_answer_latency_ms": 211.48943,
+          "measured_usage_count": 1,
+          "missing_usage_count": 0,
+          "measured_prompt_tokens": 145,
+          "measured_completion_tokens": 11,
+          "measured_total_tokens": 156
+        }
+      }
+    },
+    {
+      "run": 1,
+      "mode": "graph",
+      "retrieval": [
+        {
+          "question_id": "q-01",
+          "source_ids": [],
+          "scores": [],
+          "latency_ms": 0.034274,
+          "retrieved": []
+        }
+      ],
+      "answers": [
+        {
+          "question_id": "q-01",
+          "answer": "I don't know.",
+          "context_source_ids": [],
+          "usage": {
+            "prompt_tokens": 43,
+            "completion_tokens": 6,
+            "total_tokens": 49
+          },
+          "latency_ms": 142.038729
+        }
+      ],
+      "report": {
+        "question_count": 1,
+        "top_k": 3,
+        "questions": [
+          {
+            "question_id": "q-01",
+            "retrieval": {
+              "recall_at_k": 0.0,
+              "reciprocal_rank": null,
+              "retrieved_source_precision": 0.0,
+              "latency_ms": 0.034274
+            },
+            "answer": {
+              "expected_term_coverage": 0.0,
+              "abstained": null,
+              "usage": {
+                "prompt_tokens": 43,
+                "completion_tokens": 6,
+                "total_tokens": 49
+              },
+              "latency_ms": 142.038729
+            }
+          }
+        ],
+        "aggregate": {
+          "mean_recall_at_k": 0.0,
+          "mean_reciprocal_rank": 0.0,
+          "mean_retrieved_source_precision": 0.0,
+          "mean_expected_term_coverage": 0.0,
+          "abstention_rate": null,
+          "mean_retrieval_latency_ms": 0.034274,
+          "mean_answer_latency_ms": 142.038729,
+          "measured_usage_count": 1,
+          "missing_usage_count": 0,
+          "measured_prompt_tokens": 43,
+          "measured_completion_tokens": 6,
+          "measured_total_tokens": 49
+        }
+      }
+    }
+  ],
+  "summaries": [
+    {
+      "mode": "lexical",
+      "run_count": 1,
+      "question_count": 1,
+      "mean_recall_at_k": 1.0,
+      "mean_reciprocal_rank": 1.0,
+      "mean_retrieved_source_precision": 1.0,
+      "mean_expected_term_coverage": 1.0,
+      "abstention_rate": null,
+      "mean_retrieval_latency_ms": 0.040966,
+      "mean_answer_latency_ms": 238.400878,
+      "measured_usage_count": 1,
+      "missing_usage_count": 0,
+      "measured_prompt_tokens": 80,
+      "measured_completion_tokens": 11,
+      "measured_total_tokens": 91
+    },
+    {
+      "mode": "vector",
+      "run_count": 1,
+      "question_count": 1,
+      "mean_recall_at_k": 1.0,
+      "mean_reciprocal_rank": 1.0,
+      "mean_retrieved_source_precision": 0.3333333333333333,
+      "mean_expected_term_coverage": 1.0,
+      "abstention_rate": null,
+      "mean_retrieval_latency_ms": 3.7373149999999997,
+      "mean_answer_latency_ms": 248.435132,
+      "measured_usage_count": 1,
+      "missing_usage_count": 0,
+      "measured_prompt_tokens": 145,
+      "measured_completion_tokens": 11,
+      "measured_total_tokens": 156
+    },
+    {
+      "mode": "hybrid",
+      "run_count": 1,
+      "question_count": 1,
+      "mean_recall_at_k": 1.0,
+      "mean_reciprocal_rank": 1.0,
+      "mean_retrieved_source_precision": 0.3333333333333333,
+      "mean_expected_term_coverage": 1.0,
+      "abstention_rate": null,
+      "mean_retrieval_latency_ms": 3.7919469999999995,
+      "mean_answer_latency_ms": 211.48943,
+      "measured_usage_count": 1,
+      "missing_usage_count": 0,
+      "measured_prompt_tokens": 145,
+      "measured_completion_tokens": 11,
+      "measured_total_tokens": 156
+    },
+    {
+      "mode": "graph",
+      "run_count": 1,
+      "question_count": 1,
+      "mean_recall_at_k": 0.0,
+      "mean_reciprocal_rank": 0.0,
+      "mean_retrieved_source_precision": 0.0,
+      "mean_expected_term_coverage": 0.0,
+      "abstention_rate": null,
+      "mean_retrieval_latency_ms": 0.034274,
+      "mean_answer_latency_ms": 142.038729,
+      "measured_usage_count": 1,
+      "missing_usage_count": 0,
+      "measured_prompt_tokens": 43,
+      "measured_completion_tokens": 6,
+      "measured_total_tokens": 49
+    }
+  ]
+}

@@ -729,7 +729,7 @@ let config = Config::load()?;
 // Option 3: Use TypedBuilder for compile-time safety
 let graphrag = TypedBuilder::new()
     .with_output_dir("./output")
-    .with_ollama()
+    .with_llm()
     .build()?;"#.to_string())
                     )
                 } else {
@@ -739,7 +739,7 @@ let graphrag = TypedBuilder::new()
 let config = Config::from_toml_file("config.toml")?;
 
 // Or use hierarchical loading with env var overrides
-// Set GRAPHRAG_OLLAMA_HOST=localhost to override
+// Set GRAPHRAG_LLM_BASE_URL=http://127.0.0.1:8080/v1 to override
 let config = Config::load()?;"#.to_string())
                     )
                 };
@@ -757,7 +757,7 @@ let mut graphrag = GraphRAG::quick_start("Your document text").await?;
 // Option 3: Use builder with auto-init
 let graphrag = TypedBuilder::new()
     .with_output_dir("./output")
-    .with_ollama()
+    .with_llm()
     .build_and_init()?;"#.to_string()),
                 doc_link: None,
             },
@@ -780,14 +780,12 @@ graphrag.build_graph().await?;"#.to_string()),
             },
             GraphRAGError::Http(_) => ErrorSuggestion {
                 action: "Check network connectivity and service availability".to_string(),
-                code_example: Some(r#"// Check Ollama is running
-// Terminal: curl http://localhost:11434/api/tags
+                code_example: Some(r#"// Check llama-server is running
+// Terminal: curl http://127.0.0.1:8080/health
 
-// Verify Ollama config
-let config = Config::default();
-assert!(config.ollama.enabled);
-assert_eq!(config.ollama.host, "localhost");
-assert_eq!(config.ollama.port, 11434);
+// Verify the OpenAI-compatible endpoint
+let config = Config::default().with_llm();
+assert_eq!(config.llm.base_url, "http://127.0.0.1:8080/v1");
 
 // Or use hash embeddings for offline mode
 let graphrag = TypedBuilder::new()
@@ -798,21 +796,20 @@ let graphrag = TypedBuilder::new()
             },
             GraphRAGError::LanguageModel { message } => {
                 let action = if message.contains("not found") || message.contains("model") {
-                    "Ensure the LLM model is pulled and available".to_string()
+                    "Ensure the model is loaded by the LLM server".to_string()
                 } else {
                     "Check LLM provider configuration".to_string()
                 };
                 ErrorSuggestion {
                     action,
-                    code_example: Some(r#"// Pull the model first (in terminal)
-// ollama pull llama3.2:latest
-// ollama pull nomic-embed-text:latest
+                    code_example: Some(r#"// Start llama-server with the model (in terminal)
+// llama-server -m Qwen3.5-9B-UD-Q5_K_XL.gguf --alias qwen3.5-9b --port 8080
 
-// Or specify a different model
+// Or point to another OpenAI-compatible endpoint/model
 let graphrag = GraphRAGBuilder::new()
-    .with_ollama_enabled(true)
-    .with_chat_model("mistral:latest")
-    .with_ollama_embedding_model("nomic-embed-text:latest")
+    .with_llm_enabled(true)
+    .with_llm_base_url("http://127.0.0.1:8080/v1")
+    .with_chat_model("qwen3.5-9b")
     .build()?;"#.to_string()),
                     doc_link: None,
                 }
@@ -826,10 +823,10 @@ let graphrag = GraphRAGBuilder::new()
                 ErrorSuggestion {
                     action,
                     code_example: Some(r#"// Use matching dimension for your model
-// nomic-embed-text: 768, all-MiniLM-L6-v2: 384
+// multilingual-e5-small: 384
 let graphrag = GraphRAGBuilder::new()
-    .with_embedding_dimension(768)
-    .with_embedding_backend("ollama")
+    .with_embedding_dimension(384)
+    .with_embedding_backend("llama_cpp")
     .build()?;
 
 // Or use hash embeddings (dimension-agnostic)
@@ -856,8 +853,8 @@ let answer = graphrag.ask("Your question").await?;"#.to_string()),
                 action: "Initialize embeddings and ensure vectors are indexed".to_string(),
                 code_example: Some(r#"// Make sure embeddings are configured
 let graphrag = GraphRAGBuilder::new()
-    .with_embedding_backend("ollama")
-    .with_embedding_model("nomic-embed-text:latest")
+    .with_embedding_backend("llama_cpp")
+    .with_embedding_model("multilingual-e5-small")
     .build()?;
 
 // Or check if documents need reindexing
@@ -865,22 +862,22 @@ graphrag.build_graph().await?;"#.to_string()),
                 doc_link: None,
             },
             GraphRAGError::Timeout { operation, duration } => ErrorSuggestion {
-                action: format!("Operation '{}' took too long ({:?}). Consider increasing timeout or optimizing.", operation, duration),
+                action: format!("Operation '{operation}' took too long ({duration:?}). Consider increasing timeout or optimizing."),
                 code_example: Some(r#"// Increase timeout in config
 let mut config = Config::default();
-config.ollama.timeout_seconds = 120;  // 2 minutes
+config.llm.timeout_seconds = 120;  // 2 minutes
 
 // Or process smaller chunks
-config.chunk_size = 500;  // Smaller chunks
+config.text.chunk_size = 500;  // Smaller chunks
 config.parallel.enabled = true;  // Parallel processing"#.to_string()),
                 doc_link: None,
             },
             GraphRAGError::RateLimit { .. } => ErrorSuggestion {
                 action: "You've hit rate limits. Wait and retry, or use local models.".to_string(),
-                code_example: Some(r#"// Switch to local Ollama (no rate limits)
+                code_example: Some(r#"// Switch to local llama.cpp (no rate limits)
 let graphrag = TypedBuilder::new()
     .with_output_dir("./output")
-    .with_ollama()  // Local, no API limits
+    .with_llm()  // Local llama-server, no API limits
     .build()?;
 
 // Or enable caching to reduce API calls
@@ -900,12 +897,12 @@ let graphrag = GraphRAGBuilder::new()
                 doc_link: None,
             },
             GraphRAGError::NotFound { resource, id } => ErrorSuggestion {
-                action: format!("{} '{}' not found. Verify it exists.", resource, id),
+                action: format!("{resource} '{id}' not found. Verify it exists."),
                 code_example: None,
                 doc_link: None,
             },
             GraphRAGError::AlreadyExists { resource, id } => ErrorSuggestion {
-                action: format!("{} '{}' already exists. Use a different ID or update existing.", resource, id),
+                action: format!("{resource} '{id}' already exists. Use a different ID or update existing."),
                 code_example: None,
                 doc_link: None,
             },
@@ -925,7 +922,7 @@ let graphrag = GraphRAGBuilder::new()
         let suggestion = self.suggestion();
         let mut output = format!("{}\n\n💡 Suggestion: {}", self, suggestion.action);
         if let Some(code) = &suggestion.code_example {
-            output.push_str(&format!("\n\nExample:\n```rust\n{}\n```", code));
+            output.push_str(&format!("\n\nExample:\n```rust\n{code}\n```"));
         }
         output
     }

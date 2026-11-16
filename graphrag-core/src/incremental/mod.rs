@@ -80,6 +80,7 @@ pub struct IncrementalGraphManager {
 ///     enable_lazy_propagation: true,
 ///     enable_delta_computation: true,
 ///     lazy_propagation_threshold: 100,
+///     delta_use_bloom_filter: true,
 /// };
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -607,7 +608,7 @@ impl IncrementalGraphManager {
         } else {
             return Err(GraphRAGError::NotFound {
                 resource: "Node".to_string(),
-                id: format!("{} or {}", source, target),
+                id: format!("{source} or {target}"),
             });
         }
 
@@ -658,7 +659,7 @@ impl IncrementalGraphManager {
         self.lazy_propagation
             .propagate_pending_updates()
             .map_err(|e| GraphRAGError::IncrementalUpdate {
-                message: format!("Lazy propagation failed: {}", e),
+                message: format!("Lazy propagation failed: {e}"),
             })
     }
 
@@ -670,7 +671,6 @@ impl IncrementalGraphManager {
     /// Queue a node update for lazy propagation
     ///
     /// The update will be deferred until threshold is reached or force propagate is called.
-    #[allow(dead_code)]
     fn queue_lazy_update(
         &self,
         node_id: String,
@@ -683,7 +683,7 @@ impl IncrementalGraphManager {
         self.lazy_propagation
             .queue_node_update(node_id, affected_relationships)
             .map_err(|e| GraphRAGError::IncrementalUpdate {
-                message: format!("Failed to queue lazy update: {}", e),
+                message: format!("Failed to queue lazy update: {e}"),
             })
     }
 
@@ -763,7 +763,7 @@ impl IncrementalGraphManager {
             .compute_delta(before, &after)
             .map(Some)
             .map_err(|e| GraphRAGError::IncrementalUpdate {
-                message: format!("Delta computation failed: {}", e),
+                message: format!("Delta computation failed: {e}"),
             })
     }
 
@@ -833,7 +833,11 @@ impl IncrementalGraphManager {
 
         let node_id = node.id.clone();
         let node_idx = graph.add_node(node);
-        index.insert(node_id, node_idx);
+        index.insert(node_id.clone(), node_idx);
+        drop(index);
+        drop(graph);
+
+        self.queue_lazy_update(node_id, Vec::new())?;
 
         Ok(node_idx)
     }

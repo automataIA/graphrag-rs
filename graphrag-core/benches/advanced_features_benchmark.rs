@@ -3,26 +3,12 @@ use graphrag_core::core::{Entity, EntityId, KnowledgeGraph, Relationship};
 
 #[cfg(feature = "async")]
 use graphrag_core::{
-    graph::hierarchical_relationships::HierarchyBuilder, optimization::OptimizerConfig,
-    retrieval::causal_analysis::CausalAnalyzer,
+    graph::hierarchical_relationships::HierarchyBuilder, retrieval::causal_analysis::CausalAnalyzer,
 };
 
 use std::sync::Arc;
 
-// Sample text for benchmarking
-const SAMPLE_TEXT: &str = r#"
-Socrates was a classical Greek philosopher born in Athens around 470 BC.
-He is credited as one of the founders of Western philosophy. Socrates taught Plato,
-who in turn taught Aristotle, forming a crucial chain of philosophical influence.
-His method of inquiry, now called the Socratic method, involved asking probing questions
-to stimulate critical thinking. In 399 BC, Socrates was sentenced to death by drinking
-hemlock after being found guilty of corrupting the youth and impiety. His death caused
-widespread debate about justice and the role of philosophy in society.
-"#;
-
 const CONCEPTUAL_QUERY: &str = "What is the nature of philosophical inquiry?";
-const CAUSAL_QUERY: &str = "What caused Socrates' death?";
-const FACTUAL_QUERY: &str = "Who taught Plato?";
 
 /// Helper to create a test graph with relationships
 fn create_test_graph() -> KnowledgeGraph {
@@ -109,7 +95,7 @@ fn bench_baseline_retrieval(c: &mut Criterion) {
 #[cfg(feature = "async")]
 fn bench_symbolic_anchoring(c: &mut Criterion) {
     let graph = create_test_graph();
-    let graph_arc = Arc::new(graph);
+    let _graph_arc = Arc::new(graph);
 
     // Mock embedding provider (in real benchmark, use actual provider)
     // For now, just test the structure overhead
@@ -164,7 +150,7 @@ fn bench_causal_analysis(c: &mut Criterion) {
             let effect = EntityId("philosophy".to_string());
 
             let chains = analyzer.find_causal_chains(&cause, &effect, 5);
-            black_box(chains);
+            let _ = black_box(chains);
         });
     });
 }
@@ -183,7 +169,7 @@ fn bench_hierarchical_clustering(c: &mut Criterion) {
                 .with_resolutions(vec![0.8, 1.0, 1.5])
                 .with_min_cluster_size(2);
 
-            // Note: actual build() is async and requires Ollama
+            // Note: actual build() is async and requires an LLM server
             // This benchmarks just the builder setup
             black_box(builder);
         });
@@ -279,8 +265,8 @@ fn bench_scaling(c: &mut Criterion) {
         // Create entities
         for i in 0..*num_entities {
             let entity = Entity {
-                id: EntityId(format!("entity_{}", i)),
-                name: format!("Entity {}", i),
+                id: EntityId(format!("entity_{i}")),
+                name: format!("Entity {i}"),
                 entity_type: "TEST".to_string(),
                 confidence: 0.9,
                 mentions: vec![],
@@ -295,7 +281,7 @@ fn bench_scaling(c: &mut Criterion) {
         // Create relationships (each entity connected to next)
         for i in 0..*num_entities - 1 {
             let rel = Relationship::new(
-                EntityId(format!("entity_{}", i)),
+                EntityId(format!("entity_{i}")),
                 EntityId(format!("entity_{}", i + 1)),
                 "RELATES_TO".to_string(),
                 0.8,

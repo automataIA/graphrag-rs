@@ -1,0 +1,26 @@
+{
+  "description": "Coppie ordinate (soggetto, oggetto) etichettate a mano su chunk reali dell'indice GLiNER2.5 (chunk ~900 caratteri). label = relazione dell'ontologia affermata ESPLICITAMENTE nel chunk, oppure NONE. kind: positive, similar_type (tipo vicino a un altro, es. FRIEND_OF/LOVES), both_present_no_rel (entrambi nel chunk, nessuna relazione affermata), book_not_chunk (relazione vera nel libro ma non in questo chunk), inverted (direzione sbagliata di una relazione direzionale). Etichette di un solo lettore, 2026-11-11.",
+  "pairs": [
+    {"snippet": "da buoni compagni di", "head": "Volpe", "tail": "Gatto", "label": "FRIEND_OF", "kind": "positive", "chunk": 68},
+    {"snippet": "da buoni compagni di", "head": "Gatto", "tail": "Volpe", "label": "FRIEND_OF", "kind": "positive", "chunk": 68},
+    {"snippet": "da buoni compagni di", "head": "Volpe", "tail": "Pinocchio", "label": "NONE", "kind": "book_not_chunk", "chunk": 68, "note": "qui solo saluto; l'inganno (OPPOSES) viene dopo"},
+    {"snippet": "da buoni compagni di", "head": "Gatto", "tail": "Pinocchio", "label": "NONE", "kind": "book_not_chunk", "chunk": 68},
+    {"snippet": "da buoni compagni di", "head": "Pinocchio", "tail": "Volpe", "label": "NONE", "kind": "both_present_no_rel", "chunk": 68},
+    {"snippet": "ne aveva uno prediletto e carissimo", "head": "Pinocchio", "tail": "Lucignolo", "label": "FRIEND_OF", "kind": "similar_type", "chunk": 244, "note": "LOVES sbagliato: amico prediletto"},
+    {"snippet": "ne aveva uno prediletto e carissimo", "head": "Lucignolo", "tail": "Pinocchio", "label": "FRIEND_OF", "kind": "similar_type", "chunk": 244},
+    {"snippet": "trovò l'uscio di strada socchiuso", "head": "Grillo", "tail": "stanza", "label": "LOCATED_IN", "kind": "positive", "chunk": 21},
+    {"snippet": "trovò l'uscio di strada socchiuso", "head": "stanza", "tail": "Grillo", "label": "NONE", "kind": "inverted", "chunk": 21},
+    {"snippet": "Sulla scena si vedevano Arlecchino e Pulcinella", "head": "Arlecchino", "tail": "Pulcinella", "label": "OPPOSES", "kind": "positive", "chunk": 53},
+    {"snippet": "Sulla scena si vedevano Arlecchino e Pulcinella", "head": "Pulcinella", "tail": "Arlecchino", "label": "OPPOSES", "kind": "positive", "chunk": 53},
+    {"snippet": "Sulla scena si vedevano Arlecchino e Pulcinella", "head": "Pinocchio", "tail": "Mangiafoco", "label": "NONE", "kind": "book_not_chunk", "chunk": 53, "note": "solo il sommario del capitolo accenna al pericolo"},
+    {"snippet": "Sulla scena si vedevano Arlecchino e Pulcinella", "head": "Mangiafoco", "tail": "Arlecchino", "label": "NONE", "kind": "book_not_chunk", "chunk": 53, "note": "Mangiafoco burattinaio della compagnia: non detto qui"},
+    {"snippet": "Sulla scena si vedevano Arlecchino e Pulcinella", "head": "Pinocchio", "tail": "Pulcinella", "label": "NONE", "kind": "both_present_no_rel", "chunk": 53},
+    {"snippet": "gli stessi patti che avevo col defunto", "head": "faine", "tail": "Melampo", "label": "FRIEND_OF", "kind": "positive", "chunk": 152, "note": "patti, 'siamo andati sempre d'accordo' = alleanza"},
+    {"snippet": "gli stessi patti che avevo col defunto", "head": "Pinocchio", "tail": "Melampo", "label": "NONE", "kind": "both_present_no_rel", "chunk": 152},
+    {"snippet": "Alidoro invece voleva fermarsi", "head": "Pinocchio", "tail": "Alidoro", "label": "OPPOSES", "kind": "positive", "chunk": 213, "note": "'Crepa!'"},
+    {"snippet": "Dimmi, Grillino, dove potrei", "head": "Pinocchio", "tail": "Geppetto", "label": "FAMILY_OF", "kind": "positive", "chunk": 341, "note": "GLiNER g3 non trova Geppetto in questo chunk"},
+    {"snippet": "Dimmi, Grillino, dove potrei", "head": "Pinocchio", "tail": "Giangio", "label": "NONE", "kind": "book_not_chunk", "chunk": 341, "note": "WORKS_FOR solo nel chunk seguente"},
+    {"snippet": "Fra te e me ci possiamo accomodare", "head": "Pinocchio", "tail": "Giangio", "label": "WORKS_FOR", "kind": "positive", "chunk": 342},
+    {"snippet": "Fra te e me ci possiamo accomodare", "head": "Giangio", "tail": "Pinocchio", "label": "NONE", "kind": "inverted", "chunk": 342}
+  ]
+}

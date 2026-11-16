@@ -82,7 +82,7 @@ impl DocumentProcessingValidator {
                 name: "content_coverage".to_string(),
                 passed: coverage_ratio >= 0.9, // At least 90% coverage
                 expected: "Coverage ratio >= 0.9".to_string(),
-                actual: format!("{:.2}", coverage_ratio),
+                actual: format!("{coverage_ratio:.2}"),
                 message: format!(
                     "Chunks cover {:.1}% of original content",
                     coverage_ratio * 100.0
@@ -101,9 +101,9 @@ impl DocumentProcessingValidator {
             name: "no_empty_chunks".to_string(),
             passed: empty_chunks == 0,
             expected: "0 empty chunks".to_string(),
-            actual: format!("{} empty chunks", empty_chunks),
+            actual: format!("{empty_chunks} empty chunks"),
             message: if empty_chunks > 0 {
-                format!("Found {} empty chunks", empty_chunks)
+                format!("Found {empty_chunks} empty chunks")
             } else {
                 "All chunks have content".to_string()
             },
@@ -195,12 +195,9 @@ impl EntityExtractionValidator {
             name: "confidence_scores_valid".to_string(),
             passed: invalid_confidence == 0,
             expected: "All confidences in [0.0, 1.0]".to_string(),
-            actual: format!("{} invalid scores", invalid_confidence),
+            actual: format!("{invalid_confidence} invalid scores"),
             message: if invalid_confidence > 0 {
-                format!(
-                    "{} entities have invalid confidence scores",
-                    invalid_confidence
-                )
+                format!("{invalid_confidence} entities have invalid confidence scores")
             } else {
                 "All confidence scores are valid".to_string()
             },
@@ -212,9 +209,9 @@ impl EntityExtractionValidator {
             name: "entity_types_populated".to_string(),
             passed: missing_types == 0,
             expected: "All entities have types".to_string(),
-            actual: format!("{} without types", missing_types),
+            actual: format!("{missing_types} without types"),
             message: if missing_types > 0 {
-                format!("{} entities missing entity_type", missing_types)
+                format!("{missing_types} entities missing entity_type")
             } else {
                 "All entities have types assigned".to_string()
             },
@@ -226,9 +223,9 @@ impl EntityExtractionValidator {
             name: "entity_names_valid".to_string(),
             passed: empty_names == 0,
             expected: "All entities have names".to_string(),
-            actual: format!("{} empty names", empty_names),
+            actual: format!("{empty_names} empty names"),
             message: if empty_names > 0 {
-                format!("{} entities have empty names", empty_names)
+                format!("{empty_names} entities have empty names")
             } else {
                 "All entities have valid names".to_string()
             },
@@ -247,12 +244,9 @@ impl EntityExtractionValidator {
                 name: "entity_mentions_valid".to_string(),
                 passed: invalid_mentions == 0,
                 expected: "All mentions reference valid chunks".to_string(),
-                actual: format!("{} invalid references", invalid_mentions),
+                actual: format!("{invalid_mentions} invalid references"),
                 message: if invalid_mentions > 0 {
-                    format!(
-                        "{} entity mentions reference non-existent chunks",
-                        invalid_mentions
-                    )
+                    format!("{invalid_mentions} entity mentions reference non-existent chunks")
                 } else {
                     "All entity mentions are valid".to_string()
                 },
@@ -280,7 +274,7 @@ impl EntityExtractionValidator {
         // Warning: Low average confidence
         if let Some(&avg_conf) = metrics.get("avg_confidence") {
             if avg_conf < 0.5 {
-                warnings.push(format!("Low average entity confidence: {:.2}", avg_conf));
+                warnings.push(format!("Low average entity confidence: {avg_conf:.2}"));
             }
         }
 
@@ -336,12 +330,9 @@ impl RelationshipExtractionValidator {
             name: "relationship_confidence_valid".to_string(),
             passed: invalid_confidence == 0,
             expected: "All confidences in [0.0, 1.0]".to_string(),
-            actual: format!("{} invalid", invalid_confidence),
+            actual: format!("{invalid_confidence} invalid"),
             message: if invalid_confidence > 0 {
-                format!(
-                    "{} relationships have invalid confidence",
-                    invalid_confidence
-                )
+                format!("{invalid_confidence} relationships have invalid confidence")
             } else {
                 "All relationship confidences valid".to_string()
             },
@@ -356,9 +347,9 @@ impl RelationshipExtractionValidator {
             name: "relationship_types_populated".to_string(),
             passed: missing_types == 0,
             expected: "All relationships typed".to_string(),
-            actual: format!("{} untyped", missing_types),
+            actual: format!("{missing_types} untyped"),
             message: if missing_types > 0 {
-                format!("{} relationships missing type", missing_types)
+                format!("{missing_types} relationships missing type")
             } else {
                 "All relationships have types".to_string()
             },
@@ -375,12 +366,9 @@ impl RelationshipExtractionValidator {
             name: "relationship_entities_exist".to_string(),
             passed: orphan_relationships == 0,
             expected: "All relationships reference valid entities".to_string(),
-            actual: format!("{} orphaned", orphan_relationships),
+            actual: format!("{orphan_relationships} orphaned"),
             message: if orphan_relationships > 0 {
-                format!(
-                    "{} relationships reference non-existent entities",
-                    orphan_relationships
-                )
+                format!("{orphan_relationships} relationships reference non-existent entities")
             } else {
                 "All relationships have valid entity references".to_string()
             },
@@ -446,7 +434,7 @@ impl GraphConstructionValidator {
             name: "graph_not_empty".to_string(),
             passed: entities > 0 || documents > 0,
             expected: "At least some nodes".to_string(),
-            actual: format!("{} entities, {} docs", entities, documents),
+            actual: format!("{entities} entities, {documents} docs"),
             message: if entities == 0 && documents == 0 {
                 "Graph is completely empty".to_string()
             } else {
@@ -463,9 +451,9 @@ impl GraphConstructionValidator {
                 name: "entity_chunk_ratio_reasonable".to_string(),
                 passed: reasonable,
                 expected: "0.1 to 10 entities per chunk".to_string(),
-                actual: format!("{:.2} entities/chunk", entities_per_chunk),
+                actual: format!("{entities_per_chunk:.2} entities/chunk"),
                 message: if !reasonable {
-                    format!("Unusual entity-to-chunk ratio: {:.2}", entities_per_chunk)
+                    format!("Unusual entity-to-chunk ratio: {entities_per_chunk:.2}")
                 } else {
                     "Entity density looks reasonable".to_string()
                 },
@@ -490,7 +478,7 @@ impl GraphConstructionValidator {
                 name: "graph_connectivity".to_string(),
                 passed: is_connected,
                 expected: ">0.1 relationships per entity".to_string(),
-                actual: format!("{:.2} rels/entity", connectivity),
+                actual: format!("{connectivity:.2} rels/entity"),
                 message: if !is_connected {
                     "Graph is sparsely connected".to_string()
                 } else {
@@ -551,8 +539,7 @@ impl PipelineValidationReport {
 
         let summary = if overall_passed {
             format!(
-                "✅ All pipeline phases validated successfully ({}/{} checks passed)",
-                passed_checks, total_checks
+                "✅ All pipeline phases validated successfully ({passed_checks}/{total_checks} checks passed)"
             )
         } else {
             let failed_phases: Vec<_> = phases
@@ -611,7 +598,7 @@ impl PipelineValidationReport {
             if !phase.warnings.is_empty() {
                 report.push_str("### Warnings\n");
                 for warning in &phase.warnings {
-                    report.push_str(&format!("⚠️  {}\n", warning));
+                    report.push_str(&format!("⚠️  {warning}\n"));
                 }
                 report.push('\n');
             }
@@ -620,7 +607,7 @@ impl PipelineValidationReport {
             if !phase.metrics.is_empty() {
                 report.push_str("### Metrics\n");
                 for (key, value) in &phase.metrics {
-                    report.push_str(&format!("- {}: {:.2}\n", key, value));
+                    report.push_str(&format!("- {key}: {value:.2}\n"));
                 }
                 report.push('\n');
             }

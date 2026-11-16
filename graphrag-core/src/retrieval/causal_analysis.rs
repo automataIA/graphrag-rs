@@ -347,7 +347,6 @@ impl CausalAnalyzer {
     fn find_relationship(&self, source: &EntityId, target: &EntityId) -> Option<Relationship> {
         self.graph
             .get_entity_relationships(&source.0)
-            .into_iter()
             .find(|rel| rel.target == *target)
             .cloned()
     }
@@ -568,8 +567,7 @@ mod tests {
         // product: 0.76 * 0.8775 ≈ 0.667
         assert!(
             confidence > 0.65 && confidence < 0.7,
-            "Confidence calculation incorrect: {}",
-            confidence
+            "Confidence calculation incorrect: {confidence}"
         );
     }
 }

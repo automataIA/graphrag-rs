@@ -36,7 +36,7 @@ pub fn validate_config(config_value: &Value, schema_value: &Value) -> Result<()>
 
     // Compile schema
     let schema = JSONSchema::compile(schema_value).map_err(|e| GraphRAGError::Config {
-        message: format!("Invalid JSON Schema: {}", e),
+        message: format!("Invalid JSON Schema: {e}"),
     })?;
 
     // Validate
@@ -70,11 +70,11 @@ pub fn load_schema<P: AsRef<Path>>(schema_path: P) -> Result<Value> {
     let path = schema_path.as_ref();
 
     let schema_str = std::fs::read_to_string(path).map_err(|e| GraphRAGError::Config {
-        message: format!("Failed to read schema file {:?}: {}", path, e),
+        message: format!("Failed to read schema file {path:?}: {e}"),
     })?;
 
     serde_json::from_str(&schema_str).map_err(|e| GraphRAGError::Config {
-        message: format!("Failed to parse schema JSON: {}", e),
+        message: format!("Failed to parse schema JSON: {e}"),
     })
 }
 
@@ -97,7 +97,7 @@ where
     // Load config
     let config_str =
         std::fs::read_to_string(config_path.as_ref()).map_err(|e| GraphRAGError::Config {
-            message: format!("Failed to read config file: {}", e),
+            message: format!("Failed to read config file: {e}"),
         })?;
 
     // Parse as JSON5 first, fallback to JSON
@@ -110,12 +110,12 @@ where
     {
         // Parse as JSON5
         json5::from_str(&config_str).map_err(|e| GraphRAGError::Config {
-            message: format!("Failed to parse JSON5 config: {}", e),
+            message: format!("Failed to parse JSON5 config: {e}"),
         })?
     } else {
         // Parse as JSON
         serde_json::from_str(&config_str).map_err(|e| GraphRAGError::Config {
-            message: format!("Failed to parse JSON config: {}", e),
+            message: format!("Failed to parse JSON config: {e}"),
         })?
     };
 
@@ -153,9 +153,9 @@ pub fn format_validation_error(error: &GraphRAGError) -> String {
                     return formatted;
                 }
             }
-            format!("❌ Configuration error: {}", message)
+            format!("❌ Configuration error: {message}")
         },
-        _ => format!("❌ Error: {:?}", error),
+        _ => format!("❌ Error: {error:?}"),
     }
 }
 
@@ -218,7 +218,7 @@ impl ValidationResult {
             ));
 
             if let Some(suggestion) = &error.suggestion {
-                formatted.push_str(&format!("     💡 Suggestion: {}\n", suggestion));
+                formatted.push_str(&format!("     💡 Suggestion: {suggestion}\n"));
             }
         }
 

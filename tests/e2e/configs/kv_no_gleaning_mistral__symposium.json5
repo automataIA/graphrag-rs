@@ -23,7 +23,7 @@
       "normalize_whitespace": true
     },
     "entity_extraction": {
-      "model_name": "mistral-nemo:latest",
+      "model_name": "qwen3.5-9b",
       "temperature": 0.0,
       "max_tokens": 1200,
       "entity_types": ["PERSON", "CONCEPT", "LOCATION", "WORK"],
@@ -95,8 +95,8 @@
   },
   "vector_processing": {
     "enabled": true,
-    "embedding_model": "nomic-embed-text",
-    "embedding_dimensions": 768,
+    "embedding_model": "multilingual-e5-small",
+    "embedding_dimensions": 384,
     "use_hnsw_index": true,
     "hnsw_ef_construction": 200,
     "hnsw_m": 16,
@@ -110,24 +110,17 @@
     "use_temporal_parsing": false,
     "confidence_threshold": 0.5
   },
-  "ollama": {
+  "llm": {
     "enabled": true,
-    "host": "http://localhost",
-    "port": 11434,
-    "chat_model": "mistral-nemo:latest",
-    "embedding_model": "nomic-embed-text",
+    "base_url": "http://127.0.0.1:8080/v1",
+    "embedding_base_url": "http://127.0.0.1:8081/v1",
+    "chat_model": "qwen3.5-9b",
+    "embedding_model": "multilingual-e5-small",
     "timeout_seconds": 300,
     "max_retries": 3,
-    "fallback_to_hash": true,
+    "fallback_to_hash": false,  // llama.cpp embeddings never fall back to hash
     "max_tokens": 1200,
     "temperature": 0.0,
-    "keep_alive": "1h",
-    "generation": {
-      "temperature": 0.0,
-      "top_p": 0.9,
-      "max_tokens": 1500,
-      "stream": false
-    }
   },
   "performance": {
     "batch_processing": true,

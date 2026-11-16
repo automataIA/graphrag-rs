@@ -1,0 +1,312 @@
+{
+  "schema_version": "graphrag-0.3",
+  "questions": [
+    {
+      "id": "q-01",
+      "query": "Who wrote the first published algorithm?",
+      "relevant_source_ids": [
+        "chunk-ada"
+      ],
+      "expected_answer_terms": [
+        "Ada Lovelace"
+      ],
+      "answerable": true,
+      "category": "factual",
+      "language": "en"
+    },
+    {
+      "id": "q-02",
+      "query": "Chi ha progettato la Analytical Engine?",
+      "relevant_source_ids": [
+        "chunk-babbage"
+      ],
+      "expected_answer_terms": [
+        "Charles Babbage"
+      ],
+      "answerable": true,
+      "category": "factual",
+      "language": "it"
+    },
+    {
+      "id": "q-03",
+      "query": "What dimension does multilingual E5 return?",
+      "relevant_source_ids": [
+        "chunk-e5"
+      ],
+      "expected_answer_terms": [
+        "384"
+      ],
+      "answerable": true,
+      "category": "factual",
+      "language": "en"
+    },
+    {
+      "id": "q-04",
+      "query": "Quale metodo usa le parole condivise?",
+      "relevant_source_ids": [
+        "chunk-bm25"
+      ],
+      "expected_answer_terms": [
+        "BM25"
+      ],
+      "answerable": true,
+      "category": "factual",
+      "language": "it"
+    },
+    {
+      "id": "q-05",
+      "query": "What does Ornith return?",
+      "relevant_source_ids": [
+        "chunk-ornith"
+      ],
+      "expected_answer_terms": [
+        "token"
+      ],
+      "answerable": true,
+      "category": "factual",
+      "language": "en"
+    },
+    {
+      "id": "q-06",
+      "query": "Dove è stato pubblicato il lavoro di Ada?",
+      "relevant_source_ids": [
+        "chunk-ada"
+      ],
+      "expected_answer_terms": [
+        "Londra",
+        "1843"
+      ],
+      "answerable": true,
+      "category": "factual",
+      "language": "it"
+    },
+    {
+      "id": "q-07",
+      "query": "Who collaborated with Ada on the program?",
+      "relevant_source_ids": [
+        "chunk-babbage"
+      ],
+      "expected_answer_terms": [
+        "Charles Babbage"
+      ],
+      "answerable": true,
+      "category": "relational",
+      "language": "en"
+    },
+    {
+      "id": "q-08",
+      "query": "Quale progetto ospita Roma?",
+      "relevant_source_ids": [
+        "chunk-roma"
+      ],
+      "expected_answer_terms": [
+        "GraphRAG"
+      ],
+      "answerable": true,
+      "category": "relational",
+      "language": "it"
+    },
+    {
+      "id": "q-09",
+      "query": "Which methods does GraphRAG use?",
+      "relevant_source_ids": [
+        "chunk-graphrag",
+        "chunk-bm25",
+        "chunk-e5"
+      ],
+      "expected_answer_terms": [
+        "lexical",
+        "vector",
+        "graph"
+      ],
+      "answerable": true,
+      "category": "relational",
+      "language": "en"
+    },
+    {
+      "id": "q-10",
+      "query": "Quale modello genera risposte per GraphRAG?",
+      "relevant_source_ids": [
+        "chunk-ornith",
+        "chunk-graphrag"
+      ],
+      "expected_answer_terms": [
+        "Ornith"
+      ],
+      "answerable": true,
+      "category": "relational",
+      "language": "it"
+    },
+    {
+      "id": "q-11",
+      "query": "What is Ada's relationship to the Analytical Engine?",
+      "relevant_source_ids": [
+        "chunk-ada"
+      ],
+      "expected_answer_terms": [
+        "wrote",
+        "algorithm"
+      ],
+      "answerable": true,
+      "category": "relational",
+      "language": "en"
+    },
+    {
+      "id": "q-12",
+      "query": "Qual è la relazione tra Roma e Londra?",
+      "relevant_source_ids": [
+        "chunk-roma"
+      ],
+      "expected_answer_terms": [
+        "collabora"
+      ],
+      "answerable": true,
+      "category": "relational",
+      "language": "it"
+    },
+    {
+      "id": "q-13",
+      "query": "Where do Ada's publication date and Babbage's design appear?",
+      "relevant_source_ids": [
+        "chunk-ada",
+        "chunk-babbage"
+      ],
+      "expected_answer_terms": [
+        "1843",
+        "designed"
+      ],
+      "answerable": true,
+      "category": "cross_document",
+      "language": "en"
+    },
+    {
+      "id": "q-14",
+      "query": "Quali documenti spiegano BM25 e GraphRAG insieme?",
+      "relevant_source_ids": [
+        "chunk-bm25",
+        "chunk-graphrag"
+      ],
+      "expected_answer_terms": [
+        "BM25",
+        "GraphRAG"
+      ],
+      "answerable": true,
+      "category": "cross_document",
+      "language": "it"
+    },
+    {
+      "id": "q-15",
+      "query": "Which sources connect E5 dimension and GraphRAG vectors?",
+      "relevant_source_ids": [
+        "chunk-e5",
+        "chunk-graphrag"
+      ],
+      "expected_answer_terms": [
+        "384",
+        "vector"
+      ],
+      "answerable": true,
+      "category": "cross_document",
+      "language": "en"
+    },
+    {
+      "id": "q-16",
+      "query": "Quali fonti collegano Ornith al contesto?",
+      "relevant_source_ids": [
+        "chunk-ornith",
+        "chunk-graphrag"
+      ],
+      "expected_answer_terms": [
+        "Ornith",
+        "contesto"
+      ],
+      "answerable": true,
+      "category": "cross_document",
+      "language": "it"
+    },
+    {
+      "id": "q-17",
+      "query": "Which two sources mention both Ada and the engine?",
+      "relevant_source_ids": [
+        "chunk-ada",
+        "chunk-babbage"
+      ],
+      "expected_answer_terms": [
+        "Ada",
+        "Engine"
+      ],
+      "answerable": true,
+      "category": "cross_document",
+      "language": "en"
+    },
+    {
+      "id": "q-18",
+      "query": "Quale città ospita il laboratorio che usa relazioni grafo e retrieval?",
+      "relevant_source_ids": [
+        "chunk-roma",
+        "chunk-graphrag"
+      ],
+      "expected_answer_terms": [
+        "Roma",
+        "GraphRAG"
+      ],
+      "answerable": true,
+      "category": "cross_document",
+      "language": "it"
+    },
+    {
+      "id": "q-19",
+      "query": "Who won the 2030 lunar election?",
+      "relevant_source_ids": [],
+      "expected_answer_terms": [],
+      "answerable": false,
+      "category": "unanswerable",
+      "language": "en"
+    },
+    {
+      "id": "q-20",
+      "query": "Quale città ospita un porto su Marte?",
+      "relevant_source_ids": [],
+      "expected_answer_terms": [],
+      "answerable": false,
+      "category": "unanswerable",
+      "language": "it"
+    },
+    {
+      "id": "q-21",
+      "query": "What is the private API key for the archive?",
+      "relevant_source_ids": [],
+      "expected_answer_terms": [],
+      "answerable": false,
+      "category": "unanswerable",
+      "language": "en"
+    },
+    {
+      "id": "q-22",
+      "query": "Quanti satelliti ha il laboratorio nel 2100?",
+      "relevant_source_ids": [],
+      "expected_answer_terms": [],
+      "answerable": false,
+      "category": "unanswerable",
+      "language": "it"
+    },
+    {
+      "id": "q-23",
+      "query": "Which source proves that Ada visited Mars?",
+      "relevant_source_ids": [],
+      "expected_answer_terms": [],
+      "answerable": false,
+      "category": "unanswerable",
+      "language": "en"
+    },
+    {
+      "id": "q-24",
+      "query": "Il documento indica il prezzo del teletrasporto?",
+      "relevant_source_ids": [],
+      "expected_answer_terms": [],
+      "answerable": false,
+      "category": "unanswerable",
+      "language": "it"
+    }
+  ]
+}

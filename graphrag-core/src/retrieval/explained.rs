@@ -114,11 +114,7 @@ impl ExplainedAnswer {
                     ResultType::HierarchicalSummary => SourceType::Summary,
                     ResultType::Hybrid => SourceType::TextChunk,
                 },
-                excerpt: if r.content.len() > 200 {
-                    format!("{}...", &r.content[..200])
-                } else {
-                    r.content.clone()
-                },
+                excerpt: excerpt(&r.content, 200),
                 relevance_score: r.score,
             })
             .collect();
@@ -130,7 +126,7 @@ impl ExplainedAnswer {
         // Step 1: Query analysis
         reasoning_steps.push(ReasoningStep {
             step_number: step_num,
-            description: format!("Analyzed query: \"{}\"", query),
+            description: format!("Analyzed query: \"{query}\""),
             entities_used: vec![],
             evidence_snippet: None,
             confidence: 0.95,
@@ -161,15 +157,9 @@ impl ExplainedAnswer {
         if chunk_count > 0 {
             reasoning_steps.push(ReasoningStep {
                 step_number: step_num,
-                description: format!("Retrieved {} relevant text chunks", chunk_count),
+                description: format!("Retrieved {chunk_count} relevant text chunks"),
                 entities_used: vec![],
-                evidence_snippet: search_results.first().map(|r| {
-                    if r.content.len() > 100 {
-                        format!("{}...", &r.content[..100])
-                    } else {
-                        r.content.clone()
-                    }
-                }),
+                evidence_snippet: search_results.first().map(|r| excerpt(&r.content, 100)),
                 confidence,
             });
             step_num += 1;
@@ -225,7 +215,7 @@ impl ExplainedAnswer {
                     step.confidence * 100.0
                 ));
                 if let Some(evidence) = &step.evidence_snippet {
-                    output.push_str(&format!("   Evidence: \"{}\"\n", evidence));
+                    output.push_str(&format!("   Evidence: \"{evidence}\"\n"));
                 }
             }
             output.push('\n');
@@ -246,5 +236,39 @@ impl ExplainedAnswer {
         }
 
         output
+    }
+}
+
+/// Shorten `text` to at most `max_bytes` bytes for display, cutting on a char
+/// boundary and appending `...` when something was removed.
+fn excerpt(text: &str, max_bytes: usize) -> String {
+    if text.len() <= max_bytes {
+        return text.to_string();
+    }
+    let mut end = max_bytes;
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}...", &text[..end])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::excerpt;
+
+    #[test]
+    fn excerpt_cuts_on_char_boundary_inside_multibyte_char() {
+        // '—' is 3 bytes; byte 100 falls inside it.
+        let text = format!("{}— resto del testo", "a".repeat(99));
+        let out = excerpt(&text, 100);
+        assert_eq!(out, format!("{}...", "a".repeat(99)));
+    }
+
+    #[test]
+    fn excerpt_keeps_short_text_unchanged() {
+        assert_eq!(
+            excerpt("Pinocchio — burattino", 100),
+            "Pinocchio — burattino"
+        );
     }
 }

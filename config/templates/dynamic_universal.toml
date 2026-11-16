@@ -2,7 +2,7 @@
 # GraphRAG Configuration Template - UNIVERSAL DYNAMIC TEMPLATE
 # =============================================================================
 # 🎯 FULLY TEXT-AGNOSTIC: Works with ANY document type without hardcoded assumptions
-# 🚀 100% DYNAMIC: No hardcoded entity names, characters, or document-specific logic
+# 🚀 text-agnostic configuration: No hardcoded entity names, characters, or document-specific logic
 # 📚 Use cases: ANY book, article, document, or text - completely domain-agnostic
 # ⚡ Breakthrough Features: PageRank, Caching, Incremental, ROGRAG, Async processing
 # =============================================================================
@@ -12,7 +12,7 @@
 # -----------------------------------------------------------------------------
 [mode]
 # HYBRID pipeline recommended for universal/dynamic processing:
-# - Balanced quality and performance for any document type
+# Performance and quality depend on the selected pipeline and corpus.
 # - Semantic (60%) for nuanced understanding + Algorithmic (40%) for coverage
 # - Adaptive weighting based on content characteristics
 # - Best choice when document type is unknown or highly variable
@@ -48,7 +48,7 @@ remove_special_chars = false  # Keep special characters
 
 [pipeline.entity_extraction]
 # DYNAMIC ENTITY EXTRACTION: No hardcoded entity names or types
-model_name = "llama3.1:8b"
+model_name = "qwen3.5-9b"
 temperature = 0.2             # Balanced for consistency and discovery
 max_tokens = 1200             # Good balance for detailed extraction
 entity_types = [
@@ -61,7 +61,7 @@ entity_types = [
     "TIME",                   # Temporal references, periods
     "DOCUMENT",               # Referenced texts, sources
 ]
-confidence_threshold = 0.7    # Balanced threshold for quality vs coverage
+confidence_threshold = 0.7    # Balanced threshold for the selected workload vs coverage
 
 [pipeline.entity_extraction.filters]
 # Dynamic filtering - no hardcoded exclusions
@@ -90,8 +90,8 @@ enable_persistence = true
 
 [models]
 # Model configuration
-primary_llm = "llama3.1:8b"
-embedding_model = "nomic-embed-text"
+primary_llm = "qwen3.5-9b"
+embedding_model = "multilingual-e5-small"
 max_context_length = 4096
 
 [models.llm_params]
@@ -108,13 +108,13 @@ batch_size = 32
 worker_threads = 4
 memory_limit_mb = 512
 
-[ollama]
-# Ollama integration - local LLM processing
+[llm]
+# llama.cpp integration - local LLM processing
 enabled = true
-host = "http://localhost"
-port = 11434
-chat_model = "llama3.1:8b"
-embedding_model = "nomic-embed-text"
+base_url = "http://127.0.0.1:8080/v1"
+embedding_base_url = "http://127.0.0.1:8081/v1"
+chat_model = "qwen3.5-9b"
+embedding_model = "multilingual-e5-small"
 timeout_seconds = 60
 max_retries = 3
 fallback_to_hash = false
@@ -126,15 +126,15 @@ temperature = 0.2
 # =============================================================================
 
 [breakthrough_features]
-# Enable breakthrough features for maximum performance
-pagerank_retrieval = true       # 27x performance boost
-llm_response_caching = true     # 6x cost reduction
+# Enable breakthrough features for the selected workload
+pagerank_retrieval = true       # PageRank retrieval
+llm_response_caching = true     # response caching
 incremental_updates = true      # Zero-downtime updates
-rograg_decomposition = true     # 60%→75% accuracy improvement
+rograg_decomposition = true     # query-aware decomposition
 full_async_processing = true    # Enterprise scalability
 
 [pagerank]
-# PageRank configuration for 27x performance boost
+# PageRank configuration for PageRank retrieval
 enabled = true
 damping_factor = 0.85
 max_iterations = 100
@@ -142,7 +142,7 @@ convergence_threshold = 1e-6
 cache_results = true
 
 [caching]
-# LLM response caching for 6x cost reduction
+# LLM response caching for response caching
 enabled = true
 cache_size = 10000
 ttl_seconds = 3600
@@ -157,7 +157,7 @@ change_tracking = true
 batch_updates = true
 
 [rograg]
-# ROGRAG query decomposition for accuracy improvement
+# Performance and quality depend on the selected pipeline and corpus.
 enabled = true
 max_decomposition_depth = 3
 fuzzy_fallback = true
@@ -175,7 +175,7 @@ queue_size = 1000
 # =============================================================================
 
 [dynamic_guarantees]
-# These settings ensure 100% text-agnostic processing
+# These settings ensure text-agnostic processing processing
 no_hardcoded_entities = true     # No hardcoded character names
 no_hardcoded_patterns = true     # No book-specific patterns
 no_hardcoded_responses = true    # No pre-written responses

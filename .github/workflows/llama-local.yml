@@ -1,0 +1,41 @@
+name: Local llama.cpp verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      e5_endpoint:
+        description: "OpenAI-compatible E5 service URL"
+        required: true
+        type: string
+      ornith_endpoint:
+        description: "OpenAI-compatible Ornith service URL"
+        required: true
+        type: string
+      e5_gguf:
+        description: "Runner-local E5 GGUF path"
+        required: true
+        type: string
+      ornith_gguf:
+        description: "Runner-local Ornith GGUF path"
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-C target-cpu=x86-64-v2"
+
+jobs:
+  smoke:
+    name: local provider smoke
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.88.0
+      - uses: Swatinem/rust-cache@v2
+      - name: Run against supplied local services and models
+        env:
+          GRAPHRAG_E5_ENDPOINT: ${{ inputs.e5_endpoint }}
+          GRAPHRAG_ORNITH_ENDPOINT: ${{ inputs.ornith_endpoint }}
+          GRAPHRAG_E5_GGUF: ${{ inputs.e5_gguf }}
+          GRAPHRAG_ORNITH_GGUF: ${{ inputs.ornith_gguf }}
+        run: scripts/ci/check-local-llama.sh

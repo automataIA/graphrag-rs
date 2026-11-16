@@ -128,7 +128,7 @@ impl MetricsCollector {
             if tags.is_empty() {
                 return name.to_string();
             }
-            let tag_str: Vec<String> = tags.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
+            let tag_str: Vec<String> = tags.iter().map(|(k, v)| format!("{k}={v}")).collect();
             format!("{}:{}", name, tag_str.join(","))
         } else {
             name.to_string()
@@ -270,7 +270,7 @@ mod tests {
         collector.counter("requests", 1, Some(&tags)).await;
         collector.counter("requests", 2, Some(&tags)).await;
 
-        let key = format!("requests:method=POST,endpoint=/api/query");
+        let key = "requests:method=POST,endpoint=/api/query".to_string();
         assert_eq!(collector.get_counter(&key), Some(3));
     }
 

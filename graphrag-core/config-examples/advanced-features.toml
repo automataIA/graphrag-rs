@@ -1,6 +1,6 @@
 # GraphRAG Advanced Features Configuration Example
 # This file demonstrates all advanced features from Phases 2-3
-# Copy and modify this file to enable state-of-the-art GraphRAG capabilities
+# Copy and modify this file to enable advanced GraphRAG capabilities
 
 # ============================================================================
 # BASIC CONFIGURATION
@@ -71,7 +71,7 @@ require_temporal_consistency = true  # Require chronological ordering in chains
 num_levels = 3                   # Number of hierarchy levels (2-5)
 resolutions = [0.8, 1.0, 1.5]    # Resolution parameters (higher = more clusters)
 min_cluster_size = 3             # Minimum relationships per cluster
-generate_summaries = true        # Generate LLM summaries for clusters (requires Ollama)
+generate_summaries = true        # Generate LLM summaries for clusters (requires llama.cpp)
 
 # Phase 3.2: Graph Weight Optimization (DW-GRPO)
 # Heuristic optimization of relationship weights based on query performance
@@ -80,7 +80,7 @@ learning_rate = 0.05             # Learning rate for weight adjustments (0.01-0.
 max_iterations = 20              # Maximum optimization iterations
 slope_window = 5                 # Window size for slope calculation
 stagnation_threshold = 0.01      # Minimum slope to avoid stagnation
-use_llm_eval = true              # Use LLM for quality evaluation (requires Ollama)
+use_llm_eval = true              # Use LLM for evaluation (requires llama.cpp)
 
 # Objective weights (must sum to ~1.0)
 [advanced_features.weight_optimization.objective_weights]
@@ -93,9 +93,9 @@ conciseness = 0.2                # Weight for conciseness objective
 # ============================================================================
 
 [embeddings]
-model = "nomic-embed-text"       # Ollama embedding model
-dimension = 768
-api_endpoint = "http://localhost:11434"
+model = "multilingual-e5-small"       # llama.cpp embedding model
+dimension = 384
+api_endpoint = "http://127.0.0.1:8081/v1/embeddings"
 batch_size = 32
 
 # ============================================================================
@@ -122,13 +122,14 @@ top_k = 10
 search_algorithm = "hybrid"      # "vector", "graph", or "hybrid"
 
 # ============================================================================
-# OLLAMA CONFIGURATION
+# LLM CONFIGURATION (llama.cpp, OpenAI-compatible)
 # ============================================================================
 
-[ollama]
-host = "http://localhost:11434"
-model = "llama3.2"               # Model for relationship extraction and summaries
-embedding_model = "nomic-embed-text"
+[llm]
+base_url = "http://127.0.0.1:8080/v1"
+embedding_base_url = "http://127.0.0.1:8081/v1"
+model = "qwen3.5-9b"               # Model for relationship extraction and summaries
+embedding_model = "multilingual-e5-small"
 timeout_seconds = 300
 max_retries = 3
 
@@ -149,14 +150,14 @@ parallel_vector_ops = true
 # USAGE NOTES
 # ============================================================================
 
-# 1. Triple Reflection: Improves quality by validating relationships against source text
-#    - Best for: High-precision applications where accuracy matters
-#    - Cost: +30-50% processing time
+# 1. Triple Reflection: validates relationships against source text
+#    - Best for: Applications that need an additional relationship check
+#    - Processing overhead depends on the corpus and provider
 #    - Enable: entities.enable_triple_reflection = true
 
 # 2. Atomic Fact Extraction: Fine-grained fact extraction (ATOM-style)
-#    - Best for: Scientific texts, detailed analysis
-#    - Cost: +50-100% processing time
+#    - Best for: Scientific texts and detailed analysis
+#    - Processing overhead depends on the corpus and provider
 #    - Enable: entities.use_atomic_facts = true
 
 # 3. Symbolic Anchoring: Better conceptual/abstract query handling
@@ -179,7 +180,7 @@ parallel_vector_ops = true
 #    - Cost: One-time build cost
 #    - Enable: Call build_relationship_hierarchy() after graph construction
 
-# 7. Weight Optimization: Improve retrieval quality over time
+# 7. Weight Optimization: tunes retrieval weights over time
 #    - Best for: Production systems with test queries
 #    - Cost: One-time optimization phase
 #    - Enable: advanced_features.weight_optimization.*
@@ -188,7 +189,7 @@ parallel_vector_ops = true
 # RECOMMENDED CONFIGURATIONS
 # ============================================================================
 
-# HIGH PRECISION (research, accuracy-critical):
+# HIGH PRECISION (research or accuracy-sensitive workloads):
 # - enable_triple_reflection = true
 # - use_atomic_facts = true
 # - validation_min_confidence = 0.8

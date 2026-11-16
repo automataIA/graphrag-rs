@@ -219,7 +219,7 @@ Available Slash Commands:
 /config show            Display the currently loaded configuration file
 
 /load <file> [--rebuild] Load and process a document into the knowledge graph
-                        --rebuild: Clear existing graph before building
+                        --rebuild: Reopen the workspace and rebuild from its loaded documents
                         Example: /load info/Symposium.txt
                         Example: /load info/Symposium.txt --rebuild
 
@@ -292,7 +292,7 @@ Ctrl+C / Ctrl+Q         Quit application
 
 Tip: Default mode is ASK. Use /mode explain for confidence scores and sources.
 Tip: After an EXPLAIN query, the Sources tab in the Info Panel auto-opens.
-Tip: Use --rebuild flag to force a fresh graph rebuild when loading documents.
+Tip: Use --rebuild to reopen the workspace and rebuild the graph from its loaded documents.
 "#
         .trim()
         .to_string()

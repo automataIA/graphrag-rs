@@ -4,6 +4,9 @@
 //! for GraphRAG-RS, implementing the Multi-Document Processing capabilities outlined
 //! in Phase 3 of the implementation plan.
 
+// Experimental module with many undocumented public items; tracked for later docs.
+#![allow(missing_docs)]
+
 pub mod collection_processor;
 pub mod document_manager;
 pub mod entity_linker;

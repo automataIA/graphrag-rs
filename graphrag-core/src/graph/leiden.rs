@@ -327,9 +327,13 @@ impl HierarchicalCommunities {
     /// # Example
     /// ```no_run
     /// use graphrag_core::query::AdaptiveRoutingConfig;
+    /// # use graphrag_core::graph::HierarchicalCommunities;
+    /// # use petgraph::{Graph, Undirected};
+    /// # fn demo(communities: &HierarchicalCommunities, graph: &Graph<String, f32, Undirected>) {
     ///
     /// let config = AdaptiveRoutingConfig::default();
-    /// let results = communities.adaptive_retrieve("AI overview", &graph, config);
+    /// let results = communities.adaptive_retrieve("AI overview", graph, config);
+    /// # }
     /// ```
     pub fn adaptive_retrieve(
         &self,

@@ -1,6 +1,7 @@
 //! TOML Configuration System for GraphRAG
 //! Complete configuration management with extensive TOML support
 
+use crate::config::validation::Validatable;
 use crate::Result;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -45,13 +46,38 @@ pub struct SetConfig {
     #[serde(default)]
     pub performance: PerformanceConfig,
 
-    /// Ollama-specific configuration
+    /// LLM configuration (OpenAI-compatible: llama-server, Cerebras, Groq)
     #[serde(default)]
-    pub ollama: OllamaSetConfig,
+    pub llm: LlmSetConfig,
+
+    /// Removed `ollama` section. Present only to fail loudly on legacy configs.
+    #[serde(
+        default,
+        skip_serializing,
+        rename = "ollama",
+        deserialize_with = "reject_legacy_ollama"
+    )]
+    pub legacy_ollama: Option<()>,
 
     /// GLiNER-Relex extractor configuration
     #[serde(default)]
     pub gliner: GlinerSetConfig,
+
+    /// Cross-encoder reranker configuration (opt-in)
+    #[serde(default)]
+    pub reranker: RerankerSetConfig,
+
+    /// Per-chapter summaries as retrievable chunks (opt-in)
+    #[serde(default)]
+    pub chapter_summaries: ChapterSummariesSetConfig,
+
+    /// One LLM context line per chunk, prepended at index time (opt-in)
+    #[serde(default)]
+    pub chunk_context: ChunkContextSetConfig,
+
+    /// Retrieval options shared by all approaches (currently only HyDE)
+    #[serde(default)]
+    pub retrieval: RetrievalSetConfig,
 
     /// Experimental features
     #[serde(default)]
@@ -402,19 +428,19 @@ pub struct LLMParamsConfig {
     pub stop_sequences: Option<Vec<String>>,
 }
 
-/// Local model configuration (Ollama)
+/// Local model configuration (llama-server)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocalModelsConfig {
-    /// Ollama API base URL
-    #[serde(default = "default_ollama_url")]
-    pub ollama_base_url: String,
+    /// OpenAI-compatible base URL of the local llama-server
+    #[serde(default = "default_llm_base_url")]
+    pub base_url: String,
 
     /// Local model name for generation
-    #[serde(default = "default_ollama_model")]
+    #[serde(default = "default_chat_model")]
     pub model_name: String,
 
     /// Local embedding model name
-    #[serde(default = "default_ollama_embedding")]
+    #[serde(default = "default_llm_embedding_model")]
     pub embedding_model: String,
 }
 
@@ -438,34 +464,39 @@ pub struct PerformanceConfig {
     pub memory_limit_mb: usize,
 }
 
-/// Ollama-specific configuration for local LLM and embeddings
+/// LLM configuration: any OpenAI-compatible endpoint (llama-server, Cerebras, Groq).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OllamaSetConfig {
-    /// Enable Ollama integration
+#[serde(deny_unknown_fields)]
+pub struct LlmSetConfig {
+    /// Enable LLM-backed stages
     #[serde(default = "default_true")]
     pub enabled: bool,
 
-    /// Ollama host
-    #[serde(default = "default_ollama_host")]
-    pub host: String,
+    /// Chat API base URL including `/v1`
+    #[serde(default = "default_llm_base_url")]
+    pub base_url: String,
 
-    /// Ollama port
-    #[serde(default = "default_ollama_port")]
-    pub port: u16,
+    /// Embedding API base URL including `/v1` (llama-server `--embeddings`)
+    #[serde(default = "default_llm_embedding_base_url")]
+    pub embedding_base_url: String,
+
+    /// Name of the environment variable holding the API key (never the key itself)
+    #[serde(default)]
+    pub api_key_env: Option<String>,
 
     /// Chat model name
     #[serde(default = "default_chat_model")]
     pub chat_model: String,
 
     /// Embedding model name
-    #[serde(default = "default_embedding_model_ollama")]
+    #[serde(default = "default_llm_embedding_model")]
     pub embedding_model: String,
 
     /// Timeout in seconds
     #[serde(default = "default_timeout")]
     pub timeout_seconds: u64,
 
-    /// Maximum retries
+    /// Maximum attempts per request
     #[serde(default = "default_max_retries")]
     pub max_retries: u32,
 
@@ -474,21 +505,191 @@ pub struct OllamaSetConfig {
     pub fallback_to_hash: bool,
 
     /// Maximum tokens
+    #[serde(default)]
     pub max_tokens: Option<u32>,
 
     /// Temperature
+    #[serde(default)]
     pub temperature: Option<f32>,
 
-    /// How long to keep the model loaded in memory (e.g. "1h", "30m", "0")
-    ///
-    /// Critical for KV Cache efficiency when processing multiple chunks from the same document.
-    pub keep_alive: Option<String>,
+    /// Cache identical requests in memory
+    #[serde(default = "default_true")]
+    pub enable_caching: bool,
 
-    /// Context window size in tokens (overrides Ollama model default)
-    ///
-    /// Ollama silently truncates prompts exceeding the context window.
-    /// Set this when processing long documents to avoid silent truncation.
-    pub num_ctx: Option<u32>,
+    /// Maximum estimated tokens of retrieved context in an answer prompt
+    #[serde(default = "default_max_context_tokens")]
+    pub max_context_tokens: u32,
+
+    /// Maximum LLM requests in flight during entity extraction (match llama-server `-np`)
+    #[serde(default = "default_max_concurrent_requests")]
+    pub max_concurrent_requests: usize,
+
+    /// Cache raw extraction responses on disk in the auto_save workspace
+    #[serde(default = "default_true")]
+    pub extraction_cache: bool,
+
+    /// Send `chat_template_kwargs.enable_thinking=false` with each chat request
+    #[serde(default = "default_true")]
+    pub disable_thinking: bool,
+}
+
+/// Runtime retrieval options at the top level of a SetConfig document (`retrieval: { hyde, graph_facts }`).
+/// Lenient on purpose: older templates carry other keys under a root `retrieval` section.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RetrievalSetConfig {
+    /// HyDE query expansion in the ask path (one extra LLM call per question)
+    #[serde(default)]
+    pub hyde: bool,
+    /// Add the relationships of the seed entities to the answer context
+    #[serde(default)]
+    pub graph_facts: bool,
+    /// Map-reduce at query time: one short LLM call per candidate chunk (N extra calls per question)
+    #[serde(default)]
+    pub map_reduce: bool,
+    /// Max chunks mapped when `map_reduce` is on
+    #[serde(default = "default_map_reduce_chunks")]
+    pub map_reduce_chunks: usize,
+}
+
+fn default_map_reduce_chunks() -> usize {
+    60
+}
+
+impl Default for RetrievalSetConfig {
+    fn default() -> Self {
+        Self {
+            hyde: false,
+            graph_facts: false,
+            map_reduce: false,
+            map_reduce_chunks: default_map_reduce_chunks(),
+        }
+    }
+}
+
+/// Cross-encoder reranker configuration (llama.cpp `llama-server --reranking`).
+/// Kept in sync with `RerankerConfig::default()` (drift-guard test below).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RerankerSetConfig {
+    /// Enable reranking in the ask path
+    #[serde(default)]
+    pub enabled: bool,
+    /// Reranker server base URL
+    #[serde(default = "default_reranker_endpoint")]
+    pub api_endpoint: String,
+    /// Reranker model alias
+    #[serde(default = "default_reranker_model")]
+    pub model: String,
+    /// Max distinct candidate chunks sent to the reranker
+    #[serde(default = "default_reranker_candidates")]
+    pub candidates: usize,
+    /// Number of reranked chunks placed first in the context
+    #[serde(default = "default_reranker_top_k")]
+    pub top_k: usize,
+    /// Name of the environment variable holding the API key (never the key itself)
+    #[serde(default)]
+    pub api_key_env: Option<String>,
+    /// Request timeout in seconds
+    #[serde(default = "default_reranker_timeout")]
+    pub timeout_seconds: u64,
+}
+
+fn default_reranker_endpoint() -> String {
+    "http://localhost:8082".to_string()
+}
+fn default_reranker_model() -> String {
+    "bge-reranker-v2-m3".to_string()
+}
+fn default_reranker_candidates() -> usize {
+    30
+}
+fn default_reranker_top_k() -> usize {
+    8
+}
+fn default_reranker_timeout() -> u64 {
+    30
+}
+
+impl Default for RerankerSetConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            api_endpoint: default_reranker_endpoint(),
+            model: default_reranker_model(),
+            candidates: default_reranker_candidates(),
+            top_k: default_reranker_top_k(),
+            api_key_env: None,
+            timeout_seconds: default_reranker_timeout(),
+        }
+    }
+}
+
+/// Per-chapter summaries written at index time.
+/// Kept in sync with `ChapterSummariesConfig::default()` (drift-guard test below).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChapterSummariesSetConfig {
+    /// Write one LLM summary per chapter as an extra chunk (needs `llm.enabled`)
+    #[serde(default)]
+    pub enabled: bool,
+    /// Output token budget of one summary
+    #[serde(default = "default_chapter_summary_max_tokens")]
+    pub max_tokens: u32,
+    /// Max summary chunks added to the answer context, on top of the original chunks
+    #[serde(default = "default_chapter_summary_max_in_context")]
+    pub max_in_context: usize,
+}
+
+fn default_chapter_summary_max_tokens() -> u32 {
+    400
+}
+
+fn default_chapter_summary_max_in_context() -> usize {
+    2
+}
+
+impl Default for ChapterSummariesSetConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            max_tokens: default_chapter_summary_max_tokens(),
+            max_in_context: default_chapter_summary_max_in_context(),
+        }
+    }
+}
+
+/// One context sentence per chunk written at index time.
+/// Kept in sync with `ChunkContextConfig::default()` (drift-guard test below).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChunkContextSetConfig {
+    /// Prepend one LLM-written context sentence to every chunk (needs `llm.enabled`)
+    #[serde(default)]
+    pub enabled: bool,
+    /// Preceding chunks of the same document shown to the model
+    #[serde(default = "default_chunk_context_window")]
+    pub window: usize,
+    /// Output token budget of one context line
+    #[serde(default = "default_chunk_context_max_tokens")]
+    pub max_tokens: u32,
+}
+
+fn default_chunk_context_window() -> usize {
+    4
+}
+
+fn default_chunk_context_max_tokens() -> u32 {
+    120
+}
+
+impl Default for ChunkContextSetConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            window: default_chunk_context_window(),
+            max_tokens: default_chunk_context_max_tokens(),
+        }
+    }
 }
 
 /// GLiNER-Relex extractor configuration
@@ -524,8 +725,20 @@ pub struct GlinerSetConfig {
     /// Max concurrent chunk inferences (None → 4)
     #[serde(default)]
     pub max_concurrent_chunks: Option<usize>,
+    /// GLiNER finds entities, the LLM extracts only the relationships among them (async only)
+    #[serde(default)]
+    pub llm_relations: bool,
+    /// Extraction backend: "gline" (default) or "gliner2" (feature `gliner2`)
+    #[serde(default = "default_gliner_backend")]
+    pub backend: String,
+    /// Jev classification of entity types and relations (mode "g5")
+    #[serde(default)]
+    pub jev: crate::config::JevConfig,
 }
 
+fn default_gliner_backend() -> String {
+    "gline".to_string()
+}
 fn default_gliner_mode() -> String {
     "span".to_string()
 }
@@ -562,6 +775,9 @@ impl Default for GlinerSetConfig {
             relation_threshold: default_relation_threshold(),
             use_gpu: false,
             max_concurrent_chunks: None,
+            llm_relations: false,
+            backend: default_gliner_backend(),
+            jev: crate::config::JevConfig::default(),
         }
     }
 }
@@ -732,26 +948,30 @@ impl Default for ModeConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SemanticPipelineConfig {
     /// Enable semantic pipeline
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub enabled: bool,
 
     /// Embeddings configuration for semantic approach
+    #[serde(default)]
     pub embeddings: SemanticEmbeddingsConfig,
 
     /// Entity extraction configuration for semantic approach
+    #[serde(default)]
     pub entity_extraction: SemanticEntityConfig,
 
     /// Retrieval configuration for semantic approach
+    #[serde(default)]
     pub retrieval: SemanticRetrievalConfig,
 
     /// Graph construction configuration for semantic approach
+    #[serde(default)]
     pub graph_construction: SemanticGraphConfig,
 }
 
 /// Semantic embeddings configuration (neural models)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SemanticEmbeddingsConfig {
-    /// Backend: "huggingface", "openai", "voyage", "cohere", "jina", "mistral", "together", "ollama"
+    /// Backend: "huggingface", "openai", "voyage", "cohere", "jina", "mistral", "together", "llama_cpp"
     #[serde(default = "default_semantic_embedding_backend")]
     pub backend: String,
 
@@ -853,19 +1073,23 @@ pub struct SemanticGraphConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AlgorithmicPipelineConfig {
     /// Enable algorithmic pipeline
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub enabled: bool,
 
     /// Embeddings configuration for algorithmic approach
+    #[serde(default)]
     pub embeddings: AlgorithmicEmbeddingsConfig,
 
     /// Entity extraction configuration for algorithmic approach
+    #[serde(default)]
     pub entity_extraction: AlgorithmicEntityConfig,
 
     /// Retrieval configuration for algorithmic approach
+    #[serde(default)]
     pub retrieval: AlgorithmicRetrievalConfig,
 
     /// Graph construction configuration for algorithmic approach
+    #[serde(default)]
     pub graph_construction: AlgorithmicGraphConfig,
 }
 
@@ -921,7 +1145,44 @@ pub struct AlgorithmicEntityConfig {
     pub confidence_threshold: f32,
 
     /// Regex patterns for entity matching
+    #[serde(default, deserialize_with = "deserialize_patterns")]
     pub patterns: Option<Vec<String>>,
+}
+
+/// Accept both the current list form and the map form used by older
+/// algorithmic templates (`{ person: "...", concept: "..." }`). The public
+/// representation stays a list because the extractor consumes regex strings.
+fn deserialize_patterns<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Option<Vec<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    match value {
+        serde_json::Value::Null => Ok(None),
+        serde_json::Value::Array(values) => values
+            .into_iter()
+            .map(|value| {
+                value
+                    .as_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| serde::de::Error::custom("patterns must contain strings"))
+            })
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map(Some),
+        serde_json::Value::Object(values) => values
+            .into_values()
+            .map(|value| {
+                value
+                    .as_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| serde::de::Error::custom("pattern values must be strings"))
+            })
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map(Some),
+        _ => Err(serde::de::Error::custom("patterns must be a list or map")),
+    }
 }
 
 /// Algorithmic retrieval configuration (BM25 keyword search)
@@ -977,22 +1238,27 @@ pub struct AlgorithmicGraphConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HybridPipelineConfig {
     /// Enable hybrid pipeline
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub enabled: bool,
 
     /// Weight configuration for combining approaches
+    #[serde(default)]
     pub weights: HybridWeightsConfig,
 
     /// Embeddings configuration for hybrid
+    #[serde(default)]
     pub embeddings: HybridEmbeddingsConfig,
 
     /// Entity extraction configuration for hybrid
+    #[serde(default)]
     pub entity_extraction: HybridEntityConfig,
 
     /// Retrieval configuration for hybrid
+    #[serde(default)]
     pub retrieval: HybridRetrievalConfig,
 
     /// Graph construction configuration for hybrid
+    #[serde(default)]
     pub graph_construction: HybridGraphConfig,
 
     /// Fallback strategy when primary fails
@@ -1115,6 +1381,33 @@ pub struct EntityExtractionTopLevelConfig {
     #[serde(default)]
     pub use_gleaning: bool,
 
+    /// Ask the extraction LLM for `status` (narrated | said) and `said_by` on each
+    /// relationship; `said` ones get a `[detto da X]` marker in the description.
+    /// Needs a re-index. Default false.
+    #[serde(default)]
+    pub epistemic_status: bool,
+
+    /// Second, relation-only LLM call for the chunks the single-pass extraction left
+    /// under-extracted (at least 3 entities, at most 1 relationship). Applies only to LLM
+    /// single-pass extraction (not gleaning, GLiNER, cascade or pattern). One extra call only
+    /// for the selected chunks; needs a re-index to take effect. Default false.
+    #[serde(default)]
+    pub selective_gleaning: bool,
+
+    /// Selective gleaning: a chunk qualifies when the first pass found at least this many
+    /// entities. No effect when `selective_gleaning` is false. Default 3.
+    #[serde(default = "default_selective_min_entities")]
+    pub selective_min_entities: usize,
+
+    /// Selective gleaning: ...and at most this many relationships. No effect when
+    /// `selective_gleaning` is false. Default 1.
+    #[serde(default = "default_selective_max_relationships")]
+    pub selective_max_relationships: usize,
+
+    /// Output token cap for LLM extraction calls. Absent = use `llm.max_tokens`.
+    #[serde(default)]
+    pub extraction_max_tokens: Option<usize>,
+
     /// Maximum gleaning rounds
     #[serde(default = "default_gleaning_rounds")]
     pub max_gleaning_rounds: usize,
@@ -1138,6 +1431,10 @@ pub struct EntityExtractionTopLevelConfig {
     /// Linking confidence threshold
     #[serde(default = "default_confidence_threshold")]
     pub linking_confidence_threshold: f32,
+
+    /// Path to a TOML/JSON ontology file; `None` = built-in generic ontology
+    #[serde(default)]
+    pub ontology_path: Option<String>,
 }
 
 impl Default for EntityExtractionTopLevelConfig {
@@ -1146,12 +1443,18 @@ impl Default for EntityExtractionTopLevelConfig {
             enabled: true,
             min_confidence: default_confidence_threshold(),
             use_gleaning: false,
+            epistemic_status: false,
+            selective_gleaning: false,
+            selective_min_entities: default_selective_min_entities(),
+            selective_max_relationships: default_selective_max_relationships(),
+            extraction_max_tokens: None,
             max_gleaning_rounds: default_gleaning_rounds(),
             gleaning_improvement_threshold: default_gleaning_improvement(),
             semantic_merging: false,
             merge_similarity_threshold: default_merge_threshold(),
             automatic_linking: false,
             linking_confidence_threshold: default_confidence_threshold(),
+            ontology_path: None,
         }
     }
 }
@@ -1163,6 +1466,16 @@ fn default_log_level() -> String {
 fn default_output_dir() -> String {
     "./output".to_string()
 }
+fn reject_legacy_ollama<'de, D>(_deserializer: D) -> std::result::Result<Option<()>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Err(serde::de::Error::custom(
+        "the `ollama` section was removed: rename it to `llm` and use `base_url` \
+         (e.g. \"http://127.0.0.1:8080/v1\") instead of `host`/`port`",
+    ))
+}
+
 fn default_true() -> bool {
     true
 }
@@ -1243,15 +1556,6 @@ fn default_max_context() -> usize {
 fn default_top_p() -> f32 {
     0.9
 }
-fn default_ollama_url() -> String {
-    "http://localhost:11434".to_string()
-}
-fn default_ollama_model() -> String {
-    "llama2:7b".to_string()
-}
-fn default_ollama_embedding() -> String {
-    "nomic-embed-text".to_string()
-}
 fn default_batch_size() -> usize {
     100
 }
@@ -1261,26 +1565,38 @@ fn default_worker_threads() -> usize {
 fn default_memory_limit() -> usize {
     1024
 }
-fn default_ollama_host() -> String {
-    "http://localhost".to_string()
+fn default_llm_base_url() -> String {
+    crate::llm::DEFAULT_LLM_BASE_URL.to_string()
 }
-fn default_ollama_port() -> u16 {
-    11434
+fn default_llm_embedding_base_url() -> String {
+    crate::llm::DEFAULT_EMBEDDING_BASE_URL.to_string()
 }
 fn default_chat_model() -> String {
-    "llama3.1:8b".to_string()
+    "qwen3.5-9b".to_string()
 }
-fn default_embedding_model_ollama() -> String {
-    "nomic-embed-text".to_string()
+fn default_llm_embedding_model() -> String {
+    "multilingual-e5-small".to_string()
 }
 fn default_timeout() -> u64 {
-    60
+    120
 }
 fn default_max_retries() -> u32 {
     3
 }
+fn default_max_context_tokens() -> u32 {
+    crate::llm::DEFAULT_MAX_CONTEXT_TOKENS
+}
+fn default_max_concurrent_requests() -> usize {
+    crate::llm::DEFAULT_MAX_CONCURRENT_REQUESTS
+}
 fn default_gleaning_rounds() -> usize {
     3
+}
+fn default_selective_min_entities() -> usize {
+    3
+}
+fn default_selective_max_relationships() -> usize {
+    1
 }
 fn default_gleaning_improvement() -> f32 {
     0.1
@@ -1562,21 +1878,25 @@ impl Default for PerformanceConfig {
     }
 }
 
-impl Default for OllamaSetConfig {
+impl Default for LlmSetConfig {
     fn default() -> Self {
         Self {
             enabled: default_true(),
-            host: default_ollama_host(),
-            port: default_ollama_port(),
+            base_url: default_llm_base_url(),
+            embedding_base_url: default_llm_embedding_base_url(),
+            api_key_env: None,
             chat_model: default_chat_model(),
-            embedding_model: default_embedding_model_ollama(),
+            embedding_model: default_llm_embedding_model(),
             timeout_seconds: default_timeout(),
             max_retries: default_max_retries(),
             fallback_to_hash: false,
             max_tokens: Some(800),
             temperature: Some(0.3),
-            keep_alive: None,
-            num_ctx: None,
+            enable_caching: default_true(),
+            max_context_tokens: default_max_context_tokens(),
+            max_concurrent_requests: default_max_concurrent_requests(),
+            extraction_cache: default_true(),
+            disable_thinking: default_true(),
         }
     }
 }
@@ -1776,21 +2096,33 @@ impl SetConfig {
 
         let config: SetConfig = match extension {
             #[cfg(feature = "json5-support")]
-            "json5" | "json" => {
+            "json5" => {
                 json5::from_str(&content).map_err(|e| crate::core::GraphRAGError::Config {
                     message: format!("JSON5 parse error: {e}"),
                 })?
             },
+            "json" => {
+                serde_json::from_str(&content).map_err(|e| crate::core::GraphRAGError::Config {
+                    message: format!("JSON parse error: {e}"),
+                })?
+            },
             #[cfg(not(feature = "json5-support"))]
-            "json5" | "json" => {
+            "json5" => {
                 return Err(crate::core::GraphRAGError::Config {
                     message: "JSON5 support not enabled. Rebuild with --features json5-support"
                         .to_string(),
                 });
             },
-            _ => toml::from_str(&content).map_err(|e| crate::core::GraphRAGError::Config {
-                message: format!("TOML parse error: {e}"),
-            })?,
+            "toml" | "tml" => {
+                toml::from_str(&content).map_err(|e| crate::core::GraphRAGError::Config {
+                    message: format!("TOML parse error: {e}"),
+                })?
+            },
+            _ => {
+                return Err(crate::core::GraphRAGError::Config {
+                    message: format!("Unsupported configuration format: .{extension}"),
+                })
+            },
         };
 
         Ok(config)
@@ -1815,12 +2147,25 @@ impl SetConfig {
         Ok(())
     }
 
-    /// Convert to the existing Config format for compatibility
-    pub fn to_graphrag_config(&self) -> crate::Config {
+    /// Convert to the canonical runtime Config after semantic validation.
+    pub fn to_graphrag_config(&self) -> Result<crate::Config> {
+        let validation = self.validate();
+        if !validation.is_valid {
+            return Err(crate::core::GraphRAGError::Config {
+                message: validation.errors.join("; "),
+            });
+        }
+        Ok(self.to_graphrag_config_unchecked())
+    }
+
+    /// Convert to the canonical runtime Config for validation internals.
+    pub(crate) fn to_graphrag_config_unchecked(&self) -> crate::Config {
         let mut config = crate::Config {
             approach: self.mode.approach.clone(),
             ..Default::default()
         };
+
+        config.output_dir = self.general.output_dir.clone();
 
         // Map text processing
         config.text.chunk_size = self.pipeline.text_extraction.chunk_size;
@@ -1833,6 +2178,13 @@ impl SetConfig {
         if let Some(ref types) = self.pipeline.entity_extraction.entity_types {
             config.entities.entity_types = types.clone();
         }
+        config.entities.ontology_path = self.entity_extraction.ontology_path.clone();
+        config.entities.epistemic_status = self.entity_extraction.epistemic_status;
+        config.entities.selective_gleaning = self.entity_extraction.selective_gleaning;
+        config.entities.selective_min_entities = self.entity_extraction.selective_min_entities;
+        config.entities.selective_max_relationships =
+            self.entity_extraction.selective_max_relationships;
+        config.entities.extraction_max_tokens = self.entity_extraction.extraction_max_tokens;
 
         // Configure gleaning based on approach:
         // - semantic: use LLM-based gleaning
@@ -1883,33 +2235,57 @@ impl SetConfig {
         config.graph.extract_relationships = true; // Enable by default for TOML configs
         config.graph.relationship_confidence_threshold = 0.5; // Default threshold
 
-        // Map retrieval
-        config.retrieval.top_k = 10; // Default
+        // Map retrieval from the selected pipeline.  The runtime has one
+        // canonical top_k value, while SetConfig keeps per-approach adapters.
+        config.retrieval.top_k = match self.mode.approach.as_str() {
+            "semantic" => self
+                .semantic
+                .as_ref()
+                .map(|pipeline| pipeline.retrieval.top_k)
+                .unwrap_or(config.retrieval.top_k),
+            "algorithmic" => self
+                .algorithmic
+                .as_ref()
+                .map(|pipeline| pipeline.retrieval.top_k)
+                .unwrap_or(config.retrieval.top_k),
+            "hybrid" => config.retrieval.top_k,
+            _ => config.retrieval.top_k,
+        };
 
-        // Map embeddings
-        config.embeddings.dimension = 768; // Default for nomic-embed-text
-        config.embeddings.backend = "ollama".to_string();
-        config.embeddings.fallback_to_hash = self.ollama.fallback_to_hash;
+        // Map embeddings: the second llama-server serves multilingual-e5-small.
+        if self.llm.enabled {
+            config.embeddings.dimension = 384;
+            config.embeddings.backend = "llama_cpp".to_string();
+            config.embeddings.model = Some(self.llm.embedding_model.clone());
+            config.embeddings.api_endpoint = Some(format!(
+                "{}/embeddings",
+                self.llm.embedding_base_url.trim_end_matches('/')
+            ));
+        }
+        config.embeddings.fallback_to_hash = self.llm.fallback_to_hash;
 
         // Map parallel processing
         config.parallel.enabled = self.pipeline.parallel_execution;
         config.parallel.num_threads = self.performance.worker_threads;
 
-        // Map Ollama configuration
-        config.ollama = crate::ollama::OllamaConfig {
-            enabled: self.ollama.enabled,
-            host: self.ollama.host.clone(),
-            port: self.ollama.port,
-            chat_model: self.ollama.chat_model.clone(),
-            embedding_model: self.ollama.embedding_model.clone(),
-            timeout_seconds: self.ollama.timeout_seconds,
-            max_retries: self.ollama.max_retries,
-            fallback_to_hash: self.ollama.fallback_to_hash,
-            max_tokens: self.ollama.max_tokens,
-            temperature: self.ollama.temperature,
-            enable_caching: true,
-            keep_alive: self.ollama.keep_alive.clone(),
-            num_ctx: self.ollama.num_ctx,
+        // Map LLM configuration
+        config.llm = crate::llm::LlmConfig {
+            enabled: self.llm.enabled,
+            base_url: self.llm.base_url.clone(),
+            embedding_base_url: self.llm.embedding_base_url.clone(),
+            api_key_env: self.llm.api_key_env.clone(),
+            chat_model: self.llm.chat_model.clone(),
+            embedding_model: self.llm.embedding_model.clone(),
+            timeout_seconds: self.llm.timeout_seconds,
+            max_retries: self.llm.max_retries,
+            fallback_to_hash: self.llm.fallback_to_hash,
+            max_tokens: self.llm.max_tokens,
+            temperature: self.llm.temperature,
+            enable_caching: self.llm.enable_caching,
+            max_context_tokens: self.llm.max_context_tokens,
+            max_concurrent_requests: self.llm.max_concurrent_requests,
+            extraction_cache: self.llm.extraction_cache,
+            disable_thinking: self.llm.disable_thinking,
         };
 
         // Map GLiNER configuration
@@ -1924,6 +2300,37 @@ impl SetConfig {
             relation_threshold: self.gliner.relation_threshold,
             use_gpu: self.gliner.use_gpu,
             max_concurrent_chunks: self.gliner.max_concurrent_chunks,
+            llm_relations: self.gliner.llm_relations,
+            backend: self.gliner.backend.clone(),
+            jev: self.gliner.jev.clone(),
+        };
+
+        config.retrieval.hyde = self.retrieval.hyde;
+        config.retrieval.graph_facts = self.retrieval.graph_facts;
+        config.retrieval.map_reduce = self.retrieval.map_reduce;
+        config.retrieval.map_reduce_chunks = self.retrieval.map_reduce_chunks;
+
+        // Map reranker configuration
+        config.reranker = crate::config::RerankerConfig {
+            enabled: self.reranker.enabled,
+            api_endpoint: self.reranker.api_endpoint.clone(),
+            model: self.reranker.model.clone(),
+            candidates: self.reranker.candidates,
+            top_k: self.reranker.top_k,
+            api_key_env: self.reranker.api_key_env.clone(),
+            timeout_seconds: self.reranker.timeout_seconds,
+        };
+
+        config.chapter_summaries = crate::config::ChapterSummariesConfig {
+            enabled: self.chapter_summaries.enabled,
+            max_tokens: self.chapter_summaries.max_tokens,
+            max_in_context: self.chapter_summaries.max_in_context,
+        };
+
+        config.chunk_context = crate::config::ChunkContextConfig {
+            enabled: self.chunk_context.enabled,
+            window: self.chunk_context.window,
+            max_tokens: self.chunk_context.max_tokens,
         };
 
         // Map auto-save configuration
@@ -1943,17 +2350,30 @@ impl SetConfig {
 mod drift_guard_tests {
     //! Guards against silent drift between the serde-facing `*SetConfig` leaf
     //! structs and their canonical runtime counterparts in `config/mod.rs` /
-    //! `ollama/mod.rs`. These structs are mechanical mirrors kept in sync by hand
-    //! (the "5-point-sync" documented in CLAUDE.md); these tests fail loudly when
+    //! `llm/mod.rs`. These structs are mechanical mirrors kept in sync by hand
+    //! (the "5-point-sync" convention); these tests fail loudly when
     //! a field's default diverges so the drift is caught at build time.
     //!
-    //! NOTE: `OllamaConfig` is *intentionally* excluded — its runtime default is
+    //! NOTE: `LlmConfig` is *intentionally* excluded — its runtime default is
     //! offline-first (`enabled = false`, `fallback_to_hash = true`) while
-    //! `OllamaSetConfig` is the user-facing "I want Ollama" schema
+    //! `LlmSetConfig` is the user-facing "I want an LLM" schema
     //! (`enabled = true`). That divergence is by design, not drift.
 
     use super::*;
     use crate::config::{AutoSaveConfig, GlinerConfig};
+    #[test]
+    fn reranker_setconfig_default_matches_runtime() {
+        let set = RerankerSetConfig::default();
+        let runtime = crate::config::RerankerConfig::default();
+        assert_eq!(set.enabled, runtime.enabled);
+        assert_eq!(set.api_endpoint, runtime.api_endpoint);
+        assert_eq!(set.model, runtime.model);
+        assert_eq!(set.candidates, runtime.candidates);
+        assert_eq!(set.top_k, runtime.top_k);
+        assert_eq!(set.api_key_env, runtime.api_key_env);
+        assert_eq!(set.timeout_seconds, runtime.timeout_seconds);
+        assert!(!runtime.enabled, "reranker must stay opt-in");
+    }
 
     #[test]
     fn gliner_setconfig_default_matches_runtime() {
@@ -1977,6 +2397,11 @@ mod drift_guard_tests {
             "gliner.relation_threshold drifted"
         );
         assert_eq!(set.use_gpu, runtime.use_gpu, "gliner.use_gpu drifted");
+        assert_eq!(
+            set.llm_relations, runtime.llm_relations,
+            "gliner.llm_relations drifted"
+        );
+        assert_eq!(set.backend, runtime.backend, "gliner.backend drifted");
     }
 
     #[test]
@@ -1992,5 +2417,639 @@ mod drift_guard_tests {
             set.max_versions, runtime.max_versions,
             "auto_save.max_versions drifted"
         );
+    }
+}
+
+#[cfg(test)]
+mod llm_concurrency_config_tests {
+    use super::*;
+
+    #[test]
+    fn llm_concurrency_and_cache_defaults_and_override() {
+        let default = LlmSetConfig::default();
+        assert_eq!(default.max_concurrent_requests, 4);
+        assert!(default.extraction_cache);
+        let runtime = crate::llm::LlmConfig::default();
+        assert_eq!(runtime.max_concurrent_requests, 4);
+        assert!(runtime.extraction_cache);
+
+        let set: SetConfig =
+            toml::from_str("[llm]\nmax_concurrent_requests = 2\nextraction_cache = false\n")
+                .unwrap();
+        let config = set.to_graphrag_config().unwrap();
+        assert_eq!(config.llm.max_concurrent_requests, 2);
+        assert!(!config.llm.extraction_cache);
+    }
+}
+
+#[cfg(test)]
+mod llm_disable_thinking_config_tests {
+    use super::*;
+
+    #[test]
+    fn disable_thinking_defaults_true_and_overrides() {
+        assert!(LlmSetConfig::default().disable_thinking);
+        assert!(crate::llm::LlmConfig::default().disable_thinking);
+        let set: SetConfig = toml::from_str("[llm]\ndisable_thinking = false\n").unwrap();
+        assert!(!set.to_graphrag_config().unwrap().llm.disable_thinking);
+        let set: SetConfig = toml::from_str("[llm]\nenabled = true\n").unwrap();
+        assert!(set.to_graphrag_config().unwrap().llm.disable_thinking);
+    }
+}
+
+#[cfg(test)]
+mod reranker_config_tests {
+    use super::*;
+
+    #[test]
+    fn reranker_is_disabled_by_default_and_maps_overrides() {
+        let config = SetConfig::default().to_graphrag_config().unwrap();
+        assert!(!config.reranker.enabled);
+        assert_eq!(config.reranker, crate::config::RerankerConfig::default());
+
+        let set: SetConfig = toml::from_str(
+            "[reranker]\nenabled = true\ncandidates = 12\ntop_k = 3\napi_key_env = \"RERANK_KEY\"\n",
+        )
+        .unwrap();
+        let r = set.to_graphrag_config().unwrap().reranker;
+        assert!(r.enabled);
+        assert_eq!((r.candidates, r.top_k), (12, 3));
+        assert_eq!(r.api_key_env.as_deref(), Some("RERANK_KEY"));
+        assert_eq!(r.api_endpoint, "http://localhost:8082");
+
+        assert!(toml::from_str::<SetConfig>("[reranker]\nbogus = 1\n").is_err());
+    }
+}
+
+#[cfg(test)]
+mod gliner_llm_relations_tests {
+    use super::*;
+
+    #[test]
+    fn llm_relations_defaults_false_everywhere() {
+        assert!(!GlinerSetConfig::default().llm_relations);
+        assert!(!crate::config::GlinerConfig::default().llm_relations);
+        let set: SetConfig = toml::from_str("[gliner]\nenabled = true\n").unwrap();
+        assert!(!set.to_graphrag_config().unwrap().gliner.llm_relations);
+    }
+
+    #[test]
+    fn llm_relations_maps_from_setconfig_toml() {
+        let set: SetConfig =
+            toml::from_str("[gliner]\nenabled = true\nllm_relations = true\n").unwrap();
+        assert!(set.to_graphrag_config().unwrap().gliner.llm_relations);
+    }
+
+    #[cfg(feature = "json5-support")]
+    #[test]
+    fn llm_relations_parses_from_json5_set_and_runtime_configs() {
+        // SetConfig document (has `mode`)
+        let set: SetConfig = json5::from_str(
+            r#"{ mode: { approach: "semantic" }, gliner: { llm_relations: true } }"#,
+        )
+        .unwrap();
+        assert!(set.to_graphrag_config().unwrap().gliner.llm_relations);
+        // runtime Config document
+        let config =
+            crate::config::Config::from_json5_str(r#"{ gliner: { llm_relations: true } }"#)
+                .unwrap();
+        assert!(config.gliner.llm_relations);
+        let config =
+            crate::config::Config::from_json5_str(r#"{ gliner: { enabled: true } }"#).unwrap();
+        assert!(!config.gliner.llm_relations);
+    }
+}
+
+#[cfg(test)]
+mod hyde_config_tests {
+    use super::*;
+
+    #[test]
+    fn hyde_is_off_by_default_everywhere() {
+        assert!(!crate::config::Config::default().retrieval.hyde);
+        assert!(
+            !SetConfig::default()
+                .to_graphrag_config()
+                .unwrap()
+                .retrieval
+                .hyde
+        );
+    }
+
+    #[test]
+    fn hyde_maps_from_toml_set_config() {
+        let set: SetConfig = toml::from_str("[retrieval]\nhyde = true\n").unwrap();
+        assert!(set.to_graphrag_config().unwrap().retrieval.hyde);
+    }
+
+    #[cfg(feature = "json5-support")]
+    #[test]
+    fn hyde_loads_from_json5_via_cli_loader() {
+        use crate::config::loader::{load_config_from_str, ConfigFormat};
+        // SetConfig document (has `mode`): the shape of the bench configs
+        let set = load_config_from_str(
+            r#"{ mode: { approach: "semantic" }, retrieval: { hyde: true } }"#,
+            ConfigFormat::Json5,
+        )
+        .unwrap();
+        assert!(set.retrieval.hyde);
+        // runtime Config document
+        let runtime =
+            load_config_from_str(r#"{ retrieval: { hyde: true } }"#, ConfigFormat::Json5).unwrap();
+        assert!(runtime.retrieval.hyde);
+        // absent key keeps the default
+        let off =
+            load_config_from_str(r#"{ mode: { approach: "semantic" } }"#, ConfigFormat::Json5)
+                .unwrap();
+        assert!(!off.retrieval.hyde);
+    }
+}
+
+#[cfg(test)]
+mod graph_facts_config_tests {
+    use super::*;
+
+    #[test]
+    fn graph_facts_is_off_by_default_everywhere() {
+        assert!(!crate::config::Config::default().retrieval.graph_facts);
+        assert!(
+            !SetConfig::default()
+                .to_graphrag_config()
+                .unwrap()
+                .retrieval
+                .graph_facts
+        );
+    }
+
+    #[test]
+    fn graph_facts_maps_from_toml_set_config() {
+        let set: SetConfig = toml::from_str("[retrieval]\ngraph_facts = true\n").unwrap();
+        assert!(set.to_graphrag_config().unwrap().retrieval.graph_facts);
+    }
+
+    #[cfg(feature = "json5-support")]
+    #[test]
+    fn graph_facts_loads_from_json5_via_cli_loader() {
+        use crate::config::loader::{load_config_from_str, ConfigFormat};
+        let set = load_config_from_str(
+            r#"{ mode: { approach: "semantic" }, retrieval: { graph_facts: true } }"#,
+            ConfigFormat::Json5,
+        )
+        .unwrap();
+        assert!(set.retrieval.graph_facts);
+        let runtime = load_config_from_str(
+            r#"{ retrieval: { graph_facts: true } }"#,
+            ConfigFormat::Json5,
+        )
+        .unwrap();
+        assert!(runtime.retrieval.graph_facts);
+        let off =
+            load_config_from_str(r#"{ mode: { approach: "semantic" } }"#, ConfigFormat::Json5)
+                .unwrap();
+        assert!(!off.retrieval.graph_facts);
+    }
+}
+#[cfg(test)]
+mod map_reduce_config_tests {
+    use super::*;
+
+    #[test]
+    fn map_reduce_is_off_by_default_everywhere() {
+        let runtime = crate::config::Config::default().retrieval;
+        assert!(!runtime.map_reduce);
+        assert_eq!(runtime.map_reduce_chunks, 60);
+        let set = RetrievalSetConfig::default();
+        assert!(!set.map_reduce);
+        assert_eq!(set.map_reduce_chunks, 60);
+        let mapped = SetConfig::default().to_graphrag_config().unwrap().retrieval;
+        assert!(!mapped.map_reduce);
+        assert_eq!(mapped.map_reduce_chunks, 60);
+    }
+
+    #[test]
+    fn map_reduce_maps_from_toml_set_config() {
+        let set: SetConfig =
+            toml::from_str("[retrieval]\nmap_reduce = true\nmap_reduce_chunks = 12\n").unwrap();
+        let r = set.to_graphrag_config().unwrap().retrieval;
+        assert!(r.map_reduce);
+        assert_eq!(r.map_reduce_chunks, 12);
+        let only_flag: SetConfig = toml::from_str("[retrieval]\nmap_reduce = true\n").unwrap();
+        assert_eq!(only_flag.retrieval.map_reduce_chunks, 60);
+    }
+
+    #[cfg(feature = "json5-support")]
+    #[test]
+    fn map_reduce_loads_from_json5_via_cli_loader() {
+        use crate::config::loader::{load_config_from_str, ConfigFormat};
+        let set = load_config_from_str(
+            r#"{ mode: { approach: "semantic" }, retrieval: { map_reduce: true, map_reduce_chunks: 20 } }"#,
+            ConfigFormat::Json5,
+        )
+        .unwrap();
+        assert!(set.retrieval.map_reduce);
+        assert_eq!(set.retrieval.map_reduce_chunks, 20);
+        let runtime = load_config_from_str(
+            r#"{ retrieval: { map_reduce: true, map_reduce_chunks: 7 } }"#,
+            ConfigFormat::Json5,
+        )
+        .unwrap();
+        assert!(runtime.retrieval.map_reduce);
+        assert_eq!(runtime.retrieval.map_reduce_chunks, 7);
+        let off =
+            load_config_from_str(r#"{ mode: { approach: "semantic" } }"#, ConfigFormat::Json5)
+                .unwrap();
+        assert!(!off.retrieval.map_reduce);
+        assert_eq!(off.retrieval.map_reduce_chunks, 60);
+    }
+}
+
+#[cfg(test)]
+mod chapter_summaries_config_tests {
+    use super::*;
+
+    #[test]
+    fn chapter_summaries_are_off_by_default_everywhere() {
+        let runtime = crate::config::Config::default().chapter_summaries;
+        assert!(!runtime.enabled);
+        assert_eq!(runtime.max_tokens, 400);
+        assert_eq!(runtime.max_in_context, 2);
+        let set = ChapterSummariesSetConfig::default();
+        assert!(!set.enabled);
+        assert_eq!(set.max_tokens, 400);
+        assert_eq!(set.max_in_context, 2);
+        let mapped = SetConfig::default()
+            .to_graphrag_config()
+            .unwrap()
+            .chapter_summaries;
+        assert_eq!(mapped, runtime);
+    }
+
+    #[test]
+    fn chapter_summaries_map_from_toml_set_config() {
+        let set: SetConfig = toml::from_str(
+            "[chapter_summaries]\nenabled = true\nmax_tokens = 250\nmax_in_context = 5\n",
+        )
+        .unwrap();
+        let c = set.to_graphrag_config().unwrap().chapter_summaries;
+        assert!(c.enabled);
+        assert_eq!(c.max_tokens, 250);
+        assert_eq!(c.max_in_context, 5);
+        let only_flag: SetConfig = toml::from_str("[chapter_summaries]\nenabled = true\n").unwrap();
+        assert_eq!(only_flag.chapter_summaries.max_tokens, 400);
+        assert_eq!(only_flag.chapter_summaries.max_in_context, 2);
+        assert_eq!(
+            only_flag
+                .to_graphrag_config()
+                .unwrap()
+                .chapter_summaries
+                .max_in_context,
+            2
+        );
+        assert!(toml::from_str::<SetConfig>("[chapter_summaries]\nbogus = 1\n").is_err());
+    }
+
+    #[cfg(feature = "json5-support")]
+    #[test]
+    fn chapter_summaries_load_from_json5_via_cli_loader() {
+        use crate::config::loader::{load_config_from_str, ConfigFormat};
+        let set = load_config_from_str(
+            r#"{ mode: { approach: "semantic" }, chapter_summaries: { enabled: true, max_tokens: 300, max_in_context: 3 } }"#,
+            ConfigFormat::Json5,
+        )
+        .unwrap();
+        assert!(set.chapter_summaries.enabled);
+        assert_eq!(set.chapter_summaries.max_tokens, 300);
+        assert_eq!(set.chapter_summaries.max_in_context, 3);
+        let runtime = load_config_from_str(
+            r#"{ chapter_summaries: { enabled: true } }"#,
+            ConfigFormat::Json5,
+        )
+        .unwrap();
+        assert!(runtime.chapter_summaries.enabled);
+        assert_eq!(runtime.chapter_summaries.max_tokens, 400);
+        assert_eq!(runtime.chapter_summaries.max_in_context, 2);
+        let off =
+            load_config_from_str(r#"{ mode: { approach: "semantic" } }"#, ConfigFormat::Json5)
+                .unwrap();
+        assert!(!off.chapter_summaries.enabled);
+    }
+}
+
+#[cfg(test)]
+mod chunk_context_config_tests {
+    use super::*;
+
+    #[test]
+    fn chunk_context_is_off_by_default_everywhere() {
+        let runtime = crate::config::Config::default().chunk_context;
+        assert!(!runtime.enabled);
+        assert_eq!(runtime.window, 4);
+        assert_eq!(runtime.max_tokens, 120);
+        let set = ChunkContextSetConfig::default();
+        assert!(!set.enabled);
+        assert_eq!(set.window, 4);
+        assert_eq!(set.max_tokens, 120);
+        let mapped = SetConfig::default()
+            .to_graphrag_config()
+            .unwrap()
+            .chunk_context;
+        assert_eq!(mapped, runtime);
+        let from_toml: SetConfig = toml::from_str("").unwrap();
+        assert!(!from_toml.chunk_context.enabled);
+        assert!(
+            !from_toml
+                .to_graphrag_config()
+                .unwrap()
+                .chunk_context
+                .enabled
+        );
+    }
+
+    #[test]
+    fn chunk_context_maps_from_toml_set_config() {
+        let set: SetConfig =
+            toml::from_str("[chunk_context]\nenabled = true\nwindow = 2\nmax_tokens = 80\n")
+                .unwrap();
+        let c = set.to_graphrag_config().unwrap().chunk_context;
+        assert!(c.enabled);
+        assert_eq!(c.window, 2);
+        assert_eq!(c.max_tokens, 80);
+        let only_flag: SetConfig = toml::from_str("[chunk_context]\nenabled = true\n").unwrap();
+        let c = only_flag.to_graphrag_config().unwrap().chunk_context;
+        assert_eq!((c.window, c.max_tokens), (4, 120));
+        assert!(toml::from_str::<SetConfig>("[chunk_context]\nbogus = 1\n").is_err());
+    }
+
+    #[cfg(feature = "json5-support")]
+    #[test]
+    fn chunk_context_loads_from_json5_via_cli_loader() {
+        use crate::config::loader::{load_config_from_str, ConfigFormat};
+        let set = load_config_from_str(
+            r#"{ mode: { approach: "semantic" }, chunk_context: { enabled: true, window: 2, max_tokens: 80 } }"#,
+            ConfigFormat::Json5,
+        )
+        .unwrap();
+        assert!(set.chunk_context.enabled);
+        assert_eq!(set.chunk_context.window, 2);
+        assert_eq!(set.chunk_context.max_tokens, 80);
+        let only_flag = load_config_from_str(
+            r#"{ chunk_context: { enabled: true } }"#,
+            ConfigFormat::Json5,
+        )
+        .unwrap();
+        assert_eq!(only_flag.chunk_context.window, 4);
+        assert_eq!(only_flag.chunk_context.max_tokens, 120);
+        let off =
+            load_config_from_str(r#"{ mode: { approach: "semantic" } }"#, ConfigFormat::Json5)
+                .unwrap();
+        assert!(!off.chunk_context.enabled);
+    }
+}
+
+#[cfg(test)]
+mod gliner_jev_tests {
+    use super::*;
+    #[cfg(feature = "json5-support")]
+    use crate::config::loader::{load_config_from_str, ConfigFormat};
+
+    #[test]
+    fn jev_defaults_and_overrides() {
+        let d = crate::config::JevConfig::default();
+        assert!(!d.enabled);
+        assert_eq!(d.api_endpoint, "https://api.typesafe.ai/v1/systemone");
+        assert_eq!(d.api_key_env, "TYPESAFE_API_KEY");
+        assert_eq!(
+            (d.max_entities_per_chunk, d.max_concurrent, d.timeout_secs),
+            (8, 4, 120)
+        );
+        assert_eq!(
+            (
+                d.candidate_floor,
+                d.min_type_prob,
+                d.min_link,
+                d.min_evidence
+            ),
+            (0.2, 0.0, 0.5, 0.5)
+        );
+        assert!(d.classify_entity_types && d.raw_log_path.is_none());
+        assert!(d.filter_entities && d.min_entity == 0.5);
+
+        let set: SetConfig = toml::from_str("[gliner]\nenabled = true\n").unwrap();
+        assert!(!set.to_graphrag_config().unwrap().gliner.jev.enabled);
+        let set: SetConfig =
+            toml::from_str("[gliner.jev]\nenabled = true\nmin_link = 0.7\n").unwrap();
+        let j = set.to_graphrag_config().unwrap().gliner.jev;
+        assert!(j.enabled && j.min_link == 0.7 && j.min_evidence == 0.5);
+        #[cfg(feature = "json5-support")]
+        {
+            let set = load_config_from_str(
+            r#"{ mode: { approach: "semantic" }, gliner: { jev: { enabled: true, raw_log_path: "/x/y.jsonl" } } }"#,
+            ConfigFormat::Json5,
+        )
+        .unwrap();
+            let j = set.gliner.jev;
+            assert!(j.enabled && j.raw_log_path.as_deref() == Some("/x/y.jsonl"));
+        }
+    }
+
+    #[cfg(test)]
+    mod epistemic_status_config_tests {
+        use super::*;
+
+        #[test]
+        fn epistemic_status_is_off_by_default_everywhere() {
+            assert!(!crate::config::Config::default().entities.epistemic_status);
+            assert!(!EntityExtractionTopLevelConfig::default().epistemic_status);
+            let mapped = SetConfig::default().to_graphrag_config().unwrap();
+            assert!(!mapped.entities.epistemic_status);
+        }
+
+        #[test]
+        fn epistemic_status_maps_from_toml_in_every_approach() {
+            for approach in ["semantic", "algorithmic", "hybrid"] {
+                let set: SetConfig = toml::from_str(&format!(
+                "[mode]\napproach = \"{approach}\"\n[entity_extraction]\nepistemic_status = true\n"
+            ))
+                .unwrap();
+                assert!(
+                    set.to_graphrag_config().unwrap().entities.epistemic_status,
+                    "approach {approach}"
+                );
+            }
+            // semantic without a `semantic` sub-section, flag not set
+            let set: SetConfig = toml::from_str("[mode]\napproach = \"semantic\"\n").unwrap();
+            assert!(set.semantic.is_none());
+            assert!(!set.to_graphrag_config().unwrap().entities.epistemic_status);
+        }
+
+        #[test]
+        fn epistemic_status_defaults_in_runtime_config_serde() {
+            let json = serde_json::to_string(&crate::config::Config::default()).unwrap();
+            let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
+            value["entities"]["epistemic_status"] = true.into();
+            let cfg: crate::config::Config = serde_json::from_value(value).unwrap();
+            assert!(cfg.entities.epistemic_status);
+            // absent field deserializes to false (old runtime configs)
+            let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
+            value["entities"]
+                .as_object_mut()
+                .unwrap()
+                .remove("epistemic_status");
+            let cfg: crate::config::Config = serde_json::from_value(value).unwrap();
+            assert!(!cfg.entities.epistemic_status);
+        }
+
+        #[cfg(feature = "json5-support")]
+        #[test]
+        fn epistemic_status_loads_from_json5() {
+            use crate::config::loader::{load_config_from_str, ConfigFormat};
+            let on = load_config_from_str(
+            r#"{ mode: { approach: "semantic" }, entity_extraction: { epistemic_status: true } }"#,
+            ConfigFormat::Json5,
+        )
+        .unwrap();
+            assert!(on.entities.epistemic_status);
+            let off =
+                load_config_from_str(r#"{ mode: { approach: "semantic" } }"#, ConfigFormat::Json5)
+                    .unwrap();
+            assert!(!off.entities.epistemic_status);
+        }
+    }
+}
+
+#[cfg(test)]
+mod selective_gleaning_config_tests {
+    use super::*;
+
+    #[test]
+    fn selective_gleaning_is_off_by_default_everywhere() {
+        assert!(!crate::config::Config::default().entities.selective_gleaning);
+        assert!(!EntityExtractionTopLevelConfig::default().selective_gleaning);
+        let mapped = SetConfig::default().to_graphrag_config().unwrap();
+        assert!(!mapped.entities.selective_gleaning);
+        assert_eq!(
+            crate::config::Config::default()
+                .entities
+                .selective_min_entities,
+            3
+        );
+        assert_eq!(
+            crate::config::Config::default()
+                .entities
+                .selective_max_relationships,
+            1
+        );
+        assert_eq!(
+            EntityExtractionTopLevelConfig::default().selective_min_entities,
+            3
+        );
+        assert_eq!(
+            EntityExtractionTopLevelConfig::default().selective_max_relationships,
+            1
+        );
+        assert_eq!(mapped.entities.selective_min_entities, 3);
+        assert_eq!(mapped.entities.selective_max_relationships, 1);
+    }
+
+    #[test]
+    fn extraction_max_tokens_is_unset_by_default_and_maps_when_set() {
+        assert_eq!(
+            crate::config::Config::default()
+                .entities
+                .extraction_max_tokens,
+            None
+        );
+        assert_eq!(
+            EntityExtractionTopLevelConfig::default().extraction_max_tokens,
+            None
+        );
+        let unset = SetConfig::default().to_graphrag_config().unwrap();
+        assert_eq!(unset.entities.extraction_max_tokens, None);
+        let mut set = SetConfig::default();
+        set.entity_extraction.extraction_max_tokens = Some(4096);
+        let mapped = set.to_graphrag_config().unwrap();
+        assert_eq!(mapped.entities.extraction_max_tokens, Some(4096));
+    }
+
+    #[test]
+    fn selective_gleaning_maps_from_toml_in_every_approach() {
+        for approach in ["semantic", "algorithmic", "hybrid"] {
+            let set: SetConfig = toml::from_str(&format!(
+                "[mode]\napproach = \"{approach}\"\n[entity_extraction]\nselective_gleaning = true\n"
+            ))
+            .unwrap();
+            assert!(
+                set.to_graphrag_config()
+                    .unwrap()
+                    .entities
+                    .selective_gleaning,
+                "approach {approach}"
+            );
+        }
+        let set: SetConfig = toml::from_str("[mode]\napproach = \"semantic\"\n").unwrap();
+        assert!(set.semantic.is_none());
+        assert!(
+            !set.to_graphrag_config()
+                .unwrap()
+                .entities
+                .selective_gleaning
+        );
+    }
+
+    #[test]
+    fn selective_thresholds_map_from_toml() {
+        let set: SetConfig = toml::from_str(
+            "[entity_extraction]\nselective_min_entities = 2\nselective_max_relationships = 4\n",
+        )
+        .unwrap();
+        let cfg = set.to_graphrag_config().unwrap();
+        assert_eq!(cfg.entities.selective_min_entities, 2);
+        assert_eq!(cfg.entities.selective_max_relationships, 4);
+    }
+
+    #[test]
+    fn selective_gleaning_defaults_in_runtime_config_serde() {
+        let json = serde_json::to_string(&crate::config::Config::default()).unwrap();
+        let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        value["entities"]["selective_gleaning"] = true.into();
+        let cfg: crate::config::Config = serde_json::from_value(value).unwrap();
+        assert!(cfg.entities.selective_gleaning);
+        let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        value["entities"]
+            .as_object_mut()
+            .unwrap()
+            .remove("selective_gleaning");
+        let cfg: crate::config::Config = serde_json::from_value(value).unwrap();
+        assert!(!cfg.entities.selective_gleaning);
+        let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let entities = value["entities"].as_object_mut().unwrap();
+        entities.remove("selective_min_entities");
+        entities.remove("selective_max_relationships");
+        let cfg: crate::config::Config = serde_json::from_value(value).unwrap();
+        assert_eq!(cfg.entities.selective_min_entities, 3);
+        assert_eq!(cfg.entities.selective_max_relationships, 1);
+    }
+
+    #[cfg(feature = "json5-support")]
+    #[test]
+    fn selective_gleaning_loads_from_json5() {
+        use crate::config::loader::{load_config_from_str, ConfigFormat};
+        let on = load_config_from_str(
+            r#"{ mode: { approach: "semantic" }, entity_extraction: { selective_gleaning: true } }"#,
+            ConfigFormat::Json5,
+        )
+        .unwrap();
+        assert!(on.entities.selective_gleaning);
+        let off =
+            load_config_from_str(r#"{ mode: { approach: "semantic" } }"#, ConfigFormat::Json5)
+                .unwrap();
+        assert!(!off.entities.selective_gleaning);
+        let custom = load_config_from_str(
+            r#"{ mode: { approach: "semantic" }, entity_extraction: { selective_min_entities: 2, selective_max_relationships: 4 } }"#,
+            ConfigFormat::Json5,
+        )
+        .unwrap();
+        assert_eq!(custom.entities.selective_min_entities, 2);
+        assert_eq!(custom.entities.selective_max_relationships, 4);
     }
 }

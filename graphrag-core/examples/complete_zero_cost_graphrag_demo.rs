@@ -78,8 +78,8 @@ fn demo_approach_selections() -> Result<()> {
     ];
 
     for (name, approach_key, cost) in approaches {
-        println!("   🏷️  {}: {}", name, approach_key);
-        println!("   💰 Cost: {}", cost);
+        println!("   🏷️  {name}: {approach_key}");
+        println!("   💰 Cost: {cost}");
 
         match approach_key {
             "pure_algorithmic" => {
@@ -197,10 +197,7 @@ fn create_approach_configurations() -> Vec<(String, Config)> {
 /// Create pure algorithmic configuration (no LLM)
 fn create_pure_algorithmic_config() -> Config {
     Config {
-        chunk_size: 800,
-        chunk_overlap: 200,
         max_entities_per_chunk: Some(20),
-        top_k_results: Some(10),
         similarity_threshold: None,
         approach: "algorithmic".to_string(),
         graph: graphrag_core::config::GraphConfig {
@@ -223,15 +220,25 @@ fn create_pure_algorithmic_config() -> Config {
                 "CONCEPT".to_string(),
             ],
             use_gleaning: false,
+            epistemic_status: false,
+            selective_gleaning: false,
+            selective_min_entities: 3,
+            selective_max_relationships: 1,
+            extraction_max_tokens: None,
             max_gleaning_rounds: 3,
             enable_triple_reflection: false,
             validation_min_confidence: 0.7,
             use_atomic_facts: false,
             max_fact_tokens: 400,
+            ontology_path: None,
         },
         retrieval: graphrag_core::config::RetrievalConfig {
             top_k: 10,
             search_algorithm: "hybrid".to_string(),
+            hyde: false,
+            graph_facts: false,
+            map_reduce: false,
+            map_reduce_chunks: 60,
         },
         parallel: graphrag_core::config::ParallelConfig {
             num_threads: 4,
@@ -242,20 +249,11 @@ fn create_pure_algorithmic_config() -> Config {
             parallel_graph_ops: true,
             parallel_vector_ops: true,
         },
-        ollama: graphrag_core::ollama::OllamaConfig {
+        llm: graphrag_core::llm::LlmConfig {
             enabled: true,
-            host: "localhost".to_string(),
-            port: 11434,
-            embedding_model: "nomic-embed-text".to_string(),
-            chat_model: "llama3.1:8b".to_string(),
             timeout_seconds: 30,
-            max_retries: 3,
-            fallback_to_hash: true,
             max_tokens: Some(2048),
-            temperature: Some(0.7),
-            enable_caching: true,
-            keep_alive: None,
-            num_ctx: None,
+            ..Default::default()
         },
         zero_cost_approach: ZeroCostApproachConfig {
             approach: "pure_algorithmic".to_string(),
@@ -408,7 +406,7 @@ async fn test_approach_with_config(
     config: Config,
     documents: &[Document],
 ) -> Result<()> {
-    println!("📊 Configuration loaded for {}", approach_name);
+    println!("📊 Configuration loaded for {approach_name}");
     println!("   Output directory: {}", config.output_dir);
     println!(
         "   Zero-cost approach: {}",
@@ -447,7 +445,7 @@ async fn test_approach_with_config(
 
         // Show chunk statistics
         let total_chars: usize = chunks.iter().map(|c| c.content.len()).sum();
-        println!("   Total characters: {}", total_chars);
+        println!("   Total characters: {total_chars}");
 
         if config.summarization.llm_config.enabled {
             println!("   🤖 LLM-based hierarchical summarization will be applied");
@@ -489,7 +487,7 @@ async fn test_approach_with_config(
     // Show cost analysis
     show_cost_analysis(&config);
 
-    println!("✅ {} processing completed successfully", approach_name);
+    println!("✅ {approach_name} processing completed successfully");
     Ok(())
 }
 
@@ -555,9 +553,9 @@ fn demo_budget_optimization() -> Result<()> {
     ];
 
     for (tier, daily_budget, recommended_approach, query_capacity) in budgets {
-        println!("📊 {}: ${:.2}/day", tier, daily_budget);
-        println!("   Recommended: {}", recommended_approach);
-        println!("   Capacity: {}", query_capacity);
+        println!("📊 {tier}: ${daily_budget:.2}/day");
+        println!("   Recommended: {recommended_approach}");
+        println!("   Capacity: {query_capacity}");
 
         match recommended_approach {
             "pure_algorithmic" => {
@@ -567,7 +565,7 @@ fn demo_budget_optimization() -> Result<()> {
                 println!("   Features: Enhanced entity recognition, moderate LLM usage");
             },
             "lazy_graphrag" => {
-                println!("   Features: State-of-the-art quality, query-time LLM optimization");
+                println!("   Features: query-time LLM optimization");
             },
             _ => {},
         }

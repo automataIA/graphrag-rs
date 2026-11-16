@@ -13,7 +13,7 @@
 //! ## References
 //!
 //! - BAR-RAG Paper: "Boundary-Aware Retrieval-Augmented Generation"
-//! - Target: +40% semantic coherence, -60% entity fragmentation
+//! - Target: improve semantic coherence and reduce entity fragmentation
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};

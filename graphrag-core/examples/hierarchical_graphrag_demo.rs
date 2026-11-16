@@ -110,12 +110,13 @@ fn main() -> graphrag_core::Result<()> {
             relation_type: rel_type.to_string(),
             confidence,
             context: Vec::new(),
+            description: None,
             embedding: None,
             temporal_type: None,
             temporal_range: None,
             causal_strength: None,
         };
-        println!("  + {} --[{}]--> {}", src, rel_type, tgt);
+        println!("  + {src} --[{rel_type}]--> {tgt}");
         graph.add_relationship(rel)?;
     }
 
@@ -170,8 +171,8 @@ fn main() -> graphrag_core::Result<()> {
                     communities.get_community_entities(community_id, level, &leiden_graph);
 
                 if !entities.is_empty() {
-                    println!("\n    Community {} (Level {}):", community_id, level);
-                    println!("      Entities: {:?}", entities);
+                    println!("\n    Community {community_id} (Level {level}):");
+                    println!("      Entities: {entities:?}");
 
                     // Get entity metadata
                     let metadata_list = communities.get_entities_metadata(&entities);
@@ -185,11 +186,8 @@ fn main() -> graphrag_core::Result<()> {
                     // Get community statistics
                     let (count, avg_conf, types) =
                         communities.get_community_stats(community_id, level, &leiden_graph);
-                    println!(
-                        "      Stats: {} entities, avg confidence: {:.2}",
-                        count, avg_conf
-                    );
-                    println!("      Entity types: {:?}", types);
+                    println!("      Stats: {count} entities, avg confidence: {avg_conf:.2}");
+                    println!("      Entity types: {types:?}");
                 }
             }
         }
@@ -204,8 +202,8 @@ fn main() -> graphrag_core::Result<()> {
     println!("  Generated {} summaries", communities_mut.summaries.len());
 
     for (community_id, summary) in &communities_mut.summaries {
-        println!("\n  Community {} summary:", community_id);
-        println!("    {}", summary);
+        println!("\n  Community {community_id} summary:");
+        println!("    {summary}");
     }
 
     // Step 7: Demonstrate adaptive query routing (NEW!)
@@ -224,7 +222,7 @@ fn main() -> graphrag_core::Result<()> {
     ];
 
     for query in test_queries {
-        println!("\n  Query: \"{}\"", query);
+        println!("\n  Query: \"{query}\"");
 
         // Use adaptive retrieval (automatic level selection)
         let (analysis, results) = communities_mut.adaptive_retrieve_detailed(
@@ -251,13 +249,13 @@ fn main() -> graphrag_core::Result<()> {
                 results.len()
             );
             for (level, community_id, summary) in &results {
-                println!("      [Level {}, Community {}]", level, community_id);
+                println!("      [Level {level}, Community {community_id}]");
                 let preview = if summary.len() > 80 {
                     format!("{}...", &summary[..77])
                 } else {
                     summary.clone()
                 };
-                println!("      {}", preview);
+                println!("      {preview}");
             }
         }
     }

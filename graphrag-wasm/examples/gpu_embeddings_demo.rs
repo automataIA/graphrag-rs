@@ -1,7 +1,9 @@
+#![allow(clippy::main_recursion)]
+
 //! GPU Embeddings Demo
 //!
 //! Demonstrates GPU-accelerated embedding generation using Burn + WebGPU.
-//! This example shows how to leverage browser GPU for 20-40x speedup.
+//! This example shows how to use the browser GPU for embedding computation.
 //!
 //! ## Features
 //!
@@ -193,14 +195,8 @@ pub async fn example_performance_comparison() -> Result<JsValue, JsValue> {
         let gpu_time = end_gpu - start_gpu;
 
         web_sys::console::log_1(&format!("⚡ GPU time: {:.2}ms", gpu_time).into());
-        web_sys::console::log_1(
-            &format!(
-                "📊 Expected CPU time: {:.2}ms (20-40x slower)",
-                gpu_time * 30.0
-            )
-            .into(),
-        );
-        web_sys::console::log_1(&format!("🚀 Speedup: ~30x faster with GPU",).into());
+        web_sys::console::log_1(&format!("📊 Estimated CPU time: {:.2}ms", gpu_time * 30.0).into());
+        web_sys::console::log_1(&"🚀 GPU embedding run completed".into());
 
         // Return results as JSON
         let result = js_sys::Object::new();

@@ -1,33 +1,28 @@
-#![cfg_attr(not(feature = "async"), allow(unused_imports))]
-
 //! Contextual Chunk Enrichment via LLM (Anthropic Contextual Retrieval pattern)
 //!
 //! Before embedding, an LLM augments each chunk with 2-3 sentences of context
-//! derived from the entire document. Ollama's KV Cache means the document is
-//! evaluated **once** for all chunks from the same document.
+//! derived from the entire document. The llama.cpp server's prompt cache
+//! (`cache_prompt`, on by default) means the document prefix is evaluated
+//! **once** for all chunks from the same document.
 //!
 //! ## How it works
 //!
 //! 1. Group chunks by source document
-//! 2. For each document, calculate `num_ctx` from document + chunk sizes
-//! 3. Build prompts using a static prefix (full document) + dynamic suffix (chunk)
-//! 4. Call Ollama with `keep_alive` and `num_ctx` — the static prefix is cached
-//! 5. Return enriched chunks: `[LLM context]\n\n[original chunk text]`
+//! 2. Build prompts using a static prefix (full document) + dynamic suffix (chunk)
+//! 3. Call the OpenAI-compatible server — the static prefix is reused from the KV cache
+//! 4. Return enriched chunks: `[LLM context]\n\n[original chunk text]`
 //!
-//! ## Performance with KV Cache
-//!
-//! With Mistral-NeMo 12B on RTX 4070:
-//! - First chunk: ~2 min (loads document into KV cache)
-//! - Subsequent chunks: ~3-5 sec each (only the chunk is re-evaluated)
-//! - ~100 chunks from a 45k-token book: **5-10 minutes total**
-//!
-//! Without `keep_alive`, Ollama unloads the model between requests, destroying
-//! the KV cache and making this approach impractical at scale.
+//! The server context size (`llama-server -c`, divided by `-np` slots) must be
+//! at least [`ContextualEnricher::calculate_num_ctx`] for the largest document,
+//! otherwise the server rejects or truncates the prompt.
 
+use crate::{core::TextChunk, llm::LlmConfig};
+#[cfg(all(feature = "async", feature = "ureq"))]
 use crate::{
-    core::{Document, Result, TextChunk},
-    ollama::{OllamaClient, OllamaConfig, OllamaGenerationParams},
+    core::{Document, Result},
+    llm::{LlmClient, LlmGenerationParams},
 };
+#[cfg(all(feature = "async", feature = "ureq"))]
 use std::collections::{HashMap, HashSet};
 
 /// Configuration for contextual chunk enrichment
@@ -35,15 +30,6 @@ use std::collections::{HashMap, HashSet};
 pub struct ContextualEnricherConfig {
     /// Enable contextual enrichment. When false, chunks are returned unchanged.
     pub enabled: bool,
-
-    /// How long to keep the model loaded in Ollama between requests.
-    ///
-    /// **Critical**: Without this, Ollama unloads the model between chunks, destroying
-    /// the KV cache. The document context (static prefix) must be re-evaluated for
-    /// every chunk, making this approach 20-50x slower.
-    ///
-    /// Set to `"1h"` for processing a book; `"30m"` for shorter documents.
-    pub keep_alive: String,
 
     /// Safety margin added to the calculated `num_ctx` (as a fraction, e.g. 0.05 = 5%).
     ///
@@ -63,7 +49,6 @@ impl Default for ContextualEnricherConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            keep_alive: "1h".to_string(),
             safety_margin: 0.05,
             max_output_tokens: 150,
             context_separator: "\n\n".to_string(),
@@ -73,24 +58,22 @@ impl Default for ContextualEnricherConfig {
 
 /// LLM-based contextual chunk enricher (Anthropic Contextual Retrieval pattern)
 ///
-/// Uses Ollama to prepend 2-3 context sentences to each chunk before embedding,
-/// dramatically improving retrieval accuracy for long documents (typically +10-15%).
+/// Uses the configured LLM to prepend 2-3 context sentences to each chunk before embedding,
+/// enriching the context available to retrieval for long documents.
 ///
 /// ## Example
 ///
 /// ```ignore
 /// use graphrag_core::text::contextual_enricher::{ContextualEnricher, ContextualEnricherConfig};
-/// use graphrag_core::ollama::OllamaConfig;
+/// use graphrag_core::llm::LlmConfig;
 ///
 /// # async fn example() -> graphrag_core::Result<()> {
-/// let ollama_config = OllamaConfig {
+/// let llm_config = LlmConfig {
 ///     enabled: true,
-///     chat_model: "mistral-nemo:12b".to_string(),
-///     keep_alive: Some("1h".to_string()),
-///     ..OllamaConfig::default()
+///     ..LlmConfig::default()
 /// };
 ///
-/// let enricher = ContextualEnricher::with_defaults(ollama_config);
+/// let enricher = ContextualEnricher::with_defaults(llm_config);
 ///
 /// // Process a document's chunks
 /// let enriched = enricher.enrich_document_chunks(&document, &chunks).await?;
@@ -98,24 +81,27 @@ impl Default for ContextualEnricherConfig {
 /// # }
 /// ```
 pub struct ContextualEnricher {
-    #[cfg_attr(not(feature = "async"), allow(dead_code))]
-    client: OllamaClient,
+    #[cfg(all(feature = "async", feature = "ureq"))]
+    client: LlmClient,
     config: ContextualEnricherConfig,
 }
 
 impl ContextualEnricher {
     /// Create a new contextual enricher with explicit configs
-    pub fn new(ollama_config: OllamaConfig, enricher_config: ContextualEnricherConfig) -> Self {
-        let client = OllamaClient::new(ollama_config);
+    pub fn new(llm_config: LlmConfig, enricher_config: ContextualEnricherConfig) -> Self {
+        #[cfg(not(all(feature = "async", feature = "ureq")))]
+        let _ = llm_config;
+
         Self {
-            client,
+            #[cfg(all(feature = "async", feature = "ureq"))]
+            client: LlmClient::new(llm_config),
             config: enricher_config,
         }
     }
 
     /// Create with default enricher config
-    pub fn with_defaults(ollama_config: OllamaConfig) -> Self {
-        Self::new(ollama_config, ContextualEnricherConfig::default())
+    pub fn with_defaults(llm_config: LlmConfig) -> Self {
+        Self::new(llm_config, ContextualEnricherConfig::default())
     }
 
     /// Estimate token count from text length (approximation: chars / 4)
@@ -126,7 +112,7 @@ impl ContextualEnricher {
         (text.len() / 4) as u32
     }
 
-    /// Calculate the required `num_ctx` for a document and its chunks
+    /// Estimate the context size (tokens per server slot) needed for a document and its chunks
     ///
     /// Formula:
     /// ```text
@@ -152,7 +138,7 @@ impl ContextualEnricher {
         let with_margin = (base as f32 * (1.0 + self.config.safety_margin)) as u32;
 
         // Round up to nearest 1024 for memory alignment efficiency
-        let rounded = ((with_margin + 1023) / 1024) * 1024;
+        let rounded = with_margin.div_ceil(1024) * 1024;
 
         // Clamp: minimum 4096 (sensible floor), maximum 131072 (128k, typical GPU limit)
         rounded.clamp(4096, 131_072)
@@ -164,34 +150,25 @@ impl ContextualEnricher {
     /// first request and reused for all subsequent chunks from the same document.
     /// Only the chunk content changes between requests.
     #[cfg(feature = "async")]
-    fn build_prompt(document_text: &str, chunk_text: &str) -> String {
+    pub fn build_prompt(document_text: &str, chunk_text: &str) -> String {
         format!(
-            "<document>\n{document}\n</document>\n\n\
+            "<document>\n{document_text}\n</document>\n\n\
              Here is the chunk we want to situate within the whole document:\n\
-             <chunk>\n{chunk}\n</chunk>\n\n\
+             <chunk>\n{chunk_text}\n</chunk>\n\n\
              Please give a short succinct context to situate this chunk within \
              the overall document for the purposes of improving search retrieval \
              of the chunk. Answer only with the succinct context and nothing else.",
-            document = document_text,
-            chunk = chunk_text,
         )
     }
 
     /// Enrich a single chunk with LLM-generated context
-    #[cfg(feature = "ureq")]
-    async fn enrich_one(
-        &self,
-        chunk: &TextChunk,
-        document_text: &str,
-        num_ctx: u32,
-    ) -> Result<String> {
+    #[cfg(all(feature = "async", feature = "ureq"))]
+    async fn enrich_one(&self, chunk: &TextChunk, document_text: &str) -> Result<String> {
         let prompt = Self::build_prompt(document_text, &chunk.content);
 
-        let params = OllamaGenerationParams {
-            num_predict: Some(self.config.max_output_tokens),
+        let params = LlmGenerationParams {
+            max_tokens: Some(self.config.max_output_tokens),
             temperature: Some(0.1), // low temperature for factual, deterministic context
-            num_ctx: Some(num_ctx),
-            keep_alive: Some(self.config.keep_alive.clone()),
             ..Default::default()
         };
 
@@ -207,9 +184,9 @@ impl ContextualEnricher {
 
     /// Enrich all chunks belonging to a single document
     ///
-    /// All chunks are processed with the same `num_ctx` value (calculated once),
-    /// and Ollama's KV cache preserves the document context across all requests.
-    #[cfg(feature = "ureq")]
+    /// Chunks are processed sequentially so the server's prompt cache keeps the
+    /// document prefix across all requests.
+    #[cfg(all(feature = "async", feature = "ureq"))]
     pub async fn enrich_document_chunks(
         &self,
         document: &Document,
@@ -228,16 +205,16 @@ impl ContextualEnricher {
             return Ok(chunks.to_vec());
         }
 
-        let doc_chunk_owned: Vec<TextChunk> = doc_chunks.iter().map(|c| (*c).clone()).collect();
-        let num_ctx = self.calculate_num_ctx(&document.content, &doc_chunk_owned);
-
         #[cfg(feature = "tracing")]
-        tracing::info!(
-            doc = %document.title,
-            chunks = doc_chunks.len(),
-            num_ctx,
-            "Starting contextual enrichment (KV cache enabled)",
-        );
+        {
+            let doc_chunk_owned: Vec<TextChunk> = doc_chunks.iter().map(|c| (*c).clone()).collect();
+            tracing::info!(
+                doc = %document.title,
+                chunks = doc_chunks.len(),
+                required_ctx = self.calculate_num_ctx(&document.content, &doc_chunk_owned),
+                "Starting contextual enrichment (prompt cache enabled)",
+            );
+        }
 
         let mut result = chunks.to_vec();
 
@@ -250,7 +227,7 @@ impl ContextualEnricher {
                 chunk.id,
             );
 
-            match self.enrich_one(chunk, &document.content, num_ctx).await {
+            match self.enrich_one(chunk, &document.content).await {
                 Ok(enriched_content) => {
                     if let Some(target) = result.iter_mut().find(|c| c.id == chunk.id) {
                         target.content = enriched_content;
@@ -273,10 +250,10 @@ impl ContextualEnricher {
 
     /// Enrich chunks from multiple documents in a single pipeline call
     ///
-    /// Documents are processed one at a time so Ollama can maximise KV cache
+    /// Documents are processed one at a time so the server can maximise KV cache
     /// reuse (the document context stays loaded for all its chunks before
     /// moving to the next document).
-    #[cfg(feature = "ureq")]
+    #[cfg(all(feature = "async", feature = "ureq"))]
     pub async fn enrich_chunks(
         &self,
         documents: &[Document],
@@ -310,10 +287,10 @@ impl ContextualEnricher {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "async"))]
 mod tests {
     use super::*;
-    use crate::core::{ChunkId, DocumentId};
+    use crate::core::{ChunkId, Document, DocumentId};
 
     fn make_document(content: &str) -> Document {
         Document::new(
@@ -341,7 +318,7 @@ mod tests {
 
     #[test]
     fn test_calculate_num_ctx_minimum() {
-        let config = OllamaConfig::default();
+        let config = LlmConfig::default();
         let enricher = ContextualEnricher::with_defaults(config);
         let doc = make_document("short document");
         let chunk = make_chunk(doc.id.clone(), "c0", "short chunk");
@@ -351,7 +328,7 @@ mod tests {
 
     #[test]
     fn test_calculate_num_ctx_large_document() {
-        let config = OllamaConfig::default();
+        let config = LlmConfig::default();
         let enricher = ContextualEnricher::with_defaults(config);
         // Simulate a 45k-token book (~180k chars)
         let doc_content = "word ".repeat(36_000);

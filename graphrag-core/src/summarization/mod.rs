@@ -782,7 +782,7 @@ impl DocumentTree {
                         llm_summary
                     },
                     Err(e) => {
-                        eprintln!("⚠️ LLM summarization failed for level {}: {}, falling back to extractive", level, e);
+                        eprintln!("⚠️ LLM summarization failed for level {level}: {e}, falling back to extractive");
                         self.generate_extractive_summary(&combined_content)?
                     },
                 }

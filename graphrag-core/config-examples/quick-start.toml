@@ -36,9 +36,9 @@ require_temporal_consistency = true
 # ============================================================================
 
 [embeddings]
-model = "nomic-embed-text"
-dimension = 768
-api_endpoint = "http://localhost:11434"
+model = "multilingual-e5-small"
+dimension = 384
+api_endpoint = "http://127.0.0.1:8081/v1/embeddings"
 
 [graph]
 max_connections = 10
@@ -49,10 +49,11 @@ extract_relationships = true
 top_k = 10
 search_algorithm = "hybrid"
 
-[ollama]
-host = "http://localhost:11434"
-model = "llama3.2"
-embedding_model = "nomic-embed-text"
+[llm]
+base_url = "http://127.0.0.1:8080/v1"
+embedding_base_url = "http://127.0.0.1:8081/v1"
+model = "qwen3.5-9b"
+embedding_model = "multilingual-e5-small"
 
 [parallel]
 enabled = true

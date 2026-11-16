@@ -27,7 +27,7 @@ async fn test_gpu_acceleration_check() {
     // Should return false for CPU-only Candle embedder
     // (or true if WebGPU is available and feature is enabled)
     let is_gpu = embedder.is_gpu_accelerated();
-    assert!(!is_gpu || is_gpu); // Either value is acceptable
+    web_sys::console::log_1(&format!("GPU acceleration: {}", is_gpu).into());
 }
 
 /// Test: Create embedder with auto-detection
@@ -152,10 +152,7 @@ async fn test_embedder_error_handling() {
     let result = embedder.embed("test").await;
 
     match result {
-        Err(EmbedderError::ModelNotLoaded) => {
-            // Expected error type
-            assert!(true);
-        },
+        Err(EmbedderError::ModelNotLoaded) => {},
         Err(e) => {
             panic!("Unexpected error type: {:?}", e);
         },

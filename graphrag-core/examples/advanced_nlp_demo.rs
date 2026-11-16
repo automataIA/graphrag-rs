@@ -32,7 +32,7 @@ fn demo_syntax_analysis() -> Result<()> {
     let analyzer = SyntaxAnalyzer::new(SyntaxAnalyzerConfig::default());
     let text = "The good brown fox jumps over the lazy dog.";
 
-    println!("\nInput: \"{}\"", text);
+    println!("\nInput: \"{text}\"");
 
     // POS Tagging
     let tokens = analyzer.pos_tag(text)?;
@@ -89,6 +89,7 @@ fn demo_graph_traversal() -> Result<()> {
     }
 
     graph.add_relationship(Relationship {
+        description: None,
         source: EntityId::new("alice".to_string()),
         target: EntityId::new("bob".to_string()),
         relation_type: "knows".to_string(),
@@ -101,6 +102,7 @@ fn demo_graph_traversal() -> Result<()> {
     })?;
 
     graph.add_relationship(Relationship {
+        description: None,
         source: EntityId::new("bob".to_string()),
         target: EntityId::new("charlie".to_string()),
         relation_type: "knows".to_string(),
@@ -166,8 +168,8 @@ fn demo_query_optimization() -> Result<()> {
             _ => "location",
         };
         graph.add_entity(Entity {
-            id: EntityId::new(format!("e{}", i)),
-            name: format!("Entity {}", i),
+            id: EntityId::new(format!("e{i}")),
+            name: format!("Entity {i}"),
             entity_type: etype.to_string(),
             confidence: 0.9,
             mentions: vec![],

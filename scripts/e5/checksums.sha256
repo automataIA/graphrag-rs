@@ -1,0 +1,4 @@
+# Verify the first digest from the pinned source model directory.
+1a55775f53449dac10a2bcbc312469fac40b96d53198c407081a831f81c98477  model.safetensors
+# Verify the second digest against the generated probe file.
+c6c25a211c5d11f7439b527d4e831d8952a3aace4e2c5740b156c95c1f698112  multilingual-e5-small-f16-probe.gguf

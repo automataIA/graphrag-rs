@@ -26,8 +26,8 @@ fn test_incremental_manager_with_lazy_propagation() {
     for i in 0..3 {
         manager
             .add_node(GraphNode {
-                id: format!("node_{}", i),
-                label: format!("Node {}", i),
+                id: format!("node_{i}"),
+                label: format!("Node {i}"),
                 node_type: NodeType::Entity,
                 attributes: HashMap::from([
                     ("type".to_string(), "test".to_string()),
@@ -50,8 +50,13 @@ fn test_incremental_manager_with_lazy_propagation() {
     assert_eq!(result.updates_failed, 0);
 
     // Get propagation statistics
+    // Every add_node() queued one update; after the forced pass none is pending.
     let propagation_stats = manager.get_propagation_stats();
-    assert!(propagation_stats.total_propagated >= 0);
+    assert_eq!(propagation_stats.total_queued, 3);
+    assert_eq!(
+        propagation_stats.total_propagated,
+        propagation_stats.total_queued
+    );
 }
 
 #[test]
@@ -143,11 +148,11 @@ fn test_snapshot_creation_and_comparison() {
     for i in 0..5 {
         manager
             .add_node(GraphNode {
-                id: format!("entity_{}", i),
-                label: format!("Entity {}", i),
+                id: format!("entity_{i}"),
+                label: format!("Entity {i}"),
                 node_type: NodeType::Entity,
                 attributes: HashMap::from([
-                    ("name".to_string(), format!("Entity {}", i)),
+                    ("name".to_string(), format!("Entity {i}")),
                     ("score".to_string(), (i * 10).to_string()),
                 ]),
                 embeddings: None,
@@ -225,8 +230,8 @@ fn test_lazy_propagation_auto_trigger() {
     for i in 0..5 {
         manager
             .add_node(GraphNode {
-                id: format!("auto_node_{}", i),
-                label: format!("Auto Node {}", i),
+                id: format!("auto_node_{i}"),
+                label: format!("Auto Node {i}"),
                 node_type: NodeType::Entity,
                 attributes: HashMap::new(),
                 embeddings: None,
@@ -241,7 +246,9 @@ fn test_lazy_propagation_auto_trigger() {
     let stats = manager.get_propagation_stats();
     // With threshold of 3, we should have at least 1 auto-propagation
     // (5 nodes / 3 threshold = 1+ propagations)
-    assert!(stats.auto_propagations >= 0); // May or may not have triggered depending on timing
+    assert_eq!(stats.total_queued, 5);
+    assert!(stats.auto_propagations >= 1);
+    assert_eq!(stats.total_failed, 0);
 }
 
 #[test]
@@ -262,8 +269,8 @@ fn test_combined_lazy_and_delta() {
     for i in 0..3 {
         manager
             .add_node(GraphNode {
-                id: format!("combined_{}", i),
-                label: format!("Combined {}", i),
+                id: format!("combined_{i}"),
+                label: format!("Combined {i}"),
                 node_type: NodeType::Entity,
                 attributes: HashMap::from([("batch".to_string(), "1".to_string())]),
                 embeddings: None,
@@ -285,8 +292,8 @@ fn test_combined_lazy_and_delta() {
     for i in 3..5 {
         manager
             .add_node(GraphNode {
-                id: format!("combined_{}", i),
-                label: format!("Combined {}", i),
+                id: format!("combined_{i}"),
+                label: format!("Combined {i}"),
                 node_type: NodeType::Entity,
                 attributes: HashMap::from([("batch".to_string(), "2".to_string())]),
                 embeddings: None,
@@ -309,7 +316,10 @@ fn test_combined_lazy_and_delta() {
     assert_eq!(stats.node_count, 5);
 
     let prop_stats = manager.get_propagation_stats();
-    assert!(prop_stats.total_propagated >= 0);
+    // every add_node() queued one lazy update; at least the forced pass ran
+    assert_eq!(prop_stats.total_queued, 5);
+    assert!(prop_stats.auto_propagations >= 1);
+    assert_eq!(prop_stats.total_failed, 0);
 }
 
 #[test]
@@ -330,12 +340,12 @@ fn test_delta_computer_bloom_filter() {
     let mut nodes_before = HashMap::new();
     for i in 0..10 {
         let props = HashMap::from([("value".to_string(), i.to_string())]);
-        let hash = computer.hash_node_content(&format!("node_{}", i), &props);
+        let hash = computer.hash_node_content(&format!("node_{i}"), &props);
 
         nodes_before.insert(
-            format!("node_{}", i),
+            format!("node_{i}"),
             NodeSnapshot {
-                node_id: format!("node_{}", i),
+                node_id: format!("node_{i}"),
                 content_hash: hash,
                 properties: props,
                 last_modified: chrono::Utc::now(),
@@ -413,10 +423,10 @@ async fn test_async_batch_updater_integration() {
     // Submit operations
     for i in 0..10 {
         let operation = UpdateOperation {
-            operation_id: format!("op_{}", i),
+            operation_id: format!("op_{i}"),
             operation_type: OperationType::AddNode,
             data: UpdateData::Node {
-                node_id: format!("batch_node_{}", i),
+                node_id: format!("batch_node_{i}"),
                 properties: HashMap::from([("index".to_string(), i.to_string())]),
                 embeddings: None,
             },
@@ -462,10 +472,10 @@ async fn test_async_batch_with_backpressure() {
         let sender = updater.get_sender();
         let handle = tokio::spawn(async move {
             let operation = UpdateOperation {
-                operation_id: format!("bp_op_{}", i),
+                operation_id: format!("bp_op_{i}"),
                 operation_type: OperationType::AddNode,
                 data: UpdateData::Node {
-                    node_id: format!("bp_node_{}", i),
+                    node_id: format!("bp_node_{i}"),
                     properties: HashMap::new(),
                     embeddings: None,
                 },
@@ -501,8 +511,8 @@ fn test_graph_stats_tracking() {
     for i in 0..5 {
         manager
             .add_node(GraphNode {
-                id: format!("stats_node_{}", i),
-                label: format!("Stats Node {}", i),
+                id: format!("stats_node_{i}"),
+                label: format!("Stats Node {i}"),
                 node_type: NodeType::Entity,
                 attributes: HashMap::new(),
                 embeddings: None,

@@ -27,6 +27,10 @@ pub struct WorkspaceMetadata {
     pub format_version: String,
     /// Description (optional)
     pub description: Option<String>,
+    /// Id of the extraction ontology the graph was built with
+    /// (`name@version#fingerprint`, see [`crate::ontology::Ontology::id`])
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ontology: Option<String>,
 }
 
 impl WorkspaceMetadata {
@@ -43,6 +47,7 @@ impl WorkspaceMetadata {
             chunk_count: 0,
             format_version: "1.0".to_string(),
             description: None,
+            ontology: None,
         }
     }
 
@@ -117,7 +122,7 @@ impl WorkspaceManager {
 
         if workspace_path.exists() {
             return Err(GraphRAGError::Config {
-                message: format!("Workspace '{}' already exists", workspace_name),
+                message: format!("Workspace '{workspace_name}' already exists"),
             });
         }
 
@@ -140,7 +145,7 @@ impl WorkspaceManager {
 
         if !workspace_path.exists() {
             return Err(GraphRAGError::Config {
-                message: format!("Workspace '{}' does not exist", workspace_name),
+                message: format!("Workspace '{workspace_name}' does not exist"),
             });
         }
 
@@ -232,7 +237,7 @@ impl WorkspaceManager {
     pub fn load_graph(&self, workspace_name: &str) -> Result<KnowledgeGraph> {
         if !self.workspace_exists(workspace_name) {
             return Err(GraphRAGError::Config {
-                message: format!("Workspace '{}' does not exist", workspace_name),
+                message: format!("Workspace '{workspace_name}' does not exist"),
             });
         }
 
@@ -259,8 +264,22 @@ impl WorkspaceManager {
         }
 
         Err(GraphRAGError::Config {
-            message: format!("No graph data found in workspace '{}'", workspace_name),
+            message: format!("No graph data found in workspace '{workspace_name}'"),
         })
+    }
+
+    /// Ontology id recorded for a workspace (`None` if never recorded)
+    pub fn workspace_ontology(&self, workspace_name: &str) -> Option<String> {
+        self.load_metadata(workspace_name).ok()?.ontology
+    }
+
+    /// Record the ontology id the workspace graph was built with
+    pub fn record_ontology(&self, workspace_name: &str, ontology_id: &str) -> Result<()> {
+        let mut metadata = self
+            .load_metadata(workspace_name)
+            .unwrap_or_else(|_| WorkspaceMetadata::new(workspace_name.to_string()));
+        metadata.ontology = Some(ontology_id.to_string());
+        self.save_metadata(&metadata, workspace_name)
     }
 
     /// Save workspace metadata
@@ -269,7 +288,7 @@ impl WorkspaceManager {
         let metadata_path = workspace_path.join("metadata.toml");
 
         let toml_string = toml::to_string_pretty(metadata).map_err(|e| GraphRAGError::Config {
-            message: format!("Failed to serialize metadata: {}", e),
+            message: format!("Failed to serialize metadata: {e}"),
         })?;
 
         fs::write(metadata_path, toml_string)?;
@@ -284,14 +303,14 @@ impl WorkspaceManager {
 
         if !metadata_path.exists() {
             return Err(GraphRAGError::Config {
-                message: format!("Metadata not found for workspace '{}'", workspace_name),
+                message: format!("Metadata not found for workspace '{workspace_name}'"),
             });
         }
 
         let toml_string = fs::read_to_string(metadata_path)?;
         let metadata: WorkspaceMetadata =
             toml::from_str(&toml_string).map_err(|e| GraphRAGError::Config {
-                message: format!("Failed to parse metadata: {}", e),
+                message: format!("Failed to parse metadata: {e}"),
             })?;
 
         Ok(metadata)
@@ -365,5 +384,53 @@ mod tests {
 
         let loaded_graph = workspace.load_graph("test").unwrap();
         assert_eq!(loaded_graph.entity_count(), 0);
+    }
+
+    fn graph_with_described_relationship() -> KnowledgeGraph {
+        let mut graph = KnowledgeGraph::new();
+        for id in ["a", "b"] {
+            graph
+                .add_entity(crate::core::Entity::new(
+                    crate::core::EntityId::new(id.to_string()),
+                    id.to_uppercase(),
+                    "PERSON".to_string(),
+                    0.9,
+                ))
+                .unwrap();
+        }
+        let mut rel = crate::core::Relationship::new(
+            crate::core::EntityId::new("a".to_string()),
+            crate::core::EntityId::new("b".to_string()),
+            "OTHER".to_string(),
+            0.8,
+        );
+        rel.description = Some("questions: A questions B".to_string());
+        graph.add_relationship(rel).unwrap();
+        graph
+    }
+
+    #[test]
+    fn relationship_description_and_ontology_survive_save_load() {
+        let temp_dir = TempDir::new().unwrap();
+        let workspace = WorkspaceManager::new(temp_dir.path()).unwrap();
+        workspace
+            .save_graph(&graph_with_described_relationship(), "ws")
+            .unwrap();
+        assert_eq!(workspace.workspace_ontology("ws"), None);
+        workspace
+            .record_ontology("ws", "generic@1.0.0#abc")
+            .unwrap();
+        assert_eq!(
+            workspace.workspace_ontology("ws").as_deref(),
+            Some("generic@1.0.0#abc")
+        );
+
+        let loaded = workspace.load_graph("ws").unwrap();
+        let rels: Vec<_> = loaded.relationships().collect();
+        assert_eq!(rels.len(), 1);
+        assert_eq!(
+            rels[0].description.as_deref(),
+            Some("questions: A questions B")
+        );
     }
 }

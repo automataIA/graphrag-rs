@@ -4,7 +4,7 @@
 //!
 //! ## Embeddings
 //! - **Candle CPU**: 100% Rust, BERT/MiniLM, 50-100ms, works everywhere
-//! - **Burn WebGPU**: 20-40x speedup, Chrome/Edge 70% users, requires feature flag
+//! - **Burn WebGPU**: browser GPU embedding support, requires feature flag
 //!
 //! ## LLM Chatbot
 //! - **Candle CPU**: 2-5 tok/s, 100% Rust, good for demos
@@ -17,7 +17,7 @@
 //!
 //! ## Usage
 //!
-//! ```rust
+//! ```rust,ignore
 //! // Auto-detect best embedder
 //! let mut embedder = create_embedder("sentence-transformers/all-MiniLM-L6-v2", 384).await?;
 //!
@@ -390,7 +390,7 @@ impl CandleEmbedder {
 /// Burn-based WebGPU embedder (GPU-accelerated)
 ///
 /// Uses Burn framework with wgpu backend for WebGPU acceleration.
-/// Performance: 20-40x speedup vs CPU (device-dependent).
+/// Performance depends on the browser, device, and selected model.
 /// Requires Chrome/Edge with WebGPU support.
 #[cfg(feature = "webgpu")]
 pub struct BurnEmbedder {
@@ -521,9 +521,7 @@ pub async fn create_embedder(
     {
         // Try WebGPU first
         if let Ok(embedder) = BurnEmbedder::new(model_name, dimension).await {
-            web_sys::console::log_1(&JsValue::from_str(
-                "Using Burn WebGPU embedder (20-40x speedup)",
-            ));
+            web_sys::console::log_1(&JsValue::from_str("Using Burn WebGPU embedder"));
             return Ok(EmbedderBackend::Burn(embedder));
         }
     }

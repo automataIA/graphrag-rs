@@ -412,5 +412,5 @@ This demo is part of graphrag-rs and follows the same license (MIT OR Apache-2.0
 ---
 
 **Generated**: 2025-10-03
-**Author**: Claude Code Assistant
+**Author**: graphrag-rs contributors
 **Version**: 1.0.0-alpha

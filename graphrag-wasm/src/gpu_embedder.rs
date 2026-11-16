@@ -1,8 +1,7 @@
 //! GPU-Accelerated Embeddings with Burn + WebGPU
 //!
 //! This module provides GPU-accelerated embedding generation using Burn framework
-//! with WebGPU backend. It demonstrates how to leverage browser GPU for 20-40x
-//! speedup compared to CPU inference.
+//! with a WebGPU backend for browser-side inference.
 //!
 //! ## Architecture
 //!
@@ -16,7 +15,7 @@
 //! | Backend | Time (single) | Time (batch 32) | Speedup |
 //! |---------|---------------|-----------------|---------|
 //! | CPU     | 50-100ms      | 1-2s            | 1x      |
-//! | WebGPU  | 2-5ms         | 50-100ms        | 20-40x  |
+//! | WebGPU  | device-dependent | device-dependent | varies |
 //!
 //! ## Usage
 //!
@@ -91,7 +90,7 @@ impl From<JsValue> for GpuEmbedderError {
 
 /// GPU-accelerated embedder using Burn + WebGPU
 ///
-/// This embedder uses WebGPU for GPU acceleration, providing 20-40x speedup
+/// This embedder uses WebGPU for GPU acceleration.
 /// compared to CPU inference. It automatically falls back to CPU if WebGPU
 /// is not available.
 pub struct GpuEmbedder {

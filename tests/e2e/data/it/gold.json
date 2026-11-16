@@ -1,0 +1,350 @@
+{
+  "corpus": "pinocchio.txt",
+  "language": "it",
+  "questions": [
+    {
+      "id": "q01",
+      "kind": "single-hop",
+      "question": "Perché il falegname mastr'Antonio è chiamato maestro Ciliegia?",
+      "expected_keywords": [
+        [
+          "naso"
+        ],
+        [
+          "ciliegia"
+        ]
+      ],
+      "notes": "Cap. I: la punta del naso sempre lustra e paonazza come una ciliegia matura.",
+      "evidence_chapters": [
+        1
+      ]
+    },
+    {
+      "id": "q02",
+      "kind": "single-hop",
+      "question": "Con quale soprannome i ragazzi del vicinato fanno arrabbiare Geppetto?",
+      "expected_keywords": [
+        [
+          "polendina"
+        ]
+      ],
+      "notes": "Cap. II: Polendina, per la parrucca gialla.",
+      "evidence_chapters": [
+        2
+      ]
+    },
+    {
+      "id": "q03",
+      "kind": "single-hop",
+      "question": "Che cosa vende Geppetto per comprare l'Abbecedario a Pinocchio?",
+      "expected_keywords": [
+        [
+          "casacca",
+          "giacca"
+        ]
+      ],
+      "notes": "Cap. VIII: la vecchia casacca di frustagno.",
+      "evidence_chapters": [
+        8
+      ]
+    },
+    {
+      "id": "q04",
+      "kind": "single-hop",
+      "question": "Come si chiama il burattinaio che sta per bruciare Pinocchio ma poi lo perdona?",
+      "expected_keywords": [
+        [
+          "mangiafoco",
+          "mangiafuoco"
+        ]
+      ],
+      "notes": "Cap. X-XI: il burattinaio Mangiafoco vuole bruciare Pinocchio per cuocere il montone, poi starnutisce e lo perdona; Pinocchio difende Arlecchino e Mangiafoco perdona anche lui.",
+      "evidence_chapters": [
+        10,
+        11
+      ]
+    },
+    {
+      "id": "q05",
+      "kind": "single-hop",
+      "question": "Quali due animali ingannano Pinocchio e quali infermità fingono di avere?",
+      "expected_keywords": [
+        [
+          "volpe"
+        ],
+        [
+          "gatto"
+        ],
+        [
+          "zoppa",
+          "zoppo"
+        ],
+        [
+          "cieco",
+          "cieca"
+        ]
+      ],
+      "notes": "Cap. XII: Volpe zoppa da un piede, Gatto cieco da tutt'e due gli occhi.",
+      "evidence_chapters": [
+        12
+      ]
+    },
+    {
+      "id": "q06",
+      "kind": "single-hop",
+      "question": "Come si chiama il luogo dove Pinocchio seppellisce le monete d'oro?",
+      "expected_keywords": [
+        [
+          "campo dei miracoli"
+        ]
+      ],
+      "notes": "Cap. XII-XVIII: il Campo dei miracoli, vicino alla città di Acchiappacitrulli, dove la Volpe e il Gatto convincono Pinocchio a seppellire le monete d'oro.",
+      "evidence_chapters": [
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18
+      ]
+    },
+    {
+      "id": "q07",
+      "kind": "single-hop",
+      "question": "Che razza di animale è Alidoro?",
+      "expected_keywords": [
+        [
+          "mastino",
+          "cane"
+        ]
+      ],
+      "notes": "Cap. XXVIII: Alidoro, il can mastino.",
+      "evidence_chapters": [
+        28
+      ]
+    },
+    {
+      "id": "q08",
+      "kind": "single-hop",
+      "question": "Chi è Medoro?",
+      "expected_keywords": [
+        [
+          "barbone",
+          "cane"
+        ]
+      ],
+      "notes": "Cap. XVI: Medoro è il Can-barbone della Fata dai capelli turchini, che lo manda con la carrozza a prendere Pinocchio impiccato alla Quercia grande.",
+      "evidence_chapters": [
+        16
+      ]
+    },
+    {
+      "id": "q09",
+      "kind": "multi-hop",
+      "question": "Quante monete d'oro regala Mangiafoco a Pinocchio e per chi gliele dà?",
+      "expected_keywords": [
+        [
+          "cinque",
+          "5"
+        ],
+        [
+          "geppetto",
+          "babbo",
+          "padre"
+        ]
+      ],
+      "notes": "Cap. XI-XII: Mangiafoco regala a Pinocchio cinque monete d'oro da portare al suo babbo Geppetto, perché è povero.",
+      "evidence_chapters": [
+        11,
+        12
+      ]
+    },
+    {
+      "id": "q10",
+      "kind": "multi-hop",
+      "question": "Chi impicca Pinocchio alla Quercia grande e chi lo fa salvare?",
+      "expected_keywords": [
+        [
+          "assassini",
+          "volpe",
+          "gatto"
+        ],
+        [
+          "fata",
+          "bambina"
+        ]
+      ],
+      "notes": "Cap. XV-XVI: assassini (Gatto e Volpe) lo impiccano; la Fata dai capelli turchini lo fa raccogliere.",
+      "evidence_chapters": [
+        15,
+        16
+      ]
+    },
+    {
+      "id": "q11",
+      "kind": "multi-hop",
+      "question": "Quale amico convince Pinocchio ad andare nel Paese dei balocchi e in che cosa si trasformano entrambi?",
+      "expected_keywords": [
+        [
+          "lucignolo"
+        ],
+        [
+          "ciuchino",
+          "ciuchini",
+          "asino",
+          "asini"
+        ]
+      ],
+      "notes": "Cap. XXX-XXXII: Lucignolo convince Pinocchio ad andare nel Paese dei balocchi; dopo cinque mesi a entrambi crescono orecchie d'asino e si trasformano in ciuchini (asini).",
+      "evidence_chapters": [
+        30,
+        31,
+        32
+      ]
+    },
+    {
+      "id": "q12",
+      "kind": "multi-hop",
+      "question": "Chi compra Pinocchio ciuchino dopo il Paese dei balocchi e per quale scopo viene ricomprato in seguito?",
+      "expected_keywords": [
+        [
+          "direttore",
+          "compagnia",
+          "pagliacci"
+        ],
+        [
+          "tamburo"
+        ]
+      ],
+      "notes": "Cap. XXXIII: direttore di una compagnia di pagliacci; poi un altro lo ricompra per far con la sua pelle un tamburo.",
+      "evidence_chapters": [
+        33
+      ]
+    },
+    {
+      "id": "q13",
+      "kind": "multi-hop",
+      "question": "Chi sta per friggere Pinocchio in padella e come è descritto?",
+      "expected_keywords": [
+        [
+          "pescatore"
+        ],
+        [
+          "verde"
+        ]
+      ],
+      "notes": "Cap. XXVIII: il pescatore verde.",
+      "evidence_chapters": [
+        28
+      ]
+    },
+    {
+      "id": "q14",
+      "kind": "multi-hop",
+      "question": "Chi aiuta Pinocchio e Geppetto a raggiungere la riva dopo la fuga dal Pesce-cane?",
+      "expected_keywords": [
+        [
+          "tonno"
+        ]
+      ],
+      "notes": "Cap. XXXV-XXXVI: il Tonno, uscito con loro dal Pesce-cane, porta Geppetto e Pinocchio sulla sua groppa fino alla riva.",
+      "evidence_chapters": [
+        35,
+        36
+      ]
+    },
+    {
+      "id": "q15",
+      "kind": "multi-hop",
+      "question": "Per chi lavora Pinocchio girando il bindolo alla fine del libro e per ottenere che cosa?",
+      "expected_keywords": [
+        [
+          "giangio",
+          "ortolano"
+        ],
+        [
+          "latte"
+        ]
+      ],
+      "notes": "Cap. XXXVI: Pinocchio gira il bindolo per l'ortolano Giangio, in cambio di un bicchiere di latte per il suo babbo Geppetto malato.",
+      "evidence_chapters": [
+        36
+      ]
+    },
+    {
+      "id": "q16",
+      "kind": "single-hop",
+      "question": "Con che oggetto Pinocchio uccide il Grillo-parlante?",
+      "expected_keywords": [
+        [
+          "martello"
+        ]
+      ],
+      "notes": "Cap. IV: martello di legno.",
+      "evidence_chapters": [
+        4
+      ]
+    },
+    {
+      "id": "q17",
+      "kind": "global",
+      "question": "Come finisce la storia di Pinocchio? In che cosa si trasforma alla fine?",
+      "expected_keywords": [
+        [
+          "ragazzo",
+          "ragazzino",
+          "bambino",
+          "essere umano",
+          "carne e ossa"
+        ]
+      ],
+      "notes": "Cap. XXXVI: diventa un ragazzo.",
+      "evidence_chapters": [
+        36
+      ]
+    },
+    {
+      "id": "q18",
+      "kind": "global",
+      "question": "Dove ritrova Pinocchio il suo babbo Geppetto dopo averlo cercato a lungo?",
+      "expected_keywords": [
+        [
+          "pesce cane",
+          "pescecane",
+          "mostro marino"
+        ],
+        [
+          "geppetto",
+          "babbo"
+        ]
+      ],
+      "notes": "Cap. XXXV: nel ventre del Pesce-cane.",
+      "evidence_chapters": [
+        35
+      ]
+    },
+    {
+      "id": "q19",
+      "kind": "global",
+      "question": "Riassumi i principali errori di Pinocchio: perché cade nelle trappole dei cattivi compagni e delle cattive compagnie?",
+      "expected_keywords": [
+        [
+          "lucignolo",
+          "volpe",
+          "gatto"
+        ],
+        [
+          "scuola",
+          "studiare",
+          "lavorare",
+          "obbedire",
+          "disobbedire",
+          "bugie"
+        ]
+      ],
+      "notes": "Domanda globale, valutazione per keyword approssimativa: riferimenti a Lucignolo o a Volpe e Gatto e al rifiuto di scuola/lavoro.",
+      "evidence_chapters": []
+    }
+  ]
+}

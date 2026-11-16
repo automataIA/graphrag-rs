@@ -1,0 +1,12 @@
+[package]
+name = "graphrag-quickstart-async"
+version = "0.3.0"
+edition = "2021"
+rust-version = "1.88"
+publish = false
+
+[workspace]
+
+[dependencies]
+graphrag = { path = "../../graphrag", features = ["async", "memory-storage", "basic-retrieval"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

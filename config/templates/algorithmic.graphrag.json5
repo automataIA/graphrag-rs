@@ -146,12 +146,12 @@
   },
 
   // =========================================================================
-  // OLLAMA: LLM Service (DISABLED for algorithmic)
+  // LLM (llama.cpp): LLM Service (DISABLED for algorithmic)
   // =========================================================================
-  ollama: {
+  llm: {
     enabled: false,  // ❌ NOT required for algorithmic pipeline
-    host: "http://localhost",
-    port: 11434,
+    base_url: "http://127.0.0.1:8080/v1",
+    embedding_base_url: "http://127.0.0.1:8081/v1",
     timeout_seconds: 30,
     max_retries: 1,
     fallback_to_hash: true
@@ -209,7 +209,7 @@
  * ============================================================================
  *
  * ✅ STRENGTHS:
- * - Fast processing speed (10-50x faster than semantic)
+ // Performance and quality depend on the selected pipeline and corpus.
  * - Low resource requirements (CPU-only, 1-2GB RAM)
  * - Deterministic and reproducible results
  * - No external API dependencies
@@ -225,7 +225,7 @@
  * ⚡ PERFORMANCE:
  * - Speed: 1000-5000 documents/second
  * - Memory: 1-2GB
- * - Accuracy: 70-85% (vs 90-95% for semantic)
+ // Performance and quality depend on the selected pipeline and corpus.
  *
  * 💡 OPTIMIZATION TIPS:
  * - Tune hash_size based on vocabulary (1024-4096)

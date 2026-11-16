@@ -1,0 +1,209 @@
+[
+  {
+    "text": "query: Chi dirige il progetto Prisma?",
+    "tokens_match": true,
+    "expected_tokens": [
+      0,
+      41,
+      1294,
+      12,
+      5585,
+      59275,
+      211,
+      25117,
+      20204,
+      192,
+      32,
+      2
+    ],
+    "actual_tokens": [
+      0,
+      41,
+      1294,
+      12,
+      5585,
+      59275,
+      211,
+      25117,
+      20204,
+      192,
+      32,
+      2
+    ],
+    "dimension": 384,
+    "cosine": 0.9999995827674866,
+    "max_abs_error": 0.00013444572687149048,
+    "usage": {
+      "prompt_tokens": 12,
+      "total_tokens": 12
+    }
+  },
+  {
+    "text": "passage: Maria Rossi dirige il progetto Prisma a Torino.",
+    "tokens_match": true,
+    "expected_tokens": [
+      0,
+      46692,
+      12,
+      5379,
+      122835,
+      59275,
+      211,
+      25117,
+      20204,
+      192,
+      10,
+      85626,
+      5,
+      2
+    ],
+    "actual_tokens": [
+      0,
+      46692,
+      12,
+      5379,
+      122835,
+      59275,
+      211,
+      25117,
+      20204,
+      192,
+      10,
+      85626,
+      5,
+      2
+    ],
+    "dimension": 384,
+    "cosine": 0.999999463558197,
+    "max_abs_error": 0.0002470575273036957,
+    "usage": {
+      "prompt_tokens": 14,
+      "total_tokens": 14
+    }
+  },
+  {
+    "text": "query: Who leads project Prisma?",
+    "tokens_match": true,
+    "expected_tokens": [
+      0,
+      41,
+      1294,
+      12,
+      40469,
+      37105,
+      7,
+      13452,
+      20204,
+      192,
+      32,
+      2
+    ],
+    "actual_tokens": [
+      0,
+      41,
+      1294,
+      12,
+      40469,
+      37105,
+      7,
+      13452,
+      20204,
+      192,
+      32,
+      2
+    ],
+    "dimension": 384,
+    "cosine": 0.9999995827674866,
+    "max_abs_error": 0.00017251819372177124,
+    "usage": {
+      "prompt_tokens": 12,
+      "total_tokens": 12
+    }
+  },
+  {
+    "text": "passage: Elena works in Paris on multilingual search.",
+    "tokens_match": true,
+    "expected_tokens": [
+      0,
+      46692,
+      12,
+      60202,
+      43240,
+      23,
+      7270,
+      98,
+      6024,
+      65279,
+      289,
+      33938,
+      5,
+      2
+    ],
+    "actual_tokens": [
+      0,
+      46692,
+      12,
+      60202,
+      43240,
+      23,
+      7270,
+      98,
+      6024,
+      65279,
+      289,
+      33938,
+      5,
+      2
+    ],
+    "dimension": 384,
+    "cosine": 0.9999995231628418,
+    "max_abs_error": 0.0001686476171016693,
+    "usage": {
+      "prompt_tokens": 14,
+      "total_tokens": 14
+    }
+  },
+  {
+    "text": "query: 日本語の埋め込みを確認します。",
+    "tokens_match": true,
+    "expected_tokens": [
+      0,
+      41,
+      1294,
+      12,
+      6,
+      98449,
+      154,
+      50147,
+      8421,
+      67389,
+      74788,
+      5182,
+      30,
+      2
+    ],
+    "actual_tokens": [
+      0,
+      41,
+      1294,
+      12,
+      6,
+      98449,
+      154,
+      50147,
+      8421,
+      67389,
+      74788,
+      5182,
+      30,
+      2
+    ],
+    "dimension": 384,
+    "cosine": 0.9999994039535522,
+    "max_abs_error": 0.00018042325973510742,
+    "usage": {
+      "prompt_tokens": 14,
+      "total_tokens": 14
+    }
+  }
+]

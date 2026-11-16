@@ -8,21 +8,24 @@
 //! - Graph Weight Optimization (Phase 3.2)
 
 use graphrag_core::{
-    core::{Entity, EntityId, KnowledgeGraph, Relationship},
+    core::{Entity, EntityId, Relationship},
     graph::temporal::TemporalRelationType,
     Config,
 };
 
 #[cfg(feature = "async")]
 use graphrag_core::{
+    core::KnowledgeGraph,
     graph::hierarchical_relationships::HierarchyBuilder,
     optimization::{GraphWeightOptimizer, ObjectiveWeights, OptimizerConfig, TestQuery},
     retrieval::causal_analysis::CausalAnalyzer,
 };
 
+#[cfg(feature = "async")]
 use std::sync::Arc;
 
 /// Helper to create a test graph with philosophical entities and relationships
+#[cfg(feature = "async")]
 fn create_philosophy_graph() -> KnowledgeGraph {
     let mut graph = KnowledgeGraph::new();
 
@@ -240,7 +243,7 @@ async fn test_temporal_consistency_validation() {
                     span >= 0,
                     "Time span should be positive (cause before effect)"
                 );
-                println!("  Time span: {} seconds", span);
+                println!("  Time span: {span} seconds");
             }
         } else {
             println!("Note: Chain lacks temporal consistency (timestamps may be missing)");
@@ -262,11 +265,11 @@ async fn test_hierarchical_clustering_build() {
         .with_resolutions(vec![0.5, 1.0])
         .with_min_cluster_size(1);
 
-    // Note: actual build() requires Ollama for summaries
+    // Note: actual build() requires an LLM server for summaries
     // Here we just test the builder construction
     println!("Hierarchy builder created with 2 levels");
 
-    // In a full test with Ollama available:
+    // In a full test with an LLM server available:
     // let hierarchy = builder.build().await.unwrap();
     // assert_eq!(hierarchy.levels.len(), 2);
 }
@@ -308,11 +311,11 @@ async fn test_graph_weight_optimization_setup() {
         },
     ];
 
-    // Note: actual optimization requires Ollama for LLM evaluation
+    // Note: actual optimization requires an LLM server for LLM evaluation
     // Here we just test the setup
     println!("Optimizer created with {} test queries", test_queries.len());
 
-    // In a full test with Ollama available:
+    // In a full test with an LLM server available:
     // optimizer.optimize_weights(&mut graph, &test_queries).await.unwrap();
     // assert!(!optimizer.get_history().is_empty());
 }

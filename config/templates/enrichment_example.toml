@@ -84,15 +84,15 @@ detect_all_caps = true        # Detect ALL CAPS headings
 detect_roman_numerals = true  # Detect Roman numerals (I, II, III, IV, etc.)
 
 # =============================================================================
-# OLLAMA CONFIGURATION
+# LLM CONFIGURATION (llama.cpp, OpenAI-compatible)
 # =============================================================================
 
-[ollama]
+[llm]
 enabled = true
-host = "http://localhost"
-port = 11434
-chat_model = "llama3.1:8b"
-embedding_model = "nomic-embed-text"
+base_url = "http://127.0.0.1:8080/v1"
+embedding_base_url = "http://127.0.0.1:8081/v1"
+chat_model = "qwen3.5-9b"
+embedding_model = "multilingual-e5-small"
 timeout_seconds = 60
 
 # =============================================================================

@@ -1,13 +1,13 @@
-//! GraphRAG REST API Server with Actix-web and Apistos OpenAPI
+//! Local GraphRAG REST API Server with Actix-web and Apistos OpenAPI.
 //!
-//! Production-ready REST API for GraphRAG operations with automatic OpenAPI documentation.
+//! The server is intended for a trusted local process. It has no enabled
+//! multi-user authentication and binds to loopback unless explicitly changed.
 //!
 //! ## Features
 //! - Automatic OpenAPI 3.0.3 documentation via Apistos
 //! - Interactive Swagger UI at /swagger
 //! - Qdrant vector database integration (optional)
-//! - JWT and API key authentication (optional)
-//! - Request validation and rate limiting
+//! - Request validation and OpenAPI documentation
 //!
 //! ## Quick Start
 //!
@@ -18,7 +18,7 @@
 //! # 2. Start server with Qdrant
 //! cargo run --bin graphrag-server --features qdrant
 //!
-//! # 3. Or without Qdrant (mock mode)
+//! # 3. Or without Qdrant (in-memory document retrieval)
 //! cargo run --bin graphrag-server --no-default-features
 //!
 //! # 4. View Swagger UI
@@ -30,6 +30,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use actix_cors::Cors;
 use actix_web::{
+    http::header,
     web::{self, Data, Json, Path as WebPath},
     App, HttpServer, Responder,
 };
@@ -38,15 +39,15 @@ use apistos::{
     app::{BuildConfig, OpenApiWrapper},
     info::Info,
     spec::Spec,
-    web::{delete, get, post, resource, scope},
+    web::{delete, get, post, resource, scope, ServiceConfig as OpenApiServiceConfig},
     SwaggerUIConfig,
 };
 use serde_json::json;
+#[cfg(feature = "qdrant")]
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing_subscriber;
-
 mod models;
 use models::*;
 
@@ -69,12 +70,244 @@ use validation::{
 };
 
 mod config_handler;
-use config_handler::ConfigManager;
 
 mod config_endpoints;
 
 // Import full GraphRAG pipeline
 use graphrag_core::GraphRAG;
+
+const RESPONSE_EXCERPT_BYTES: usize = 200;
+
+fn truncate_utf8(text: &str, max_bytes: usize) -> &str {
+    let mut end = text.len().min(max_bytes);
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
+}
+
+fn response_excerpt(text: &str) -> String {
+    if text.len() > RESPONSE_EXCERPT_BYTES {
+        format!("{}...", truncate_utf8(text, RESPONSE_EXCERPT_BYTES))
+    } else {
+        text.to_owned()
+    }
+}
+
+/// Collapse pipeline search results into one entry per source document, best chunk first.
+/// Scores are normalized by the top score so `similarity` stays in 0..=1.
+fn pipeline_query_results(
+    graphrag: &GraphRAG,
+    mut search_results: Vec<graphrag_core::retrieval::SearchResult>,
+    top_k: usize,
+    fallback_title: impl Fn(&str) -> Option<String>,
+) -> Vec<QueryResult> {
+    search_results.sort_by(|a, b| b.score.total_cmp(&a.score));
+    let top_score = search_results.first().map_or(0.0, |r| r.score);
+    let mut seen = std::collections::HashSet::new();
+    let mut results = Vec::new();
+    for result in &search_results {
+        let chunk = result
+            .source_chunks
+            .iter()
+            .chain(std::iter::once(&result.id))
+            .find_map(|id| graphrag.get_chunk(id));
+        let Some(chunk) = chunk else { continue };
+        let doc_id = chunk.document_id.0.as_str();
+        if !seen.insert(doc_id.to_string()) {
+            continue;
+        }
+        let title = graphrag
+            .knowledge_graph()
+            .and_then(|g| g.get_document(&chunk.document_id))
+            .map(|d| d.title.clone())
+            .or_else(|| fallback_title(doc_id))
+            .unwrap_or_default();
+        let similarity = if top_score > 0.0 {
+            (result.score / top_score).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        results.push(QueryResult {
+            document_id: doc_id.to_string(),
+            title,
+            similarity,
+            excerpt: response_excerpt(&chunk.content),
+        });
+        if results.len() == top_k {
+            break;
+        }
+    }
+    results
+}
+
+/// JSON extractor config: body size limit, and malformed bodies reported in the
+/// same JSON error shape as every other `ApiError` (actix defaults to plain text).
+fn json_config() -> web::JsonConfig {
+    web::JsonConfig::default()
+        .limit(validation::MAX_BODY_SIZE)
+        .error_handler(|err, _req| ApiError::BadRequest(err.to_string()).into())
+}
+
+fn parse_bind_addr(value: Option<&str>) -> color_eyre::Result<SocketAddr> {
+    let value = value.unwrap_or("127.0.0.1:8080");
+    value.parse::<SocketAddr>().map_err(|error| {
+        color_eyre::eyre::eyre!(
+            "invalid GRAPHRAG_BIND_ADDR '{}': expected an IP address and port ({})",
+            value,
+            error
+        )
+    })
+}
+
+fn parse_cors_origins(value: Option<&str>) -> color_eyre::Result<Option<Vec<String>>> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+
+    let origins: Vec<&str> = value.split(',').map(str::trim).collect();
+    if origins.is_empty() || origins.iter().any(|origin| origin.is_empty()) {
+        return Err(color_eyre::eyre::eyre!(
+            "GRAPHRAG_CORS_ORIGINS must contain one or more non-empty origins"
+        ));
+    }
+    if origins.iter().any(|origin| !is_valid_origin(origin)) {
+        return Err(color_eyre::eyre::eyre!(
+            "GRAPHRAG_CORS_ORIGINS accepts explicit http:// or https:// origins without paths, credentials, or wildcards"
+        ));
+    }
+    Ok(Some(origins.into_iter().map(str::to_owned).collect()))
+}
+
+fn is_valid_origin(origin: &str) -> bool {
+    if origin == "*" || origin.contains(char::is_whitespace) {
+        return false;
+    }
+    let authority = origin
+        .strip_prefix("http://")
+        .or_else(|| origin.strip_prefix("https://"));
+    let Some(authority) = authority else {
+        return false;
+    };
+    if authority.is_empty() {
+        return false;
+    }
+    if authority
+        .chars()
+        .any(|character| matches!(character, '/' | '?' | '#' | '@'))
+    {
+        return false;
+    }
+
+    // An origin may contain an optional numeric port. Bracketed IPv6 is
+    // accepted; unbracketed additional colons are rejected as ambiguous.
+    let host = if let Some(rest) = authority.strip_prefix('[') {
+        let Some(end) = rest.find(']') else {
+            return false;
+        };
+        let host = &rest[..end];
+        if host.is_empty() {
+            return false;
+        }
+        let suffix = &rest[end + 1..];
+        if let Some(port) = suffix.strip_prefix(':') {
+            if port.is_empty() || port.parse::<u16>().is_err() {
+                return false;
+            }
+        } else if !suffix.is_empty() {
+            return false;
+        }
+        if host.parse::<std::net::Ipv6Addr>().is_err() {
+            return false;
+        }
+        return true;
+    } else {
+        let mut pieces = authority.split(':');
+        let host = pieces.next().unwrap_or_default();
+        if host.is_empty() || pieces.clone().count() > 1 {
+            return false;
+        }
+        if let Some(port) = pieces.next() {
+            if port.is_empty() || port.parse::<u16>().is_err() {
+                return false;
+            }
+        }
+        host
+    };
+
+    host.chars()
+        .all(|character| character.is_ascii_alphanumeric() || matches!(character, '.' | '-'))
+}
+
+fn build_cors(origins: Option<&[String]>) -> Cors {
+    let Some(origins) = origins else {
+        // Cors::default() does not grant cross-origin access. Same-origin
+        // requests remain available to the local trusted service.
+        return Cors::default().max_age(3600);
+    };
+
+    let cors = origins
+        .iter()
+        .fold(Cors::default(), |cors, origin| cors.allowed_origin(origin));
+    cors.allowed_methods(["GET", "POST", "DELETE", "OPTIONS"])
+        .allowed_headers([header::ACCEPT, header::CONTENT_TYPE, header::AUTHORIZATION])
+        .max_age(3600)
+}
+
+macro_rules! register_api_routes {
+    ($cfg:expr) => {
+        $cfg.service(
+            scope("/api/config")
+                .service(
+                    resource("")
+                        .route(get().to(config_endpoints::get_config))
+                        .route(post().to(config_endpoints::set_config)),
+                )
+                .service(
+                    resource("/template").route(get().to(config_endpoints::get_config_template)),
+                )
+                .service(resource("/default").route(get().to(config_endpoints::get_default_config)))
+                .service(resource("/validate").route(post().to(config_endpoints::validate_config))),
+        )
+        .service(
+            scope("/api")
+                .service(
+                    scope("/documents")
+                        .service(
+                            resource("")
+                                .route(get().to(list_documents))
+                                .route(post().to(add_document)),
+                        )
+                        .service(resource("/{id}").route(delete().to(delete_document))),
+                )
+                .service(scope("/query").service(resource("").route(post().to(query))))
+                .service(
+                    scope("/graph")
+                        .service(resource("/build").route(post().to(build_graph)))
+                        .service(resource("/stats").route(get().to(graph_stats))),
+                ),
+        );
+    };
+}
+
+/// Register production routes with Apistos so the OpenAPI operations remain
+/// attached to the same handlers as the running server.
+fn configure_routes(cfg: &mut OpenApiServiceConfig<'_>) {
+    register_api_routes!(cfg);
+}
+
+/// Register the same route set for plain Actix in-process contract tests.
+#[cfg(test)]
+fn configure_actix_routes(cfg: &mut web::ServiceConfig) {
+    register_api_routes!(cfg);
+}
+
+/// A configuration and its initialized pipeline are swapped together.
+#[derive(Default)]
+struct ActiveState {
+    graphrag: Option<GraphRAG>,
+    graph_built: bool,
+}
 
 /// Application state with optional Qdrant backend and full GraphRAG pipeline
 #[derive(Clone)]
@@ -83,13 +316,11 @@ struct AppState {
     qdrant: Option<Arc<QdrantStore>>,
 
     // Embedding service (real or fallback)
+    #[cfg_attr(not(feature = "qdrant"), allow(dead_code))]
     embeddings: Arc<EmbeddingService>,
 
-    // Full GraphRAG pipeline (when configured via JSON)
-    graphrag: Arc<RwLock<Option<GraphRAG>>>,
-
-    // Configuration manager for JSON config
-    config_manager: Arc<ConfigManager>,
+    // The active pipeline and its metadata are one atomic snapshot.
+    active: Arc<RwLock<ActiveState>>,
 
     // Authentication state (optional)
     #[cfg(feature = "auth")]
@@ -97,8 +328,32 @@ struct AppState {
 
     // Fallback in-memory storage (used when Qdrant unavailable or simple mode)
     documents: Arc<RwLock<Vec<Document>>>,
-    graph_built: Arc<RwLock<bool>>,
     query_count: Arc<RwLock<usize>>,
+}
+
+/// Connect to Qdrant and ensure the collection exists.
+///
+/// `QdrantStore::new` connects lazily, so the collection probe doubles as the
+/// reachability check: an unreachable server returns `Err` and the caller falls
+/// back to in-memory storage instead of failing every later request.
+#[cfg(feature = "qdrant")]
+async fn connect_qdrant(
+    url: &str,
+    collection: &str,
+    dimension: u64,
+) -> Result<QdrantStore, String> {
+    let store = QdrantStore::new(url, collection)
+        .await
+        .map_err(|e| e.to_string())?;
+    if store.collection_exists().await.map_err(|e| e.to_string())? {
+        tracing::info!("✅ Connected to existing Qdrant collection: {}", collection);
+    } else {
+        match store.create_collection(dimension).await {
+            Ok(_) => tracing::info!("✅ Created Qdrant collection: {}", collection),
+            Err(e) => tracing::warn!("⚠️  Could not create collection: {}", e),
+        }
+    }
+    Ok(store)
 }
 
 impl AppState {
@@ -114,10 +369,10 @@ impl AppState {
         let embedding_config = EmbeddingConfig {
             backend: embedding_backend,
             dimension: embedding_dim,
-            ollama_url: std::env::var("OLLAMA_URL")
-                .unwrap_or_else(|_| "http://localhost".to_string()),
-            ollama_model: std::env::var("OLLAMA_EMBEDDING_MODEL")
-                .unwrap_or_else(|_| "nomic-embed-text".to_string()),
+            endpoint: std::env::var("EMBEDDING_ENDPOINT")
+                .unwrap_or_else(|_| "http://127.0.0.1:8081/v1/embeddings".to_string()),
+            model: std::env::var("EMBEDDING_MODEL")
+                .unwrap_or_else(|_| "multilingual-e5-small".to_string()),
             enable_cache: true,
         };
 
@@ -146,38 +401,19 @@ impl AppState {
             let collection_name =
                 std::env::var("COLLECTION_NAME").unwrap_or_else(|_| "graphrag".to_string());
 
-            match QdrantStore::new(&qdrant_url, &collection_name).await {
+            match connect_qdrant(&qdrant_url, &collection_name, embedding_dim as u64).await {
                 Ok(store) => {
-                    // Check if collection exists, create if not
-                    if !store.collection_exists().await.unwrap_or(false) {
-                        match store.create_collection(embedding_dim as u64).await {
-                            Ok(_) => {
-                                tracing::info!("✅ Created Qdrant collection: {}", collection_name);
-                            },
-                            Err(e) => {
-                                tracing::warn!("⚠️  Could not create collection: {}", e);
-                            },
-                        }
-                    } else {
-                        tracing::info!(
-                            "✅ Connected to existing Qdrant collection: {}",
-                            collection_name
-                        );
-                    }
-
                     tracing::info!("🗄️  Using Qdrant at: {}", qdrant_url);
 
                     Self {
                         qdrant: Some(Arc::new(store)),
                         embeddings,
-                        graphrag: Arc::new(RwLock::new(None)),
-                        config_manager: Arc::new(ConfigManager::new()),
+                        active: Arc::new(RwLock::new(ActiveState::default())),
                         #[cfg(feature = "auth")]
                         auth: Arc::new(AuthState::new(std::env::var("JWT_SECRET").unwrap_or_else(
                             |_| "graphrag_secret_key_change_in_production_32chars".to_string(),
                         ))),
                         documents: Arc::new(RwLock::new(Vec::new())),
-                        graph_built: Arc::new(RwLock::new(false)),
                         query_count: Arc::new(RwLock::new(0)),
                     }
                 },
@@ -189,14 +425,12 @@ impl AppState {
                     Self {
                         qdrant: None,
                         embeddings,
-                        graphrag: Arc::new(RwLock::new(None)),
-                        config_manager: Arc::new(ConfigManager::new()),
+                        active: Arc::new(RwLock::new(ActiveState::default())),
                         #[cfg(feature = "auth")]
                         auth: Arc::new(AuthState::new(std::env::var("JWT_SECRET").unwrap_or_else(
                             |_| "graphrag_secret_key_change_in_production_32chars".to_string(),
                         ))),
                         documents: Arc::new(RwLock::new(Vec::new())),
-                        graph_built: Arc::new(RwLock::new(false)),
                         query_count: Arc::new(RwLock::new(0)),
                     }
                 },
@@ -208,14 +442,12 @@ impl AppState {
             tracing::info!("📦 Using in-memory storage (Qdrant feature disabled)");
             Self {
                 embeddings,
-                graphrag: Arc::new(RwLock::new(None)),
-                config_manager: Arc::new(ConfigManager::new()),
+                active: Arc::new(RwLock::new(ActiveState::default())),
                 #[cfg(feature = "auth")]
                 auth: Arc::new(AuthState::new(std::env::var("JWT_SECRET").unwrap_or_else(
                     |_| "graphrag_secret_key_change_in_production_32chars".to_string(),
                 ))),
                 documents: Arc::new(RwLock::new(Vec::new())),
-                graph_built: Arc::new(RwLock::new(false)),
                 query_count: Arc::new(RwLock::new(0)),
             }
         }
@@ -250,7 +482,7 @@ async fn root(state: Data<AppState>) -> impl Responder {
         "version": env!("CARGO_PKG_VERSION"),
         "status": "running",
         "backend": if state.has_qdrant() { "qdrant" } else { "memory" },
-        "graphrag_configured": state.graphrag.read().await.is_some(),
+        "graphrag_configured": state.active.read().await.graphrag.is_some(),
         "documentation": "/swagger",
         "openapi_spec": "/openapi.json",
         "endpoints": {
@@ -284,6 +516,10 @@ async fn root(state: Data<AppState>) -> impl Responder {
 )]
 async fn health(state: Data<AppState>) -> Result<Json<HealthResponse>, ApiError> {
     let doc_count;
+    let active = state.active.read().await;
+    let pipeline_configured = active.graphrag.is_some();
+    let active_graph_built = active.graph_built;
+    drop(active);
     let graph_built;
     let query_count = *state.query_count.read().await;
 
@@ -292,7 +528,7 @@ async fn health(state: Data<AppState>) -> Result<Json<HealthResponse>, ApiError>
         match qdrant.stats().await {
             Ok((count, _)) => {
                 doc_count = count;
-                graph_built = count > 0;
+                graph_built = pipeline_configured && active_graph_built;
             },
             Err(_) => {
                 doc_count = 0;
@@ -301,13 +537,13 @@ async fn health(state: Data<AppState>) -> Result<Json<HealthResponse>, ApiError>
         }
     } else {
         doc_count = state.documents.read().await.len();
-        graph_built = *state.graph_built.read().await;
+        graph_built = pipeline_configured && active_graph_built;
     }
 
     #[cfg(not(feature = "qdrant"))]
     {
         doc_count = state.documents.read().await.len();
-        graph_built = *state.graph_built.read().await;
+        graph_built = pipeline_configured && active_graph_built;
     }
 
     Ok(Json(HealthResponse {
@@ -352,16 +588,37 @@ async fn query(
     // Increment query count
     *state.query_count.write().await += 1;
 
+    // A configured, built pipeline answers with its own retrieval (graph + vectors).
+    {
+        let mut active = state.active.write().await;
+        let graph_built = active.graph_built;
+        if let (Some(graphrag), true) = (active.graphrag.as_mut(), graph_built) {
+            let search_results = graphrag
+                .search(&body.query)
+                .await
+                .map_err(|e| ApiError::InternalError(format!("GraphRAG search failed: {e}")))?;
+            let titles = state.documents.read().await;
+            let results = pipeline_query_results(graphrag, search_results, body.top_k, |id| {
+                titles.iter().find(|d| d.id == id).map(|d| d.title.clone())
+            });
+            return Ok(Json(QueryResponse {
+                query: body.query.clone(),
+                results,
+                processing_time_ms: start.elapsed().as_millis() as u64,
+                backend: "graphrag-pipeline".to_string(),
+            }));
+        }
+    }
+
     #[cfg(feature = "qdrant")]
     if let Some(qdrant) = &state.qdrant {
         // Real vector search with Qdrant using real embeddings
-        let query_embedding = match state.embeddings.generate_single(&body.query).await {
+        let query_embedding = match state.embeddings.generate_query(&body.query).await {
             Ok(embedding) => embedding,
             Err(e) => {
                 tracing::error!("Failed to generate query embedding: {}", e);
                 return Err(ApiError::InternalError(format!(
-                    "Failed to generate embedding: {}",
-                    e
+                    "Failed to generate embedding: {e}"
                 )));
             },
         };
@@ -374,11 +631,7 @@ async fn query(
                         document_id: r.id,
                         title: r.metadata.title,
                         similarity: r.score,
-                        excerpt: if r.metadata.text.len() > 200 {
-                            format!("{}...", &r.metadata.text[..200])
-                        } else {
-                            r.metadata.text
-                        },
+                        excerpt: response_excerpt(&r.metadata.text),
                     })
                     .collect();
 
@@ -393,8 +646,7 @@ async fn query(
             },
             Err(e) => {
                 return Err(ApiError::InternalError(format!(
-                    "Qdrant search failed: {}",
-                    e
+                    "Qdrant search failed: {e}"
                 )));
             },
         }
@@ -424,11 +676,7 @@ async fn query(
                     0.1
                 };
 
-            let excerpt = if doc.content.len() > 200 {
-                format!("{}...", &doc.content[..200])
-            } else {
-                doc.content.clone()
-            };
+            let excerpt = response_excerpt(&doc.content);
 
             QueryResult {
                 document_id: doc.id.clone(),
@@ -495,8 +743,7 @@ async fn add_document(
             Err(e) => {
                 tracing::error!("Failed to generate document embedding: {}", e);
                 return Err(ApiError::InternalError(format!(
-                    "Failed to generate embedding: {}",
-                    e
+                    "Failed to generate embedding: {e}"
                 )));
             },
         };
@@ -514,6 +761,7 @@ async fn add_document(
 
         match qdrant.add_document(&id, embedding, metadata).await {
             Ok(_) => {
+                add_to_configured_graphrag(&state, &id, &title, &content).await?;
                 tracing::info!("Added document to Qdrant: {} ({})", title, id);
 
                 return Ok(Json(DocumentOperationResponse {
@@ -525,8 +773,7 @@ async fn add_document(
             },
             Err(e) => {
                 return Err(ApiError::InternalError(format!(
-                    "Failed to add document to Qdrant: {}",
-                    e
+                    "Failed to add document to Qdrant: {e}"
                 )));
             },
         }
@@ -541,8 +788,7 @@ async fn add_document(
     };
 
     state.documents.write().await.push(document.clone());
-    *state.graph_built.write().await = false;
-
+    add_to_configured_graphrag(&state, &id, &document.title, &document.content).await?;
     tracing::info!("Added document to memory: {} ({})", document.title, id);
 
     Ok(Json(DocumentOperationResponse {
@@ -551,6 +797,34 @@ async fn add_document(
         message: "Document added to memory successfully".to_string(),
         backend: "memory".to_string(),
     }))
+}
+
+async fn add_to_configured_graphrag(
+    state: &Data<AppState>,
+    id: &str,
+    title: &str,
+    content: &str,
+) -> Result<(), ApiError> {
+    let mut active = state.active.write().await;
+    if let Some(graphrag) = active.graphrag.as_mut() {
+        let pipeline_error = |e| {
+            ApiError::InternalError(format!("Failed to add document to GraphRAG pipeline: {e}"))
+        };
+        let mut document = graphrag_core::core::Document::new(
+            graphrag_core::core::DocumentId::new(id.to_string()),
+            title.to_string(),
+            content.to_string(),
+        );
+        // build_graph() only processes chunks: an unchunked document yields an empty graph.
+        let text = &graphrag.config().text;
+        document.chunks =
+            graphrag_core::text::TextProcessor::new(text.chunk_size, text.chunk_overlap)
+                .and_then(|processor| processor.chunk_text(&document))
+                .map_err(pipeline_error)?;
+        graphrag.add_document(document).map_err(pipeline_error)?;
+        active.graph_built = false;
+    }
+    Ok(())
 }
 
 /// List all documents
@@ -602,7 +876,7 @@ async fn list_documents(state: Data<AppState>) -> Json<ListDocumentsResponse> {
 #[api_operation(
     tag = "documents",
     summary = "Delete a document",
-    description = "Remove a document from the knowledge graph by ID",
+    description = "Remove a document from storage-only mode by ID; unavailable while a GraphRAG pipeline is configured",
     error_code = 404,
     error_code = 500
 )]
@@ -612,6 +886,17 @@ async fn delete_document(
 ) -> Result<Json<DocumentOperationResponse>, ApiError> {
     let doc_id = id.into_inner();
 
+    // The active pipeline is a single config/graph snapshot, but the core
+    // graph currently has no atomic document-removal operation. Refuse before
+    // touching Qdrant or memory so a successful response cannot leave the
+    // configured graph stale.
+    if state.active.read().await.graphrag.is_some() {
+        return Err(ApiError::BadRequest(
+            "Document deletion is unavailable while a GraphRAG pipeline is configured; rebuild the pipeline from its workspace instead"
+                .to_string(),
+        ));
+    }
+
     #[cfg(feature = "qdrant")]
     if let Some(qdrant) = &state.qdrant {
         match qdrant.delete_document(&doc_id).await {
@@ -620,14 +905,13 @@ async fn delete_document(
                 return Ok(Json(DocumentOperationResponse {
                     success: true,
                     document_id: Some(doc_id.clone()),
-                    message: format!("Document {} deleted from Qdrant", doc_id),
+                    message: format!("Document {doc_id} deleted from Qdrant"),
                     backend: "qdrant".to_string(),
                 }));
             },
             Err(e) => {
                 return Err(ApiError::InternalError(format!(
-                    "Failed to delete from Qdrant: {}",
-                    e
+                    "Failed to delete from Qdrant: {e}"
                 )));
             },
         }
@@ -640,18 +924,16 @@ async fn delete_document(
 
     if documents.len() == original_len {
         return Err(ApiError::NotFound(format!(
-            "Document with id '{}' not found",
-            doc_id
+            "Document with id '{doc_id}' not found"
         )));
     }
 
-    *state.graph_built.write().await = false;
     tracing::info!("Deleted document from memory: {}", doc_id);
 
     Ok(Json(DocumentOperationResponse {
         success: true,
         document_id: Some(doc_id.clone()),
-        message: format!("Document {} deleted from memory", doc_id),
+        message: format!("Document {doc_id} deleted from memory"),
         backend: "memory".to_string(),
     }))
 }
@@ -667,42 +949,44 @@ async fn delete_document(
 async fn build_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>, ApiError> {
     let start = std::time::Instant::now();
 
-    // Try the real GraphRAG pipeline first
+    // A configured GraphRAG pipeline is the only backend that can build a
+    // knowledge graph.  Keep the state lock while building so readers cannot
+    // observe a config/metadata pair from different generations.
     {
-        let mut graphrag_guard = state.graphrag.write().await;
-        if let Some(ref mut graphrag) = *graphrag_guard {
-            // Use actual pipeline to build graph
-            match graphrag.build_graph().await {
-                Ok(_) => {
-                    let processing_time = start.elapsed().as_millis() as u64;
-                    let (entities, relationships) = graphrag
-                        .knowledge_graph()
-                        .map(|kg| (kg.entities().count(), kg.relationships().count()))
-                        .unwrap_or((0, 0));
+        let mut active = state.active.write().await;
+        if let Some(graphrag) = active.graphrag.as_mut() {
+            graphrag.build_graph().await.map_err(|e| {
+                ApiError::InternalError(format!("GraphRAG pipeline build failed: {e}"))
+            })?;
+            let processing_time = start.elapsed().as_millis() as u64;
+            let (entities, relationships, document_count) = graphrag
+                .knowledge_graph()
+                .map(|kg| {
+                    (
+                        kg.entities().count(),
+                        kg.relationships().count(),
+                        kg.documents().count(),
+                    )
+                })
+                .unwrap_or((0, 0, 0));
+            active.graph_built = true;
 
-                    *state.graph_built.write().await = true;
+            tracing::info!(
+                "Built knowledge graph via pipeline in {}ms ({} entities, {} relationships)",
+                processing_time,
+                entities,
+                relationships
+            );
 
-                    tracing::info!(
-                        "Built knowledge graph via pipeline in {}ms ({} entities, {} relationships)",
-                        processing_time, entities, relationships
-                    );
-
-                    return Ok(Json(BuildGraphResponse {
-                        success: true,
-                        document_count: state.documents.read().await.len(),
-                        processing_time_ms: processing_time,
-                        message: format!(
-                            "Knowledge graph built: {} entities, {} relationships",
-                            entities, relationships
-                        ),
-                        backend: "graphrag-pipeline".to_string(),
-                    }));
-                },
-                Err(e) => {
-                    tracing::warn!("GraphRAG pipeline build failed, trying fallback: {}", e);
-                    // Fall through to lower-priority backends
-                },
-            }
+            return Ok(Json(BuildGraphResponse {
+                success: true,
+                document_count,
+                processing_time_ms: processing_time,
+                message: format!(
+                    "Knowledge graph built: {entities} entities, {relationships} relationships"
+                ),
+                backend: "graphrag-pipeline".to_string(),
+            }));
         }
     }
 
@@ -716,34 +1000,20 @@ async fn build_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>, 
                     ));
                 }
 
-                let processing_time = start.elapsed().as_millis() as u64;
-
-                tracing::info!(
-                    "Built knowledge graph from {} Qdrant documents in {}ms",
-                    count,
-                    processing_time
-                );
-
-                *state.graph_built.write().await = true;
-
-                return Ok(Json(BuildGraphResponse {
-                    success: true,
-                    document_count: count,
-                    processing_time_ms: processing_time,
-                    message: "Knowledge graph built from Qdrant successfully".to_string(),
-                    backend: "qdrant".to_string(),
-                }));
+                return Err(ApiError::BadRequest(format!(
+                    "Knowledge graph construction is unavailable for the Qdrant document store ({count} documents); configure a GraphRAG pipeline first"
+                )));
             },
             Err(e) => {
                 return Err(ApiError::InternalError(format!(
-                    "Failed to access Qdrant: {}",
-                    e
+                    "Failed to access Qdrant: {e}"
                 )));
             },
         }
     }
 
-    // Fallback: in-memory storage
+    // The memory backend indexes documents for local retrieval, but does not
+    // claim to have built a knowledge graph.
     let doc_count = state.documents.read().await.len();
 
     if doc_count == 0 {
@@ -752,22 +1022,9 @@ async fn build_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>, 
         ));
     }
 
-    *state.graph_built.write().await = true;
-    let processing_time = start.elapsed().as_millis() as u64;
-
-    tracing::info!(
-        "Built knowledge graph from {} memory documents in {}ms",
-        doc_count,
-        processing_time
-    );
-
-    Ok(Json(BuildGraphResponse {
-        success: true,
-        document_count: doc_count,
-        processing_time_ms: processing_time,
-        message: "Knowledge graph built from memory successfully".to_string(),
-        backend: "memory".to_string(),
-    }))
+    Err(ApiError::BadRequest(format!(
+        "Knowledge graph construction is unavailable for the in-memory document store ({doc_count} documents); configure a GraphRAG pipeline first"
+    )))
 }
 
 /// Get graph statistics
@@ -779,8 +1036,8 @@ async fn build_graph(state: Data<AppState>) -> Result<Json<BuildGraphResponse>, 
 async fn graph_stats(state: Data<AppState>) -> Json<GraphStatsResponse> {
     // Try real GraphRAG pipeline stats first
     {
-        let graphrag_guard = state.graphrag.read().await;
-        if let Some(ref graphrag) = *graphrag_guard {
+        let active = state.active.read().await;
+        if let Some(graphrag) = active.graphrag.as_ref() {
             if let Some(kg) = graphrag.knowledge_graph() {
                 let entity_count = kg.entities().count();
                 let relationship_count = kg.relationships().count();
@@ -792,7 +1049,7 @@ async fn graph_stats(state: Data<AppState>) -> Json<GraphStatsResponse> {
                     entity_count,
                     relationship_count,
                     vector_count: chunk_count,
-                    graph_built: true,
+                    graph_built: active.graph_built,
                     backend: "graphrag-pipeline".to_string(),
                 });
             }
@@ -820,14 +1077,12 @@ async fn graph_stats(state: Data<AppState>) -> Json<GraphStatsResponse> {
 
     // Fallback: in-memory storage
     let doc_count = state.documents.read().await.len();
-    let graph_built = *state.graph_built.read().await;
-
     Json(GraphStatsResponse {
         document_count: doc_count,
         entity_count: 0,
         relationship_count: 0,
         vector_count: 0,
-        graph_built,
+        graph_built: false,
         backend: "memory".to_string(),
     })
 }
@@ -950,6 +1205,9 @@ async fn main() -> color_eyre::Result<()> {
         .compact()
         .init();
 
+    let bind_addr = parse_bind_addr(std::env::var("GRAPHRAG_BIND_ADDR").ok().as_deref())?;
+    let cors_origins = parse_cors_origins(std::env::var("GRAPHRAG_CORS_ORIGINS").ok().as_deref())?;
+
     // Create application state (connects to Qdrant if available)
     let state = AppState::new().await;
     let state_data = Data::new(state.clone());
@@ -960,17 +1218,18 @@ async fn main() -> color_eyre::Result<()> {
             title: "GraphRAG REST API".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
             description: Some(concat!(
-                "Production-ready REST API for GraphRAG operations with Qdrant vector database.\n\n",
+                "Local REST API for GraphRAG document retrieval and configured graph pipelines.\n\n",
                 "## Features\n",
                 "- Semantic search over documents\n",
-                "- Knowledge graph construction\n",
-                "- Real-time vector embeddings\n",
-                "- Qdrant integration (optional)\n",
-                "- JWT authentication (optional)\n\n",
+                "- Knowledge graph construction through an initialized GraphRAG pipeline\n",
+                "- Local lexical or vector retrieval\n",
+                "- Qdrant document storage (optional)\n",
+                "- No multi-user authentication; keep the listener on a trusted network\n\n",
                 "## Getting Started\n",
-                "1. Add documents via `POST /api/documents`\n",
-                "2. Build graph via `POST /api/graph/build`\n",
-                "3. Query via `POST /api/query`\n"
+                "1. Configure a graph pipeline via `POST /api/config` when graph construction is needed\n",
+                "2. Add documents via `POST /api/documents`\n",
+                "3. Build the configured graph via `POST /api/graph/build`\n",
+                "4. Query via `POST /api/query`\n"
             ).to_string()),
             ..Default::default()
         },
@@ -986,9 +1245,9 @@ async fn main() -> color_eyre::Result<()> {
     }
 
     tracing::info!("🚀 GraphRAG Server starting...");
-    tracing::info!("📡 Listening on http://0.0.0.0:8080");
-    tracing::info!("📚 Swagger UI: http://0.0.0.0:8080/swagger");
-    tracing::info!("📄 OpenAPI spec: http://0.0.0.0:8080/openapi.json");
+    tracing::info!("📡 Listening on http://{}", bind_addr);
+    tracing::info!("📚 Swagger UI: http://{}/swagger", bind_addr);
+    tracing::info!("📄 OpenAPI spec: http://{}/openapi.json", bind_addr);
     tracing::info!(
         "🗄️  Backend: {}",
         if state.has_qdrant() {
@@ -999,12 +1258,7 @@ async fn main() -> color_eyre::Result<()> {
     );
 
     HttpServer::new(move || {
-        // Configure CORS for each app instance
-        let cors = Cors::default()
-            .allow_any_origin()
-            .allow_any_method()
-            .allow_any_header()
-            .max_age(3600);
+        let cors = build_cors(cors_origins.as_deref());
 
         App::new()
             // OpenAPI documentation
@@ -1019,34 +1273,17 @@ async fn main() -> color_eyre::Result<()> {
 
             // Request body size limits (10MB for general payload, 10MB for JSON)
             .app_data(web::PayloadConfig::new(validation::MAX_BODY_SIZE))
-            .app_data(web::JsonConfig::default().limit(validation::MAX_BODY_SIZE))
+            .app_data(json_config())
+
+            // `/swagger/` and other trailing-slash variants resolve to their canonical route.
+            .wrap(actix_web::middleware::NormalizePath::trim())
 
             // Public routes
             .service(resource("/").route(get().to(root)))
             .service(resource("/health").route(get().to(health)))
 
-            // API routes
-            .service(
-                scope("/api")
-                    // Documents endpoints
-                    .service(
-                        scope("/documents")
-                            .service(resource("").route(get().to(list_documents)))
-                            .service(resource("").route(post().to(add_document)))
-                            .service(resource("/{id}").route(delete().to(delete_document)))
-                    )
-                    // Query endpoints
-                    .service(
-                        scope("/query")
-                            .service(resource("").route(post().to(query)))
-                    )
-                    // Graph endpoints
-                    .service(
-                        scope("/graph")
-                            .service(resource("/build").route(post().to(build_graph)))
-                            .service(resource("/stats").route(get().to(graph_stats)))
-                    )
-            )
+            // Register the same route configuration used by in-process tests.
+            .configure(configure_routes)
 
             // Auth routes (temporarily disabled - feature "auth" is disabled)
             // #[cfg(feature = "auth")]
@@ -1056,29 +1293,356 @@ async fn main() -> color_eyre::Result<()> {
             //         .service(resource("/api-key").route(post().to(create_api_key)))
             // )
 
-            // Config endpoints (item 3.3): registered via plain Actix-web routes.
-            // NOTE: To include them in OpenAPI spec, add #[api_operation] macros to
-            //       each handler in config_endpoints.rs, then register via Apistos scope/resource.
-
             // Build OpenAPI spec endpoint + interactive Swagger UI at /swagger
             .build_with(
                 "/openapi.json",
                 BuildConfig::default().with(SwaggerUIConfig::new(&"/swagger")),
             )
-
-            // Config endpoints (plain Actix-web routing — no #[api_operation] yet)
-            .service(
-                web::scope("/api/config")
-                    .route("", web::get().to(config_endpoints::get_config))
-                    .route("", web::post().to(config_endpoints::set_config))
-                    .route("/template", web::get().to(config_endpoints::get_config_template))
-                    .route("/default", web::get().to(config_endpoints::get_default_config))
-                    .route("/validate", web::post().to(config_endpoints::validate_config))
-            )
     })
-    .bind("0.0.0.0:8080")?
+    .bind(bind_addr)?
     .run()
     .await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn memory_state() -> Data<AppState> {
+        let embeddings = EmbeddingService::new(EmbeddingConfig {
+            backend: "hash".to_string(),
+            dimension: 384,
+            endpoint: "http://127.0.0.1:9/v1/embeddings".to_string(),
+            model: "unused".to_string(),
+            enable_cache: false,
+        })
+        .await
+        .expect("hash embedding service should initialize without network");
+
+        Data::new(AppState {
+            #[cfg(feature = "qdrant")]
+            qdrant: None,
+            embeddings: Arc::new(embeddings),
+            active: Arc::new(RwLock::new(ActiveState::default())),
+            #[cfg(feature = "auth")]
+            auth: Arc::new(AuthState::new(
+                "test_secret_key_32_characters_long".to_string(),
+            )),
+            documents: Arc::new(RwLock::new(Vec::new())),
+            query_count: Arc::new(RwLock::new(0)),
+        })
+    }
+
+    #[tokio::test]
+    async fn configured_pipeline_chunks_added_documents_before_build() {
+        let state = memory_state().await;
+        let mut graphrag = GraphRAG::new(graphrag_core::Config::default()).unwrap();
+        graphrag.initialize().unwrap();
+        state.active.write().await.graphrag = Some(graphrag);
+
+        add_to_configured_graphrag(
+            &state,
+            "doc-1",
+            "Promessi",
+            "Renzo Tramaglino vive a Lecco e vuole sposare Lucia Mondella. \
+             Don Rodrigo minaccia Don Abbondio. Fra Cristoforo aiuta Renzo e Lucia.",
+        )
+        .await
+        .unwrap();
+
+        let mut active = state.active.write().await;
+        let graphrag = active.graphrag.as_mut().unwrap();
+        let graph = graphrag.knowledge_graph().unwrap();
+        assert!(graph.chunks().count() > 0, "added document must be chunked");
+
+        graphrag.build_graph().await.unwrap();
+        assert!(graphrag.knowledge_graph().unwrap().entities().count() > 0);
+    }
+
+    #[cfg(feature = "qdrant")]
+    #[tokio::test]
+    async fn unreachable_qdrant_is_not_selected_as_backend() {
+        assert!(connect_qdrant("http://127.0.0.1:9", "graphrag_test", 384)
+            .await
+            .is_err());
+    }
+
+    #[tokio::test]
+    async fn query_uses_configured_pipeline_after_build() {
+        let state = memory_state().await;
+        let mut graphrag = GraphRAG::new(graphrag_core::Config::default()).unwrap();
+        graphrag.initialize().unwrap();
+        state.active.write().await.graphrag = Some(graphrag);
+        add_to_configured_graphrag(
+            &state,
+            "doc-1",
+            "Prisma",
+            "Maria Rossi directs the Prisma project at Aurora Laboratory in Turin.",
+        )
+        .await
+        .unwrap();
+        build_graph(state.clone()).await.unwrap();
+
+        let response = query(
+            state.clone(),
+            Json(QueryRequest {
+                query: "Who directs the Prisma project?".to_string(),
+                top_k: 3,
+            }),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.backend, "graphrag-pipeline");
+        assert_eq!(
+            response.results.len(),
+            1,
+            "results are grouped per document"
+        );
+        assert_eq!(response.results[0].document_id, "doc-1");
+        assert_eq!(response.results[0].title, "Prisma");
+        assert!(response.results[0].excerpt.contains("Maria Rossi"));
+        assert!((0.0..=1.0).contains(&response.results[0].similarity));
+    }
+
+    #[actix_web::test]
+    async fn malformed_json_body_returns_json_error() {
+        let state = memory_state().await;
+        let app = actix_web::test::init_service(
+            App::new()
+                .app_data(state)
+                .app_data(json_config())
+                .configure(configure_actix_routes),
+        )
+        .await;
+        let response = actix_web::test::call_service(
+            &app,
+            actix_web::test::TestRequest::post()
+                .uri("/api/query")
+                .insert_header(("content-type", "application/json"))
+                .set_payload("{not json")
+                .to_request(),
+        )
+        .await;
+        assert_eq!(response.status(), actix_web::http::StatusCode::BAD_REQUEST);
+        let body: serde_json::Value = actix_web::test::read_body_json(response).await;
+        assert_eq!(body["error"], "Bad Request");
+        assert!(body["message"].as_str().unwrap().contains("Json"));
+    }
+
+    #[test]
+    fn bind_defaults_to_loopback_and_rejects_malformed_values() {
+        assert_eq!(
+            parse_bind_addr(None).unwrap(),
+            "127.0.0.1:8080".parse::<SocketAddr>().unwrap()
+        );
+        assert_eq!(
+            parse_bind_addr(Some("0.0.0.0:18080")).unwrap(),
+            "0.0.0.0:18080".parse::<SocketAddr>().unwrap()
+        );
+        assert!(parse_bind_addr(Some("localhost:8080")).is_err());
+    }
+
+    #[test]
+    fn cors_requires_explicit_http_origins() {
+        assert!(parse_cors_origins(None).unwrap().is_none());
+        assert_eq!(
+            parse_cors_origins(Some(" http://localhost:3000,https://app.example.test "))
+                .unwrap()
+                .unwrap(),
+            vec![
+                "http://localhost:3000".to_string(),
+                "https://app.example.test".to_string()
+            ]
+        );
+        assert!(parse_cors_origins(Some("*")).is_err());
+        assert!(parse_cors_origins(Some("localhost:3000")).is_err());
+        assert!(parse_cors_origins(Some(" ")).is_err());
+        assert!(parse_cors_origins(Some("http://localhost:3000,")).is_err());
+        assert!(parse_cors_origins(Some("http://localhost:3000/path")).is_err());
+        assert!(parse_cors_origins(Some("http://user:pass@localhost:3000")).is_err());
+        assert!(parse_cors_origins(Some("http://[::1]:3000")).is_ok());
+    }
+
+    #[test]
+    fn excerpts_never_split_utf8() {
+        let text = format!("{} end", "文".repeat(100));
+        let excerpt = response_excerpt(&text);
+        assert!(excerpt.is_char_boundary(excerpt.len()));
+        assert!(excerpt.starts_with(&"文".repeat(66)));
+        assert!(excerpt.ends_with("..."));
+    }
+
+    #[actix_web::test]
+    async fn invalid_config_does_not_replace_active_snapshot() {
+        let state = memory_state().await;
+        config_endpoints::set_config(state.clone(), Json(json!({"retrieval": {"top_k": 3}})))
+            .await
+            .expect("valid candidate should initialize");
+        let before = config_endpoints::get_config(state.clone())
+            .await
+            .expect("active config")
+            .0;
+
+        let error =
+            config_endpoints::set_config(state.clone(), Json(json!({"retrieval": {"top_k": 0}})))
+                .await
+                .expect_err("invalid candidate must be rejected");
+        assert!(error.to_string().contains("Top-k"));
+        let after = config_endpoints::get_config(state)
+            .await
+            .expect("active config remains available")
+            .0;
+        assert_eq!(before, after);
+    }
+
+    #[actix_web::test]
+    async fn failed_workspace_initialization_does_not_replace_active_snapshot() {
+        let state = memory_state().await;
+        config_endpoints::set_config(state.clone(), Json(json!({"retrieval": {"top_k": 3}})))
+            .await
+            .expect("valid candidate should initialize");
+
+        add_document(
+            state.clone(),
+            Json(AddDocumentRequest {
+                title: "Rollback document".to_string(),
+                content: "The active graph survives a failed replacement.".to_string(),
+            }),
+        )
+        .await
+        .expect("document should be added to the active pipeline");
+        build_graph(state.clone())
+            .await
+            .expect("active pipeline should build before replacement");
+        let before = config_endpoints::get_config(state.clone())
+            .await
+            .expect("active config")
+            .0;
+        let before_stats = graph_stats(state.clone()).await.0;
+
+        let base_dir =
+            std::env::temp_dir().join(format!("graphrag-server-corrupt-{}", uuid::Uuid::new_v4()));
+        let workspace = base_dir.join("active");
+        std::fs::create_dir_all(&workspace).expect("create corrupt workspace");
+        std::fs::write(workspace.join("graph.json"), b"{ definitely not graph json")
+            .expect("write corrupt graph");
+
+        let candidate = json!({
+            "retrieval": {"top_k": 3},
+            "auto_save": {
+                "enabled": true,
+                "base_dir": base_dir,
+                "workspace_name": "active"
+            }
+        });
+        let error = config_endpoints::set_config(state.clone(), Json(candidate))
+            .await
+            .expect_err("corrupt workspace must reject candidate");
+        assert!(error.to_string().contains("initialization"));
+
+        let after = config_endpoints::get_config(state.clone())
+            .await
+            .expect("active config remains available")
+            .0;
+        assert_eq!(before, after);
+        assert_eq!(graph_stats(state.clone()).await.0, before_stats);
+        let query = query(
+            state,
+            Json(QueryRequest {
+                query: "survives".to_string(),
+                top_k: 3,
+            }),
+        )
+        .await
+        .expect("previous graph remains queryable")
+        .0;
+        assert_eq!(query.results.len(), 1);
+        std::fs::remove_dir_all(base_dir).expect("remove corrupt workspace");
+    }
+
+    #[actix_web::test]
+    async fn production_routes_cover_config_documents_query_and_cors() {
+        let state = memory_state().await;
+        let origins = vec!["http://localhost:3000".to_string()];
+        let app = actix_web::test::init_service(
+            App::new()
+                .wrap(build_cors(Some(&origins)))
+                .app_data(state)
+                .configure(configure_actix_routes),
+        )
+        .await;
+
+        let response = actix_web::test::call_service(
+            &app,
+            actix_web::test::TestRequest::post()
+                .uri("/api/config")
+                .set_json(json!({"retrieval": {"top_k": 3}}))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(response.status(), actix_web::http::StatusCode::OK);
+
+        let response = actix_web::test::call_service(
+            &app,
+            actix_web::test::TestRequest::get()
+                .uri("/api/config")
+                .to_request(),
+        )
+        .await;
+        assert_eq!(response.status(), actix_web::http::StatusCode::OK);
+
+        let response = actix_web::test::call_service(
+            &app,
+            actix_web::test::TestRequest::post()
+                .uri("/api/documents")
+                .set_json(json!({
+                    "title": "日本語 document",
+                    "content": "日本語の内容と UTF-8 を検索できます。"
+                }))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(response.status(), actix_web::http::StatusCode::OK);
+
+        let response = actix_web::test::call_service(
+            &app,
+            actix_web::test::TestRequest::get()
+                .uri("/api/documents")
+                .to_request(),
+        )
+        .await;
+        assert_eq!(response.status(), actix_web::http::StatusCode::OK);
+
+        let query_response: QueryResponse = actix_web::test::call_and_read_body_json(
+            &app,
+            actix_web::test::TestRequest::post()
+                .uri("/api/query")
+                .set_json(json!({"query": "日本語", "topK": 3}))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(query_response.results.len(), 1);
+
+        let response = actix_web::test::call_service(
+            &app,
+            actix_web::test::TestRequest::default()
+                .method(actix_web::http::Method::OPTIONS)
+                .uri("/api/query")
+                .insert_header((header::ORIGIN, "http://localhost:3000"))
+                .insert_header((header::ACCESS_CONTROL_REQUEST_METHOD, "POST"))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(response.status(), actix_web::http::StatusCode::OK);
+        assert_eq!(
+            response
+                .headers()
+                .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+                .unwrap(),
+            "http://localhost:3000"
+        );
+    }
 }

@@ -198,21 +198,33 @@ impl BM25Retriever {
         }
     }
 
-    /// Tokenize text into terms
+    /// Tokenize text into terms (Unicode-aware, Italian + English)
+    ///
+    /// Splits on any non-alphanumeric char (so Italian elisions such as
+    /// `dell'oro` become `dell` + `oro`), drops stopwords and words shorter than
+    /// 3 chars, and applies a light suffix stripping (`monete`/`moneta` match).
     fn tokenize(&self, text: &str) -> Vec<String> {
         text.to_lowercase()
-            .split_whitespace()
-            .map(|s| {
-                // Remove punctuation and clean up
-                s.chars()
-                    .filter(|c| c.is_alphanumeric())
-                    .collect::<String>()
-            })
-            .filter(|s| !s.is_empty() && s.len() > 2 && !self.is_stop_word(s))
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|s| s.chars().count() > 2 && !self.is_stop_word(s))
+            .map(Self::light_stem)
             .collect()
     }
 
-    /// Check if a word is a stop word
+    /// Strip one trailing Italian vowel from words of 5+ chars so that common
+    /// gender/number inflections (`monete`, `moneta`, `monetario`) share a term.
+    fn light_stem(word: &str) -> String {
+        if word.chars().count() >= 5 {
+            if let Some(last) = word.chars().last() {
+                if matches!(last, 'a' | 'e' | 'i' | 'o') {
+                    return word[..word.len() - last.len_utf8()].to_string();
+                }
+            }
+        }
+        word.to_string()
+    }
+
+    /// Check if a word is a stop word (English + Italian)
     fn is_stop_word(&self, word: &str) -> bool {
         const STOP_WORDS: &[&str] = &[
             "the", "be", "to", "of", "and", "a", "in", "that", "have", "i", "it", "for", "not",
@@ -225,7 +237,24 @@ impl BM25Retriever {
             "after", "use", "two", "how", "our", "work", "first", "well", "way", "even", "new",
             "want", "because", "any", "these", "give", "day", "most", "us",
         ];
-        STOP_WORDS.contains(&word)
+        // Italian: articles, prepositions (simple + articulated), pronouns, auxiliaries,
+        // interrogatives, and the stems left behind by apostrophe elision.
+        const IT_STOP_WORDS: &[&str] = &[
+            "chi", "che", "cosa", "come", "dove", "quando", "perché", "perche", "quale", "quali",
+            "quanto", "quanta", "quanti", "quante", "il", "lo", "la", "gli", "le", "uno", "una",
+            "del", "dello", "della", "dei", "degli", "delle", "dal", "dallo", "dalla", "dai",
+            "dagli", "dalle", "nel", "nello", "nella", "nei", "negli", "nelle", "sul", "sullo",
+            "sulla", "sui", "sugli", "sulle", "con", "per", "tra", "fra", "non", "sono", "era",
+            "ero", "fu", "stato", "stata", "essere", "ha", "hanno", "ho", "hai", "abbiamo",
+            "aveva", "avere", "suo", "sua", "suoi", "sue", "loro", "mio", "mia", "tuo", "tua",
+            "questo", "questa", "questi", "queste", "quello", "quella", "quelli", "quelle",
+            "anche", "ma", "se", "poi", "mai", "più", "piu", "molto", "ogni", "ancora", "quindi",
+            "però", "dopo", "prima", "ora", "qui", "lui", "lei", "noi", "voi", "essi", "ciò",
+            "sia", "fare", "fatto", "dice", "disse", "ecco", "così", "cosi", "tutto", "tutti",
+            "tutta", "tutte", "stesso", "cui", "dell", "dall", "nell", "sull", "quell", "quest",
+            "anch", "senz", "com", "cos", "all", "alla", "alle", "allo", "agli", "ai",
+        ];
+        STOP_WORDS.contains(&word) || IT_STOP_WORDS.contains(&word)
     }
 
     /// Clear all indexed data
@@ -371,5 +400,55 @@ mod tests {
         let retriever = BM25Retriever::new();
         let results = retriever.search("test", 10);
         assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_tokenization_italian_elision_and_stopwords() {
+        let retriever = BM25Retriever::new();
+        let tokens =
+            retriever.tokenize("Dove seppellisce le monete dell'oro nel Campo dei miracoli?");
+        // elided article/preposition is split off and dropped, the noun is kept
+        assert!(tokens.contains(&"oro".to_string()), "{tokens:?}");
+        assert!(!tokens.iter().any(|t| t.starts_with("dell")), "{tokens:?}");
+        // Italian stopwords are removed
+        for sw in ["dove", "le", "nel", "dei"] {
+            assert!(!tokens.contains(&sw.to_string()), "{sw} in {tokens:?}");
+        }
+        assert!(
+            tokens.iter().any(|t| t.starts_with("miracol")),
+            "{tokens:?}"
+        );
+    }
+
+    #[test]
+    fn test_tokenization_counts_chars_not_bytes() {
+        let retriever = BM25Retriever::new();
+        // "sì" is 3 bytes but only 2 chars: it must be dropped like any 2-char word,
+        // while accented words of 3+ chars are kept.
+        let tokens = retriever.tokenize("sì città caffè ok");
+        assert!(tokens.iter().any(|t| t.starts_with("citt")), "{tokens:?}");
+        assert!(tokens.iter().any(|t| t.starts_with("caff")), "{tokens:?}");
+        assert!(!tokens.iter().any(|t| t == "sì" || t == "ok"), "{tokens:?}");
+    }
+
+    #[test]
+    fn test_italian_inflection_matches_via_light_stemming() {
+        let mut retriever = BM25Retriever::new();
+        retriever
+            .index_documents(&[
+                Document {
+                    id: "a".to_string(),
+                    content: "Pinocchio seppellisce una moneta nel campo".to_string(),
+                    metadata: HashMap::new(),
+                },
+                Document {
+                    id: "b".to_string(),
+                    content: "La fata parla con il burattino".to_string(),
+                    metadata: HashMap::new(),
+                },
+            ])
+            .unwrap();
+        let results = retriever.search("monete", 5);
+        assert_eq!(results.first().map(|r| r.doc_id.as_str()), Some("a"));
     }
 }

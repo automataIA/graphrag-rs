@@ -6,7 +6,9 @@
 //! ## Installation
 //!
 //! ```bash
-//! cargo install graphrag
+//! cargo install --path graphrag --features cli --locked
+//! # after the 0.3 release is published:
+//! cargo install graphrag --features cli --locked
 //! ```
 //!
 //! This installs the `graphrag` binary which is the full-featured TUI and CLI
@@ -16,7 +18,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! graphrag = "0.1"
+//! graphrag = "0.3"
 //! ```
 //!
 //! All types from `graphrag-core` are re-exported:

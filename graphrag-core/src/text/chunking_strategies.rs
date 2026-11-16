@@ -262,7 +262,7 @@ impl RustCodeChunkingStrategy {
 /// 2. Scoring chunk coherence using sentence embeddings
 /// 3. Finding optimal split points that maximize semantic unity
 ///
-/// **Performance Target**: +40% semantic coherence, -60% entity fragmentation
+/// **Performance Target**: improve semantic coherence and reduce entity fragmentation
 pub struct BoundaryAwareChunkingStrategy {
     #[cfg_attr(not(feature = "async"), allow(dead_code))]
     boundary_detector: crate::text::BoundaryDetector,

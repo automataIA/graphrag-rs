@@ -8,19 +8,23 @@
 //! - Jina AI API
 //! - Mistral AI API
 //! - Together AI API
-use graphrag_core::embeddings::{EmbeddingConfig, EmbeddingProvider, EmbeddingProviderType};
 
 #[cfg(feature = "huggingface-hub")]
 use graphrag_core::embeddings::huggingface::HuggingFaceEmbeddings;
 
 #[cfg(feature = "ureq")]
 use graphrag_core::embeddings::api_providers::HttpEmbeddingProvider;
+#[cfg(any(feature = "huggingface-hub", feature = "ureq"))]
+use graphrag_core::embeddings::EmbeddingProvider;
+#[cfg(feature = "ureq")]
+use graphrag_core::embeddings::{EmbeddingConfig, EmbeddingProviderType};
 
 #[tokio::main]
 async fn main() -> graphrag_core::core::error::Result<()> {
     println!("🚀 GraphRAG Core - Embedding Providers Demo\n");
 
     // Example text to embed
+    #[cfg(any(feature = "huggingface-hub", feature = "ureq"))]
     let text = "GraphRAG combines knowledge graphs with retrieval-augmented generation.";
 
     // 1. Hugging Face Hub - Free, downloadable models

@@ -17,10 +17,10 @@
 //! ## Usage
 //!
 //! ```rust
-//! use graphrag_rs::caching::{CachedLLMClient, CacheConfig, EvictionPolicy};
-//! use graphrag_rs::generation::MockLLM;
+//! use graphrag_core::caching::{CachedLLMClient, CacheConfig, EvictionPolicy};
+//! use graphrag_core::generation::MockLLM;
 //!
-//! # async fn example() -> graphrag_rs::Result<()> {
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Create cache configuration
 //! let cache_config = CacheConfig::builder()
 //!     .max_capacity(10_000)
@@ -30,16 +30,16 @@
 //!     .build();
 //!
 //! // Wrap any LLM with caching
-//! let base_llm = Box::new(MockLLM::new()?);
+//! let base_llm = MockLLM::new()?;
 //! let cached_llm = CachedLLMClient::new(base_llm, cache_config).await?;
 //!
 //! // Use exactly like any other LLM
-//! let response1 = cached_llm.complete("What is AI?").await?; // Cache miss
-//! let response2 = cached_llm.complete("What is AI?").await?; // Cache hit!
+//! let response1 = cached_llm.complete_async("What is AI?").await?; // Cache miss
+//! let response2 = cached_llm.complete_async("What is AI?").await?; // Cache hit!
 //!
 //! // Monitor cache performance
 //! let stats = cached_llm.cache_statistics();
-//! println!("Cache hit rate: {:.2}%", stats.hit_rate() * 100.0);
+//! println!("Cache hit rate: {:.2}%", stats.hit_rate * 100.0);
 //! # Ok(())
 //! # }
 //! ```

@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create workspace manager
     let workspace_dir = "./workspace_demo";
     let workspace = WorkspaceManager::new(workspace_dir)?;
-    println!("✅ Created workspace manager at: {}\n", workspace_dir);
+    println!("✅ Created workspace manager at: {workspace_dir}\n");
 
     // Create a simple knowledge graph
     let mut graph = KnowledgeGraph::new();
@@ -60,6 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Add a relationship
     let relationship = Relationship {
+        description: None,
         source: EntityId::new("rust".to_string()),
         target: EntityId::new("graphrag".to_string()),
         relation_type: "USES".to_string(),
@@ -140,13 +141,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     println!("🎉 Demo completed successfully!");
-    println!("\nℹ️  Workspace saved at: {}", workspace_dir);
+    println!("\nℹ️  Workspace saved at: {workspace_dir}");
     println!("   You can inspect the files:");
-    println!("   - {}/demo/graph.json (knowledge graph)", workspace_dir);
-    println!(
-        "   - {}/demo/metadata.toml (workspace metadata)",
-        workspace_dir
-    );
+    println!("   - {workspace_dir}/demo/graph.json (knowledge graph)");
+    println!("   - {workspace_dir}/demo/metadata.toml (workspace metadata)");
 
     Ok(())
 }

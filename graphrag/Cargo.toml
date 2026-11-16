@@ -2,6 +2,7 @@
 name = "graphrag"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -19,22 +20,71 @@ path = "src/lib.rs"
 [[bin]]
 name = "graphrag"
 path = "src/main.rs"
+required-features = ["cli"]
+
+[features]
+# The facade's library surface stays small and portable by default. Optional
+# integrations remain available through explicitly forwarded feature names.
+default = ["async", "memory-storage", "basic-retrieval"]
+cli = ["dep:graphrag-cli", "dep:tokio", "dep:color-eyre", "async"]
+
+# Core feature bundles are forwarded as well as individual integrations so
+# facade users can select the same supported configurations as core users.
+starter = ["graphrag-core/starter"]
+full = ["graphrag-core/full"]
+wasm-bundle = ["graphrag-core/wasm-bundle"]
+research = ["graphrag-core/research"]
+
+async = ["graphrag-core/async"]
+api = ["graphrag-core/api"]
+ureq = ["graphrag-core/ureq"]
+llm = ["graphrag-core/llm"]
+memory-storage = ["graphrag-core/memory-storage"]
+persistent-storage = ["graphrag-core/persistent-storage"]
+lancedb = ["graphrag-core/lancedb"]
+basic-retrieval = ["graphrag-core/basic-retrieval"]
+graph-retrieval = ["graphrag-core/graph-retrieval"]
+hybrid-retrieval = ["graphrag-core/hybrid-retrieval"]
+pagerank = ["graphrag-core/pagerank"]
+parallel-processing = ["graphrag-core/parallel-processing"]
+function-calling = ["graphrag-core/function-calling"]
+vector-hnsw = ["graphrag-core/vector-hnsw"]
+vector-memory = ["graphrag-core/vector-memory"]
+monitoring = ["graphrag-core/monitoring"]
+benchmarking = ["graphrag-core/benchmarking"]
+yaml-support = ["graphrag-core/yaml-support"]
+toml-support = ["graphrag-core/toml-support"]
+serde_json = ["graphrag-core/serde_json"]
+json5-support = ["graphrag-core/json5-support"]
+graphml-import = ["graphrag-core/graphml-import"]
+rdf-import = ["graphrag-core/rdf-import"]
+caching = ["graphrag-core/caching"]
+incremental = ["graphrag-core/incremental"]
+rograg = ["graphrag-core/rograg"]
+lightrag = ["graphrag-core/lightrag"]
+lazygraphrag = ["graphrag-core/lazygraphrag"]
+e2graphrag = ["graphrag-core/e2graphrag"]
+tobugraph = ["graphrag-core/tobugraph"]
+redis_storage = ["graphrag-core/redis_storage"]
+leiden = ["graphrag-core/leiden"]
+cross-encoder = ["graphrag-core/cross-encoder"]
+qdrant = ["graphrag-core/qdrant"]
+code-chunking = ["graphrag-core/code-chunking"]
+neural-embeddings = ["graphrag-core/neural-embeddings"]
+huggingface-hub = ["graphrag-core/huggingface-hub"]
+corpus-processing = ["graphrag-core/corpus-processing"]
+gliner = ["graphrag-core/gliner"]
+gliner2 = ["graphrag-core/gliner2"]
+hierarchical-config = ["graphrag-core/hierarchical-config"]
+wasm = ["graphrag-core/wasm"]
+cuda = ["graphrag-core/cuda"]
+metal = ["graphrag-core/metal"]
 
 [dependencies]
-graphrag-core = { version = "0.2.0", path = "../graphrag-core", features = [
-    "async",
-    "pagerank",
-    "lightrag",
-    "leiden",
-    "caching",
-    "parallel-processing",
-    "ollama",
-    "rograg",
-    "cross-encoder",
-    "incremental",
-    "json5-support",
-    "vector-hnsw",
-] }
-graphrag-cli = { version = "0.2.0", path = "../graphrag-cli" }
-tokio = { version = "1.0", features = ["full"] }
-color-eyre = "0.6"
+graphrag-core = { version = "0.3.0", path = "../graphrag-core", default-features = false }
+graphrag-cli = { version = "0.3.0", path = "../graphrag-cli", optional = true }
+tokio = { version = "1.0", features = ["full"], optional = true }
+color-eyre = { version = "0.6", optional = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

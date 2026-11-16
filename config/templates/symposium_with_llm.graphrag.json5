@@ -5,7 +5,7 @@
   // 🎯 APPROACH: LLM-based extraction with gleaning + semantic embeddings
   // 💰 COST: ~$5-10 indexing, ~$0.50 per query (full LLM pipeline)
   // ⏱️ TIME: 3-5 minutes processing, 2-3s per query
-  // 🎓 USE CASE: Maximum quality philosophical analysis
+  // Performance and quality depend on the selected pipeline and corpus.
   // ==========================================================================
 
   "$schema": "../schema/graphrag-config.schema.json",
@@ -32,11 +32,11 @@
   // SEMANTIC PIPELINE: Full LLM Components
   // ---------------------------------------------------------------------------
   semantic: {
-    // Neural embeddings via Ollama
+    // Neural embeddings via llama.cpp
     embeddings: {
-      backend: "ollama",                // Use Ollama for embeddings
-      model_name: "nomic-embed-text",
-      embedding_dimensions: 768,        // nomic-embed-text dimension
+      backend: "llama_cpp",                // Use llama.cpp for embeddings
+      model_name: "multilingual-e5-small",
+      embedding_dimensions: 384,        // nomic-embed-text dimension
       normalize_embeddings: true
     },
 
@@ -45,7 +45,7 @@
       use_gleaning: false,
       max_gleaning_rounds: 2,           // Deep concept extraction
 
-      llm_model: "qwen3:8b-q4_k_m",
+      llm_model: "qwen3.5-9b",
       llm_temperature: 0.1,             // Low for consistent extraction
       llm_max_tokens: 1500,
 
@@ -78,7 +78,7 @@
       top_k: 10,
 
       use_hnsw_index: true,
-      hnsw_ef_construction: 300,        // Higher for quality
+      hnsw_ef_construction: 300,        // Higher for the selected workload
       hnsw_m: 24,                       // More connections
       hnsw_ef_search: 50,
 
@@ -154,7 +154,7 @@
     // LLM config per riassunti astrattivi
     llm_config: {
       enabled: true,                        // Usa LLM per riassunti di qualità
-      model_name: "qwen3:8b-q4_k_m",        // Modello bilanciato qualità/velocità
+      model_name: "qwen3.5-9b",        // Modello bilanciato qualità/velocità
       temperature: 0.3,                     // Bilanciamento creatività/accuratezza
       max_tokens: 180                       // Limita lunghezza riassunti
     },
@@ -170,24 +170,18 @@
   },
 
   // ---------------------------------------------------------------------------
-  // OLLAMA: Required for Full LLM Pipeline
+  // LLM (llama.cpp): Required for Full LLM Pipeline
   // ---------------------------------------------------------------------------
-  ollama: {
+  llm: {
     enabled: true,                      // MUST be enabled for semantic
-    host: "http://localhost",
-    port: 11434,
-    chat_model: "qwen3:8b-q4_k_m",
-    embedding_model: "nomic-embed-text",
+    base_url: "http://127.0.0.1:8080/v1",
+    embedding_base_url: "http://127.0.0.1:8081/v1",
+    chat_model: "qwen3.5-9b",
+    embedding_model: "multilingual-e5-small",
     timeout_seconds: 90,
     max_retries: 3,
     fallback_to_hash: false,            // Don't fallback for semantic
 
-    generation: {
-      temperature: 0.2,                 // Balanced for philosophy
-      top_p: 0.9,
-      max_tokens: 1500,
-      stream: false
-    }
   },
 
   // ---------------------------------------------------------------------------
@@ -229,7 +223,7 @@
   },
 
   // ---------------------------------------------------------------------------
-  // PERFORMANCE: Balanced for Quality
+  // Performance and quality depend on the selected pipeline and corpus.
   // ---------------------------------------------------------------------------
   performance: {
     batch_processing: true,
@@ -277,7 +271,7 @@
 //   - Strategy: Progressive (extractive base + LLM abstractive)
 //   - Levels: 3 (chunk → section → document)
 //   - Methods: TF-IDF + TextRank (extractive) + LLM (abstractive)
-//   - Quality: High-quality philosophical summaries
+// Performance and quality depend on the selected pipeline and corpus.
 //
 // 💰 COSTS (Symposium 35k words):
 //   - Indexing: ~$6-12 (LLM extraction + gleaning + embeddings + summarization)
@@ -289,13 +283,13 @@
 //   - Retrieval: 2-3 seconds (embedding + vector search + LLM)
 //   - Query total: ~2-3 seconds
 //
-// 🎯 QUALITY: ~95% accuracy (maximum philosophical depth)
-//   - Summaries: High quality, contextually rich
+// Performance and quality depend on the selected pipeline and corpus.
+// Performance and quality depend on the selected pipeline and corpus.
 //   - Hierarchical structure improves query response
 //
 // ⚖️ TRADE-OFFS:
 //   - Higher cost vs algorithmic approach (+$1-2 for summaries)
 //   - Longer processing time (4-7 min vs 10 sec)
 //   - Best for: Deep analysis, academic research, complex queries
-//   - Summaries improve answer quality and context understanding
+// Performance and quality depend on the selected pipeline and corpus.
 // ==========================================================================

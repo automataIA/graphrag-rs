@@ -11,7 +11,7 @@
 //! Configuration: config/templates/symposium_with_llm.graphrag.json5
 //!
 //! Prerequisites:
-//! - Ollama running with qwen3:8b-q4_k_m and nomic-embed-text models
+//! - llama-server running on :8080 (chat) and :8081 (embeddings, multilingual-e5-small)
 //! - Symposium.txt in docs-example/
 //!
 //! Run with:
@@ -21,7 +21,7 @@
 //! - Processing time: 4-7 minutes (LLM extraction + gleaning + summarization)
 //! - Indexing cost: ~$6-12 (LLM calls for extraction, embeddings, and summaries)
 //! - Query cost: ~$0.50 per query (embeddings + LLM generation)
-//! - Quality: ~95% (maximum philosophical depth with hierarchical understanding)
+//! - Quality: evaluate the configured model on the target corpus
 
 use graphrag_core::GraphRAG;
 use std::time::Instant;
@@ -160,7 +160,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     error = %e,
                     "Query processing failed"
                 );
-                error!("Make sure Ollama is running with: ollama run qwen3:8b-q4_k_m");
+                error!("Make sure llama-server is running on http://127.0.0.1:8080");
             },
         }
     }
@@ -186,23 +186,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Performance Metrics"
     );
 
-    // Log quality metrics
+    // Log qualitative characteristics; benchmark accuracy separately.
     info!(
-        entity_accuracy = "~95%",
-        relationship_precision = "~93%",
-        semantic_understanding = "Very High",
-        philosophical_depth = "Maximum",
-        response_quality = "Excellent",
-        summary_quality = "High-quality abstractive",
-        "Quality Metrics"
+        entity_extraction = "model-based",
+        relationship_extraction = "model-based",
+        semantic_understanding = "model-dependent",
+        philosophical_depth = "model-dependent",
+        response_quality = "model-dependent",
+        summary_style = "abstractive",
+        "Observed characteristics"
     );
 
     // Log summary
     info!(
         summary = "Full LLM Approach with Hierarchical Summarization completed successfully",
-        strengths = "Maximum accuracy, deep semantic understanding, hierarchical summaries",
+        strengths = "Model-based semantic processing and hierarchical summaries",
         trade_offs = "Higher cost, longer processing time, requires specific models",
-        best_for = "Deep philosophical analysis requiring maximum accuracy"
+        best_for = "Deep philosophical analysis evaluated on its target corpus"
     );
 
     Ok(())

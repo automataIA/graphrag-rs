@@ -1,0 +1,1 @@
+{{#include ../../../graphrag/README.md}}

@@ -171,10 +171,20 @@ fn create_approach_configurations() -> Vec<(String, Config)> {
 /// Create pure algorithmic configuration (no LLM)
 fn create_pure_algorithmic_config() -> Config {
     Config {
-        chunk_size: 800,
-        chunk_overlap: 200,
         max_entities_per_chunk: Some(20),
-        top_k_results: Some(10),
+        text: graphrag_core::config::TextConfig {
+            chunk_size: 800,
+            chunk_overlap: 200,
+            languages: vec!["en".to_string()],
+        },
+        retrieval: graphrag_core::config::RetrievalConfig {
+            top_k: 10,
+            search_algorithm: "hybrid".to_string(),
+            hyde: false,
+            graph_facts: false,
+            map_reduce: false,
+            map_reduce_chunks: 60,
+        },
         zero_cost_approach: ZeroCostApproachConfig {
             approach: "pure_algorithmic".to_string(),
             pure_algorithmic: graphrag_core::config::PureAlgorithmicConfig {
@@ -451,7 +461,7 @@ fn demo_budget_optimization() -> Result<()> {
                 println!("   Features: Enhanced entity recognition, moderate LLM usage");
             }
             "lazy_graphrag" => {
-                println!("   Features: State-of-the-art quality, query-time LLM optimization");
+                println!("   Features: query-time LLM optimization");
             }
             _ => {}
         }

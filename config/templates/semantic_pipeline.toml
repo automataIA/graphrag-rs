@@ -1,16 +1,16 @@
 # =============================================================================
 # SEMANTIC PIPELINE CONFIGURATION
-# Neural/LLM-based approach for high-quality entity extraction and retrieval
+# Performance and quality depend on the selected pipeline and corpus.
 # =============================================================================
 #
 # This template demonstrates a PURE SEMANTIC pipeline using:
-# - Neural embeddings (HuggingFace, OpenAI, Ollama)
+# - Neural embeddings (HuggingFace, OpenAI, llama.cpp)
 # - LLM-based entity extraction with gleaning (iterative refinement)
 # - Vector similarity search (cosine similarity, HNSW indexing)
 # - Semantic graph construction with PageRank
 #
-# Best for: High-quality analysis, nuanced understanding, complex relationships
-# Requires: Ollama (or OpenAI API) for LLM inference
+# Performance and quality depend on the selected pipeline and corpus.
+# Requires: llama.cpp (or another OpenAI-compatible API) for LLM inference
 # Resource usage: High (GPU recommended for neural embeddings)
 #
 # =============================================================================
@@ -39,23 +39,23 @@ enable_profiling = true
 
 # --- SEMANTIC EMBEDDINGS: Neural Vector Representations ---
 [semantic.embeddings]
-# Backend options: "huggingface", "openai", "voyage", "cohere", "jina", "ollama"
+# Backend options: "huggingface", "openai", "voyage", "cohere", "jina", "llama_cpp"
 backend = "huggingface"
 
-# HuggingFace models (high-quality, open-source)
+# Performance and quality depend on the selected pipeline and corpus.
 model_name = "sentence-transformers/all-MiniLM-L6-v2"  # Fast, balanced
 # Alternative models:
-# - "sentence-transformers/all-mpnet-base-v2"  # Higher quality, slower
+# Performance and quality depend on the selected pipeline and corpus.
 # - "BAAI/bge-small-en-v1.5"                   # Good for English
 # - "intfloat/multilingual-e5-large"           # Multilingual support
 
 embedding_dimensions = 384  # Match model output dimensions
 normalize_embeddings = true  # Normalize for cosine similarity
 
-# Ollama embeddings (if using local Ollama)
-# backend = "ollama"
-# model_name = "nomic-embed-text"
-# embedding_dimensions = 768
+# llama.cpp embeddings (if using a local llama-server)
+# backend = "llama_cpp"
+# model_name = "multilingual-e5-small"
+# embedding_dimensions = 384
 
 # OpenAI embeddings (if using OpenAI API)
 # backend = "openai"
@@ -65,12 +65,12 @@ normalize_embeddings = true  # Normalize for cosine similarity
 
 # --- SEMANTIC ENTITY EXTRACTION: LLM-based with Gleaning ---
 [semantic.entity_extraction]
-# Use LLM-based extraction for high-quality entity recognition
+# Performance and quality depend on the selected pipeline and corpus.
 use_gleaning = true
 max_gleaning_rounds = 3  # Iterative refinement passes
 
 # LLM configuration for entity extraction
-llm_model = "llama3.1:8b"  # Ollama model for extraction
+llm_model = "qwen3.5-9b"  # llama-server --alias for extraction
 llm_temperature = 0.1      # Low for consistent extraction
 llm_max_tokens = 1500      # Higher for detailed entity descriptions
 
@@ -163,23 +163,17 @@ extract_position = true
 calculate_confidence = true
 
 # -----------------------------------------------------------------------------
-# OLLAMA: LLM Service Configuration
+# LLM (llama.cpp): LLM Service Configuration
 # -----------------------------------------------------------------------------
-[ollama]
+[llm]
 enabled = true
-host = "http://localhost"
-port = 11434
-chat_model = "llama3.1:8b"
-embedding_model = "nomic-embed-text"
+base_url = "http://127.0.0.1:8080/v1"
+embedding_base_url = "http://127.0.0.1:8081/v1"
+chat_model = "qwen3.5-9b"
+embedding_model = "multilingual-e5-small"
 timeout_seconds = 60
 max_retries = 3
 fallback_to_hash = false
-
-[ollama.generation]
-temperature = 0.2         # Low for consistent analysis
-top_p = 0.9
-max_tokens = 1000
-stream = false
 
 # -----------------------------------------------------------------------------
 # QUERY PROCESSING: Advanced Query Understanding
@@ -231,7 +225,7 @@ memory_limit_mb = 4096
 cache_embeddings = true
 
 # -----------------------------------------------------------------------------
-# MONITORING: Quality Tracking
+# Performance and quality depend on the selected pipeline and corpus.
 # -----------------------------------------------------------------------------
 [monitoring]
 enabled = true
@@ -243,7 +237,7 @@ log_insights = true
 # SEMANTIC PIPELINE SUMMARY:
 #
 # ✅ STRENGTHS:
-# - High-quality entity extraction with LLM-based gleaning
+# Performance and quality depend on the selected pipeline and corpus.
 # - Nuanced semantic understanding through neural embeddings
 # - Captures complex relationships and implicit connections
 # - Excellent for conceptual analysis and abstract reasoning
@@ -252,7 +246,7 @@ log_insights = true
 # ⚠️  CONSIDERATIONS:
 # - Requires GPU for optimal neural embedding performance
 # - Higher computational cost and latency
-# - Needs Ollama or OpenAI API for LLM inference
+# - Needs llama.cpp or another OpenAI-compatible API for LLM inference
 # - May require fine-tuning for domain-specific terminology
 #
 # 🎯 BEST USE CASES:
@@ -263,8 +257,8 @@ log_insights = true
 # - Domain-specific knowledge bases
 #
 # 🚀 QUICK START:
-# 1. Install Ollama: https://ollama.ai/
-# 2. Pull models: ollama pull llama3.1:8b && ollama pull nomic-embed-text
+# 1. Install llama.cpp: https://github.com/ggml-org/llama.cpp
+# 2. Start servers: llama-server -m Qwen3.5-9B-UD-Q5_K_XL.gguf --alias qwen3.5-9b --port 8080 ; llama-server -m multilingual-e5-small.gguf --embeddings --pooling mean --alias multilingual-e5-small --port 8081
 # 3. Run pipeline: cargo run --example your_example -- semantic_pipeline.toml
 #
 # =============================================================================

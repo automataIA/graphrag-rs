@@ -17,6 +17,17 @@ use ratatui::layout::{Constraint, Direction, Layout};
 use std::{path::PathBuf, time::Instant};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
+/// Return a UTF-8-safe prefix whose encoded length is at most `max_bytes`.
+fn utf8_prefix(value: &str, max_bytes: usize) -> &str {
+    let end = value
+        .char_indices()
+        .take_while(|(index, character)| *index + character.len_utf8() <= max_bytes)
+        .map(|(index, character)| index + character.len_utf8())
+        .last()
+        .unwrap_or(0);
+    &value[..end.min(value.len())]
+}
+
 /// Main application state
 pub struct App {
     /// Should the app quit?
@@ -419,12 +430,11 @@ impl App {
             Err(e) => {
                 self.action_tx.send(Action::StopProgress)?;
                 self.action_tx.send(Action::ConfigLoadError(format!(
-                    "Failed to load config: {}",
-                    e
+                    "Failed to load config: {e}"
                 )))?;
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
-                    format!("Config load failed: {}", e),
+                    format!("Config load failed: {e}"),
                 ))?;
             },
         }
@@ -457,7 +467,7 @@ impl App {
         ]);
 
         self.action_tx
-            .send(Action::StartProgress(format!("Executing query: {}", query)))?;
+            .send(Action::StartProgress(format!("Executing query: {query}")))?;
 
         let start = Instant::now();
 
@@ -471,7 +481,7 @@ impl App {
                     timestamp: Utc::now(),
                     duration_ms: duration.as_millis(),
                     results_count: raw_results.len(),
-                    results_preview: vec![answer[..answer.len().min(200)].to_string()],
+                    results_preview: vec![utf8_prefix(&answer, 200).to_string()],
                 };
 
                 self.query_history.add_entry(entry.clone());
@@ -499,10 +509,10 @@ impl App {
             Err(e) => {
                 self.action_tx.send(Action::StopProgress)?;
                 self.action_tx
-                    .send(Action::QueryError(format!("Query failed: {}", e)))?;
+                    .send(Action::QueryError(format!("Query failed: {e}")))?;
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
-                    format!("Query error: {}", e),
+                    format!("Query error: {e}"),
                 ))?;
             },
         }
@@ -530,7 +540,7 @@ impl App {
         ]);
 
         self.action_tx
-            .send(Action::StartProgress(format!("EXPLAIN query: {}", query)))?;
+            .send(Action::StartProgress(format!("EXPLAIN query: {query}")))?;
 
         let start = Instant::now();
 
@@ -543,7 +553,7 @@ impl App {
                     timestamp: Utc::now(),
                     duration_ms: duration.as_millis(),
                     results_count: result.sources.len(),
-                    results_preview: vec![result.answer[..result.answer.len().min(200)].to_string()],
+                    results_preview: vec![utf8_prefix(&result.answer, 200).to_string()],
                 };
                 self.query_history.add_entry(entry.clone());
                 self.info_panel
@@ -566,8 +576,8 @@ impl App {
                         src.relevance_score,
                         src.id
                     ));
-                    let excerpt = &src.excerpt[..src.excerpt.len().min(120)];
-                    raw_display.push(format!("   {}", excerpt));
+                    let excerpt = utf8_prefix(&src.excerpt, 120);
+                    raw_display.push(format!("   {excerpt}"));
                     raw_display.push(String::new());
                 }
                 self.raw_results_viewer.set_content(raw_display);
@@ -602,10 +612,10 @@ impl App {
             Err(e) => {
                 self.action_tx.send(Action::StopProgress)?;
                 self.action_tx
-                    .send(Action::QueryError(format!("Query failed: {}", e)))?;
+                    .send(Action::QueryError(format!("Query failed: {e}")))?;
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
-                    format!("Query error: {}", e),
+                    format!("Query error: {e}"),
                 ))?;
             },
         }
@@ -635,7 +645,7 @@ impl App {
         ]);
 
         self.action_tx
-            .send(Action::StartProgress(format!("REASON query: {}", query)))?;
+            .send(Action::StartProgress(format!("REASON query: {query}")))?;
 
         let start = Instant::now();
 
@@ -648,7 +658,7 @@ impl App {
                     timestamp: Utc::now(),
                     duration_ms: duration.as_millis(),
                     results_count: 0,
-                    results_preview: vec![answer[..answer.len().min(200)].to_string()],
+                    results_preview: vec![utf8_prefix(&answer, 200).to_string()],
                 };
                 self.query_history.add_entry(entry.clone());
                 self.info_panel
@@ -672,10 +682,10 @@ impl App {
             Err(e) => {
                 self.action_tx.send(Action::StopProgress)?;
                 self.action_tx
-                    .send(Action::QueryError(format!("Query failed: {}", e)))?;
+                    .send(Action::QueryError(format!("Query failed: {e}")))?;
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
-                    format!("Query error: {}", e),
+                    format!("Query error: {e}"),
                 ))?;
             },
         }
@@ -731,7 +741,7 @@ impl App {
                         other => {
                             self.action_tx.send(Action::SetStatus(
                                 StatusType::Error,
-                                format!("Unknown mode '{}'. Use: ask | explain | reason", other),
+                                format!("Unknown mode '{other}'. Use: ask | explain | reason"),
                             ))?;
                             return Ok(());
                         },
@@ -758,7 +768,7 @@ impl App {
             Err(e) => {
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
-                    format!("Command error: {}", e),
+                    format!("Command error: {e}"),
                 ))?;
             },
         }
@@ -811,7 +821,7 @@ impl App {
                 self.action_tx.send(Action::StopProgress)?;
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
-                    format!("Failed to load document: {}", e),
+                    format!("Failed to load document: {e}"),
                 ))?;
             },
         }
@@ -860,7 +870,7 @@ impl App {
                 self.action_tx.send(Action::StopProgress)?;
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
-                    format!("Failed to clear graph: {}", e),
+                    format!("Failed to clear graph: {e}"),
                 ))?;
             },
         }
@@ -907,7 +917,7 @@ impl App {
                 self.action_tx.send(Action::StopProgress)?;
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
-                    format!("Failed to rebuild graph: {}", e),
+                    format!("Failed to rebuild graph: {e}"),
                 ))?;
             },
         }
@@ -987,7 +997,7 @@ impl App {
             Err(e) => {
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
-                    format!("Failed to list entities: {}", e),
+                    format!("Failed to list entities: {e}"),
                 ))?;
             },
         }
@@ -1006,8 +1016,7 @@ impl App {
         }
 
         self.action_tx.send(Action::StartProgress(format!(
-            "Loading workspace '{}'...",
-            name
+            "Loading workspace '{name}'..."
         )))?;
 
         // Get workspace directory from workspace_manager (default: ~/.graphrag/workspaces)
@@ -1036,7 +1045,7 @@ impl App {
 
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Success,
-                    format!("Workspace '{}' loaded", name),
+                    format!("Workspace '{name}' loaded"),
                 ))?;
 
                 self.update_stats().await;
@@ -1045,7 +1054,7 @@ impl App {
                 self.action_tx.send(Action::StopProgress)?;
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
-                    format!("Failed to load workspace: {}", e),
+                    format!("Failed to load workspace: {e}"),
                 ))?;
             },
         }
@@ -1075,7 +1084,7 @@ impl App {
             Err(e) => {
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
-                    format!("Failed to list workspaces: {}", e),
+                    format!("Failed to list workspaces: {e}"),
                 ))?;
             },
         }
@@ -1094,8 +1103,7 @@ impl App {
         }
 
         self.action_tx.send(Action::StartProgress(format!(
-            "Saving workspace '{}'...",
-            name
+            "Saving workspace '{name}'..."
         )))?;
 
         let workspace_dir = dirs::data_dir()
@@ -1125,14 +1133,14 @@ impl App {
 
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Success,
-                    format!("Workspace '{}' saved", name),
+                    format!("Workspace '{name}' saved"),
                 ))?;
             },
             Err(e) => {
                 self.action_tx.send(Action::StopProgress)?;
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
-                    format!("Failed to save workspace: {}", e),
+                    format!("Failed to save workspace: {e}"),
                 ))?;
             },
         }
@@ -1143,8 +1151,7 @@ impl App {
     /// Handle deleting workspace
     async fn handle_delete_workspace(&mut self, name: String) -> Result<()> {
         self.action_tx.send(Action::StartProgress(format!(
-            "Deleting workspace '{}'...",
-            name
+            "Deleting workspace '{name}'..."
         )))?;
 
         let workspace_dir = dirs::data_dir()
@@ -1171,14 +1178,14 @@ impl App {
 
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Success,
-                    format!("Workspace '{}' deleted", name),
+                    format!("Workspace '{name}' deleted"),
                 ))?;
             },
             Err(e) => {
                 self.action_tx.send(Action::StopProgress)?;
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
-                    format!("Failed to delete workspace: {}", e),
+                    format!("Failed to delete workspace: {e}"),
                 ))?;
             },
         }
@@ -1207,7 +1214,7 @@ impl App {
                 Err(e) => {
                     self.action_tx.send(Action::SetStatus(
                         StatusType::Error,
-                        format!("Cannot read config file: {}", e),
+                        format!("Cannot read config file: {e}"),
                     ))?;
                 },
             }
@@ -1263,7 +1270,7 @@ impl App {
             Err(e) => {
                 self.action_tx.send(Action::SetStatus(
                     StatusType::Error,
-                    format!("Export failed: {}", e),
+                    format!("Export failed: {e}"),
                 ))?;
             },
         }
@@ -1275,5 +1282,19 @@ impl App {
         if let Some(stats) = self.graphrag.get_stats().await {
             self.info_panel.set_stats(stats);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::utf8_prefix;
+
+    #[test]
+    fn utf8_prefix_never_splits_multibyte_characters() {
+        let value = "Città — 東京";
+        assert_eq!(utf8_prefix(value, 6), "Città");
+        assert_eq!(utf8_prefix(value, 7), "Città ");
+        assert_eq!(utf8_prefix(value, 0), "");
+        assert_eq!(utf8_prefix("東京", 1), "");
     }
 }

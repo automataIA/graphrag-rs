@@ -39,7 +39,7 @@
       }
     },
     "entity_extraction": {
-      "model_name": "llama3.1:8b",
+      "model_name": "qwen3.5-9b",
       "temperature": 0.2,
       "max_tokens": 1200,
       "entity_types": [
@@ -77,8 +77,8 @@
     "enable_persistence": true
   },
   "models": {
-    "primary_llm": "llama3.1:8b",
-    "embedding_model": "nomic-embed-text",
+    "primary_llm": "qwen3.5-9b",
+    "embedding_model": "multilingual-e5-small",
     "max_context_length": 4096,
     "llm_params": {
       "temperature": 0.2,
@@ -93,12 +93,12 @@
     "worker_threads": 4,
     "memory_limit_mb": 512
   },
-  "ollama": {
+  "llm": {
     "enabled": true,
-    "host": "http://localhost",
-    "port": 11434,
-    "chat_model": "llama3.1:8b",
-    "embedding_model": "nomic-embed-text",
+    "base_url": "http://127.0.0.1:8080/v1",
+    "embedding_base_url": "http://127.0.0.1:8081/v1",
+    "chat_model": "qwen3.5-9b",
+    "embedding_model": "multilingual-e5-small",
     "timeout_seconds": 60,
     "max_retries": 3,
     "fallback_to_hash": false,

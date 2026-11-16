@@ -108,9 +108,7 @@ fn test_dynamic_weight_conceptual_boost() {
 
     assert!(
         (weight - expected_weight).abs() < 0.01,
-        "Expected weight ~{} but got {}",
-        expected_weight,
-        weight
+        "Expected weight ~{expected_weight} but got {weight}"
     );
 }
 
@@ -182,9 +180,7 @@ fn test_dynamic_weight_causal_boost() {
 
     assert!(
         (weight - expected_weight).abs() < 0.01,
-        "Expected weight ~{} but got {}",
-        expected_weight,
-        weight
+        "Expected weight ~{expected_weight} but got {weight}"
     );
 }
 
@@ -233,9 +229,7 @@ fn test_dynamic_weight_semantic_boost() {
 
     assert!(
         (weight - expected_weight).abs() < 0.01,
-        "Expected weight ~{} but got {}",
-        expected_weight,
-        weight
+        "Expected weight ~{expected_weight} but got {weight}"
     );
 }
 
@@ -293,16 +287,13 @@ fn test_dynamic_weight_combined_boosts() {
 
     assert!(
         weight > rel.confidence * 2.0,
-        "Expected significant boost with all factors, got weight {}",
-        weight
+        "Expected significant boost with all factors, got weight {weight}"
     );
 
     // Verify weight is within reasonable range
     assert!(
         weight > expected_weight * 0.9 && weight < expected_weight * 1.1,
-        "Expected weight ~{} but got {}",
-        expected_weight,
-        weight
+        "Expected weight ~{expected_weight} but got {weight}"
     );
 }
 
@@ -346,8 +337,7 @@ fn test_cosine_similarity_identical_vectors() {
     // weight = 0.5 * (1.0 + 1.0) = 1.0
     assert!(
         (weight - 1.0).abs() < 0.01,
-        "Expected weight 1.0 for identical vectors, got {}",
-        weight
+        "Expected weight 1.0 for identical vectors, got {weight}"
     );
 }
 
@@ -388,7 +378,6 @@ fn test_cosine_similarity_orthogonal_vectors() {
     // weight = 0.5 * (1.0 + 0.0) = 0.5
     assert!(
         (weight - 0.5).abs() < 0.01,
-        "Expected weight 0.5 for orthogonal vectors, got {}",
-        weight
+        "Expected weight 0.5 for orthogonal vectors, got {weight}"
     );
 }

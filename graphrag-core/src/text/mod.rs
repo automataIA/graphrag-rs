@@ -74,6 +74,42 @@ pub struct TextProcessor {
     performance_monitor: PerformanceMonitor,
 }
 
+/// Byte offset and label of the explicit chapter markers of a plain-text document (see
+/// [`TextProcessor::assign_chapters`]); empty when no marker family has two lines.
+fn plain_text_chapter_starts(content: &str) -> Vec<(usize, String)> {
+    use regex::Regex;
+    use std::sync::OnceLock;
+    static FAMILIES: OnceLock<[Regex; 3]> = OnceLock::new();
+    let families = FAMILIES.get_or_init(|| {
+        [
+            r"^[IVXLCDM]+\.$",
+            r"(?i)^(capitolo|chapter|parte|part)\s+(\d+|[IVXLCDM]+)\b",
+            r"^\d+\.$",
+        ]
+        .map(|p| Regex::new(p).expect("static regex literal"))
+    });
+    let mut offset = 0;
+    let lines: Vec<(usize, &str)> = content
+        .split('\n')
+        .map(|line| {
+            let start = offset;
+            offset += line.len() + 1;
+            (start, line.trim())
+        })
+        .collect();
+    for re in families {
+        let found: Vec<(usize, String)> = lines
+            .iter()
+            .filter(|(_, line)| re.is_match(line))
+            .map(|(start, line)| (*start, (*line).to_string()))
+            .collect();
+        if found.len() >= 2 {
+            return found;
+        }
+    }
+    Vec::new()
+}
+
 impl TextProcessor {
     /// Create a new text processor
     pub fn new(chunk_size: usize, chunk_overlap: usize) -> Result<Self> {
@@ -215,6 +251,38 @@ impl TextProcessor {
         Ok(chunks)
     }
 
+    /// Set only `metadata.chapter` on `chunks` from the chapter headings of `document`;
+    /// every other field is left untouched. A chunk belongs to the last chapter heading
+    /// that starts at or before its own start; chunks before the first heading keep none.
+    ///
+    /// Markdown/HTML documents use the layout parser (first level of the heading path).
+    /// For plain text the generic heuristics are too noisy on prose (capitalised first
+    /// words, ALL CAPS lines), so only explicit chapter markers count: the first of these
+    /// families with at least two lines wins, otherwise no chapter is set:
+    /// 1. lines holding only a roman numeral and a dot (`I.`, `XXXVI.`);
+    /// 2. lines `Capitolo|Chapter|Parte|Part <number or roman numeral>`;
+    /// 3. lines holding only an arabic number and a dot (`1.`).
+    pub fn assign_chapters(document: &Document, chunks: &mut [TextChunk]) {
+        let parser = LayoutParserFactory::create_for_document(document);
+        if parser.name() != "PlainTextLayoutParser" {
+            let structure = parser.parse(&document.content);
+            for chunk in chunks {
+                if let Some(idx) = structure.find_section_containing_offset(chunk.start_offset) {
+                    chunk.metadata.chapter = structure.get_heading_path(idx).into_iter().next();
+                }
+            }
+            return;
+        }
+
+        let starts = plain_text_chapter_starts(&document.content);
+        for chunk in chunks {
+            let n = starts.partition_point(|(offset, _)| *offset <= chunk.start_offset);
+            if n > 0 {
+                chunk.metadata.chapter = Some(starts[n - 1].1.clone());
+            }
+        }
+    }
+
     /// Create a default enricher for document processing
     pub fn create_default_enricher(document: &Document) -> ChunkEnricher {
         let parser = LayoutParserFactory::create_for_document(document);
@@ -316,7 +384,7 @@ impl TextProcessor {
                     || search_text
                         .chars()
                         .nth(next_pos)
-                        .map_or(true, |c| c.is_whitespace())
+                        .is_none_or(|c| c.is_whitespace())
                 {
                     last_boundary = Some(safe_start + safe_search_start + next_pos);
                 }
@@ -567,6 +635,57 @@ impl LanguageDetector {
 mod tests {
     use super::*;
     use crate::core::DocumentId;
+
+    #[test]
+    fn chapter_starts_use_the_first_family_with_two_markers() {
+        let roman = "Intro\nI.\nuno\nII.\ndue\nE ancora\nFINE.\n";
+        let starts = plain_text_chapter_starts(roman);
+        assert_eq!(
+            starts.iter().map(|s| s.1.as_str()).collect::<Vec<_>>(),
+            ["I.", "II."]
+        );
+        assert_eq!(starts[0].0, 6);
+        let kw = "Capitolo 1\ntesto\nChapter II\ntesto\n";
+        assert_eq!(plain_text_chapter_starts(kw).len(), 2);
+        assert!(plain_text_chapter_starts("I.\ntesto\nsolo uno\n").is_empty());
+        assert!(plain_text_chapter_starts("niente qui").is_empty());
+    }
+
+    #[test]
+    fn chapter_starts_handle_crlf_offsets() {
+        let text = "pre\r\nI.\r\nuno\r\nII.\r\ndue\r\n";
+        let starts = plain_text_chapter_starts(text);
+        assert_eq!(starts.len(), 2);
+        assert_eq!(&text[starts[1].0..starts[1].0 + 3], "II.");
+    }
+
+    #[test]
+    fn assign_chapters_sets_only_the_chapter_field() {
+        let text = "pre\nI.\nuno uno\nII.\ndue due\n";
+        let document = Document::new(
+            DocumentId::new("d".to_string()),
+            "t".to_string(),
+            text.to_string(),
+        );
+        let mk = |start: usize, end: usize| {
+            TextChunk::new(
+                ChunkId::new(format!("c{start}")),
+                document.id.clone(),
+                text[start..end].to_string(),
+                start,
+                end,
+            )
+        };
+        let mut chunks = vec![mk(0, 3), mk(4, 12), mk(16, 25)];
+        let before = chunks.clone();
+        TextProcessor::assign_chapters(&document, &mut chunks);
+        assert_eq!(chunks[0].metadata.chapter, None);
+        assert_eq!(chunks[1].metadata.chapter.as_deref(), Some("I."));
+        assert_eq!(chunks[2].metadata.chapter.as_deref(), Some("II."));
+        for (a, b) in before.iter().zip(&chunks) {
+            assert_eq!((&a.id, &a.content), (&b.id, &b.content));
+        }
+    }
 
     #[test]
     fn test_text_chunking() {

@@ -35,14 +35,14 @@ parallel_execution = true
 # NARRATIVE CHUNKING: Research shows 800-1024 tokens optimal for narrative context
 # Reference: LlamaIndex (2024) "Evaluating the Ideal Chunk Size for a RAG System"
 chunk_size = 800              # Captures complete scenes and conversations (LlamaIndex 2024)
-chunk_overlap = 300           # 37.5% overlap - preserves character continuity (Pinecone 2024)
+chunk_overlap = 300           # configured overlap for character continuity
 min_chunk_size = 200          # Ensures meaningful narrative units
 clean_control_chars = true
 normalize_whitespace = true
 
 [pipeline.entity_extraction]
 # LITERARY ENTITY TYPES: Specialized for narrative analysis
-model_name = "llama3.1:8b"
+model_name = "qwen3.5-9b"
 temperature = 0.1             # Low for consistent character extraction (IBM 2024)
 max_tokens = 1500             # Higher for detailed character descriptions
 entity_types = [
@@ -95,7 +95,7 @@ max_community_size = 15       # Intimate character groups
 # UNIFIED TEXT PROCESSING
 enabled = true
 chunk_size = 800              # Consistent with pipeline
-chunk_overlap = 300           # 37.5% overlap ratio
+chunk_overlap = 300           # configured overlap ratio
 min_chunk_size = 200
 max_chunk_size = 1500         # Allow longer chunks for complex scenes
 normalize_whitespace = true
@@ -138,8 +138,8 @@ character_relationship_boost = 1.3
 [vector_processing]
 # SEMANTIC SEARCH: Optimized for narrative similarity
 enabled = true
-embedding_model = "nomic-embed-text"
-embedding_dimensions = 768
+embedding_model = "multilingual-e5-small"
+embedding_dimensions = 384
 use_hnsw_index = true
 hnsw_ef_construction = 300    # Higher for rich narrative search (HNSW Paper 2016)
 hnsw_m = 24                   # More connections for semantic depth (HNSW Research)
@@ -162,36 +162,29 @@ theme_patterns = ["theme", "meaning", "symbolism", "message", "represents", "sig
 setting_patterns = ["where", "location", "place", "setting", "environment", "atmosphere"]
 conflict_patterns = ["conflict", "problem", "struggle", "tension", "crisis"]
 
-[ollama]
+[llm]
 # NARRATIVE LLM: Research-optimized for literary analysis
 enabled = true
-host = "http://localhost"
-port = 11434
-chat_model = "llama3.1:8b"
-embedding_model = "nomic-embed-text"
+base_url = "http://127.0.0.1:8080/v1"
+embedding_base_url = "http://127.0.0.1:8081/v1"
+chat_model = "qwen3.5-9b"
+embedding_model = "multilingual-e5-small"
 timeout_seconds = 90          # Higher for complex literary analysis
 max_retries = 3
 fallback_to_hash = false
 max_tokens = 1200             # Sufficient for detailed character analysis
 temperature = 0.2             # Research: 0.1-0.3 optimal for factual analysis (IBM 2024)
 
-[ollama.generation]
-# NARRATIVE GENERATION: Balanced creativity and consistency
-temperature = 0.3             # Research: balanced setting for literary analysis (phData 2024)
-top_p = 0.85                  # Focused but nuanced responses (AnalyticsVidhya 2024)
-max_tokens = 1500             # Detailed literary analysis
-stream = false
-
 [performance]
-# NARRATIVE PERFORMANCE: Quality over speed
+# Performance and quality depend on the selected pipeline and corpus.
 batch_processing = true
-batch_size = 30               # Smaller batches for quality
+batch_size = 30               # Smaller batches for the selected workload
 worker_threads = 4
 memory_limit_mb = 6144        # Higher for complex character networks
 cache_embeddings = true
 
 [monitoring]
-# NARRATIVE QUALITY MONITORING
+# Performance and quality depend on the selected pipeline and corpus.
 enabled = true
 track_character_consistency = true
 track_relationship_accuracy = true

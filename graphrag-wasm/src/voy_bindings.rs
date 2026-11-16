@@ -14,7 +14,7 @@
 //! ```
 //!
 //! Then use from Rust/WASM:
-//! ```rust
+//! ```rust,ignore
 //! let index = VoyIndex::from_embeddings(embeddings, 384)?;
 //! let results = index.search_parsed(query, 5)?;
 //! ```

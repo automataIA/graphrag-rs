@@ -126,7 +126,7 @@ mod tests {
 
         for i in 0..10 {
             history.add_entry(QueryEntry {
-                query: format!("query {}", i),
+                query: format!("query {i}"),
                 timestamp: Utc::now(),
                 duration_ms: 100,
                 results_count: 1,

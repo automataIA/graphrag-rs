@@ -2,7 +2,7 @@
 # GraphRAG Configuration Template - WEB & BLOG CONTENT
 # =============================================================================
 # 🎯 FULLY TEXT-AGNOSTIC: Works with ANY web content without hardcoded assumptions
-# 🚀 100% DYNAMIC: No hardcoded brand names, topics, or content-specific logic
+# 🚀 text-agnostic configuration: No hardcoded brand names, topics, or content-specific logic
 # 📚 Use cases: ANY web content - blogs, articles, social media, marketing materials
 # ⚡ Breakthrough Features: PageRank, Caching, Incremental, ROGRAG, Async processing
 # Based on 2024 research: balanced creativity and precision for diverse web content
@@ -15,7 +15,7 @@
 # HYBRID pipeline recommended for web/blog content:
 # - Semantic (60%) for understanding topics, trends, and creative content
 # - Algorithmic (40%) for fast hashtag/keyword extraction and simple patterns
-# - Best balance for diverse web content: quality insights + fast processing
+# Performance and quality depend on the selected pipeline and corpus.
 # - Handles both structured metadata AND unstructured narratives
 approach = "hybrid"
 
@@ -36,14 +36,14 @@ parallel_execution = true
 # WEB CHUNKING: Medium chunks for web content topics
 # Reference: Web Content Analysis Research (2024) "Optimal Chunking for Digital Content"
 chunk_size = 600              # Medium chunks for topic continuity (Web Content Research 2024)
-chunk_overlap = 180           # 30% overlap for context preservation (Pinecone 2024)
+chunk_overlap = 180           # configured overlap for context
 min_chunk_size = 150          # Captures complete thoughts/paragraphs
 clean_control_chars = true
 normalize_whitespace = true
 
 [pipeline.entity_extraction]
 # WEB ENTITY TYPES: Specialized for web and blog content
-model_name = "llama3.1:8b"
+model_name = "qwen3.5-9b"
 temperature = 0.3             # Moderate for creative web content (phData 2024)
 max_tokens = 1000             # Standard length for web descriptions
 entity_types = [
@@ -104,7 +104,7 @@ max_community_size = 20       # Moderate-sized topic groups
 # WEB TEXT PROCESSING
 enabled = true
 chunk_size = 600              # Consistent with pipeline
-chunk_overlap = 180           # 30% overlap for topic continuity
+chunk_overlap = 180           # configured overlap for topic continuity
 min_chunk_size = 150
 max_chunk_size = 1200         # Allow longer chunks for detailed web content
 normalize_whitespace = true
@@ -147,8 +147,8 @@ content_relationship_boost = 1.2         # Boost content-related connections
 [vector_processing]
 # WEB SEARCH: Balanced discovery and precision
 enabled = true
-embedding_model = "nomic-embed-text"
-embedding_dimensions = 768
+embedding_model = "multilingual-e5-small"
+embedding_dimensions = 384
 use_hnsw_index = true
 hnsw_ef_construction = 200    # Standard for web content search
 hnsw_m = 16                   # Balanced connections for web content
@@ -194,28 +194,21 @@ Context:
 
 Trend Analysis:"""
 
-[ollama]
+[llm]
 # WEB LLM: Balanced for web content analysis
 enabled = true
-host = "http://localhost"
-port = 11434
-chat_model = "llama3.1:8b"
-embedding_model = "nomic-embed-text"
+base_url = "http://127.0.0.1:8080/v1"
+embedding_base_url = "http://127.0.0.1:8081/v1"
+chat_model = "qwen3.5-9b"
+embedding_model = "multilingual-e5-small"
 timeout_seconds = 60          # Standard timeout for web content
 max_retries = 3
 fallback_to_hash = false
 max_tokens = 1000             # Standard for web content responses
 temperature = 0.3             # Research: 0.3-0.5 optimal for creative content (phData 2024)
 
-[ollama.generation]
-# WEB GENERATION: Balanced creativity and coherence
-temperature = 0.4             # Moderate for engaging web content (phData 2024)
-top_p = 0.9                   # Broader consideration for creative responses (AnalyticsVidhya 2024)
-max_tokens = 1200             # Adequate for web content explanations
-stream = false
-
 [performance]
-# WEB PERFORMANCE: Balanced speed and quality
+# Performance and quality depend on the selected pipeline and corpus.
 batch_processing = true
 batch_size = 40               # Standard batches for web content
 worker_threads = 4

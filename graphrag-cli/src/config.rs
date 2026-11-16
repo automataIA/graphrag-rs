@@ -2,8 +2,7 @@
 
 use crate::handlers::FileOperations;
 use color_eyre::eyre::{eyre, Result};
-use graphrag_core::config::json5_loader::{detect_config_format, ConfigFormat};
-use graphrag_core::config::setconfig::SetConfig;
+use graphrag_core::config::json5_loader::detect_config_format;
 use graphrag_core::Config as GraphRAGConfig;
 use std::path::Path;
 
@@ -12,54 +11,19 @@ pub async fn load_config(path: &Path) -> Result<GraphRAGConfig> {
     // Validate file
     FileOperations::validate_file(path).await?;
 
-    // Read file
-    let content = FileOperations::read_to_string(path).await?;
-
-    // Detect format from file extension
+    // Keep extension errors at the CLI boundary, then delegate all parsing,
+    // schema selection, legacy adaptation, and validation to the core loader.
     let format = detect_config_format(path)
         .ok_or_else(|| eyre!("Unsupported config file format: {:?}", path.extension()))?;
-
-    // Parse based on detected format - always parse as SetConfig first, then convert
-    let set_config: SetConfig = match format {
-        ConfigFormat::Json5 => {
-            #[cfg(feature = "json5-support")]
-            {
-                json5::from_str(&content)
-                    .map_err(|e| eyre!("Failed to parse JSON5 config: {}", e))?
-            }
-            #[cfg(not(feature = "json5-support"))]
-            {
-                return Err(eyre!(
-                    "JSON5 support not enabled. Recompile with json5-support feature."
-                ));
-            }
-        },
-        ConfigFormat::Json => serde_json::from_str(&content)
-            .map_err(|e| eyre!("Failed to parse JSON config: {}", e))?,
-        ConfigFormat::Toml => {
-            toml::from_str(&content).map_err(|e| eyre!("Failed to parse TOML config: {}", e))?
-        },
-        ConfigFormat::Yaml => {
-            #[cfg(feature = "yaml-support")]
-            {
-                serde_yaml::from_str(&content)
-                    .map_err(|e| eyre!("Failed to parse YAML config: {}", e))?
-            }
-            #[cfg(not(feature = "yaml-support"))]
-            {
-                return Err(eyre!(
-                    "YAML support not enabled. Recompile with yaml-support feature."
-                ));
-            }
-        },
-    };
-
-    // Convert SetConfig to Config
-    let config = set_config.to_graphrag_config();
+    let config = graphrag_core::config::loader::load_config(
+        path.to_str()
+            .ok_or_else(|| eyre!("Config path is not valid UTF-8"))?,
+    )
+    .map_err(|e| eyre!(e.to_string()))?;
 
     // Log configuration details for debugging
     tracing::info!("Loaded {:?} configuration from: {}", format, path.display());
-    tracing::info!("Mode approach: {}", set_config.mode.approach);
+    tracing::info!("Mode approach: {}", config.approach);
     tracing::info!(
         "Entity extraction use_gleaning: {}",
         config.entities.use_gleaning
@@ -68,8 +32,8 @@ pub async fn load_config(path: &Path) -> Result<GraphRAGConfig> {
         "Entity extraction max_gleaning_rounds: {}",
         config.entities.max_gleaning_rounds
     );
-    tracing::info!("Ollama enabled: {}", config.ollama.enabled);
-    tracing::info!("Ollama chat_model: {}", config.ollama.chat_model);
+    tracing::info!("LLM enabled: {}", config.llm.enabled);
+    tracing::info!("LLM chat_model: {}", config.llm.chat_model);
 
     Ok(config)
 }

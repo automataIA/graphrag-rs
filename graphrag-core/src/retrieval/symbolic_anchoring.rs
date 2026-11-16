@@ -563,8 +563,7 @@ mod tests {
         // Expected: 0.2*0.4 + 0.6*0.6 = 0.08 + 0.36 = 0.44
         assert!(
             relevance > 0.4 && relevance < 0.5,
-            "Expected ~0.44, got {}",
-            relevance
+            "Expected ~0.44, got {relevance}"
         );
     }
 
@@ -584,8 +583,7 @@ mod tests {
         // Without PageRank: just count_score = 2/10 = 0.2
         assert!(
             (relevance - 0.2).abs() < 0.01,
-            "Expected 0.2, got {}",
-            relevance
+            "Expected 0.2, got {relevance}"
         );
     }
 }

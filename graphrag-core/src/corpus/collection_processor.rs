@@ -273,6 +273,9 @@ impl CollectionProcessor {
                 confidence: entity.confidence,
                 mentions: Vec::new(),
                 embedding: None,
+                first_mentioned: None,
+                last_mentioned: None,
+                temporal_validity: None,
             };
 
             entities.push(corpus_entity);

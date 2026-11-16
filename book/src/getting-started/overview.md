@@ -1,39 +1,21 @@
 # Overview
 
-GraphRAG-RS is a 5-crate Cargo workspace. You pick the entry point that fits your deployment.
+GraphRAG-RS is a five-crate Cargo workspace. Choose the entry point that matches the
+application you are building.
 
 | Crate | Role |
-|-------|------|
-| [`graphrag-core`](../crates/core.md) | Core library — all GraphRAG logic. Native + WASM (`rlib` + `cdylib`). |
-| [`graphrag-cli`](../crates/cli.md) | Turnkey TUI + CLI binary. In-process use of the core (no HTTP). |
-| [`graphrag-server`](../crates/server.md) | Actix-web REST API with OpenAPI + optional Qdrant. |
-| [`graphrag-wasm`](../crates/wasm.md) | Browser bindings (Voy vector store, WebLLM, ONNX). |
-| `graphrag` | Wrapper meta-crate that re-exports `graphrag-core` for the hello-world experience. |
+|---|---|
+| [`graphrag-core`](../crates/core.md) | Core chunking, graph, retrieval, and persistence library. |
+| [`graphrag`](../crates/facade.md) | Small facade with the default local feature set. |
+| [`graphrag-cli`](../crates/cli.md) | Turnkey `index` and `ask` commands plus the interactive TUI. |
+| [`graphrag-server`](../crates/server.md) | Optional Actix based HTTP service. |
+| [`graphrag-wasm`](../crates/wasm.md) | Experimental browser bindings. |
 
-## The config-driven pipeline
+The default native path is local: text is chunked, embeddings are computed with the
+hash fallback, patterns extract graph items, and lexical retrieval selects relevant
+chunks. Synchronous retrieval is deterministic for equal inputs. Provider-backed
+extraction, embeddings, generation, and remote storage are opt-in features with
+additional runtime requirements.
 
-The same code runs three ways, selected at runtime from `Config` — not at compile time:
-
-- **Pattern-only** — no LLM, regex extractor, < 10 ms per chunk. `Config::default()` works offline
-  via hash-fallback embeddings.
-- **LLM-enriched** — Ollama with KV-cache reuse (`keep_alive` + dynamic `num_ctx`) for higher-quality
-  entity and relationship extraction.
-- **Hybrid** — selective LLM stages over a fast base pipeline.
-
-See [How It Works](../concepts/how-it-works.md) for the full 7-stage pipeline.
-
-## Deployment options
-
-- **Server** — multi-tenant, GPU workloads, large corpora. Qdrant + Ollama. See
-  [graphrag-server](../crates/server.md).
-- **WASM (client-side)** — privacy-first, offline, zero infrastructure. Full pipeline in the browser
-  with ONNX embeddings and WebLLM synthesis. See [graphrag-wasm](../crates/wasm.md).
-- **Embedded library** — call `graphrag-core` directly from your Rust app.
-
-## Prerequisites
-
-- **Rust 1.85+** (add the `wasm32-unknown-unknown` target for WASM builds).
-- **Ollama** (optional) for LLM-quality extraction / real embeddings: `ollama pull nomic-embed-text`.
-- **Docker** (optional) for the Qdrant vector database.
-
-Continue to [Installation & Quick Start](quickstart.md).
+The supported toolchain is Rust 1.88. Add `wasm32-unknown-unknown` separately for WASM
+builds. Continue to [Installation and Quick Start](quickstart.md).

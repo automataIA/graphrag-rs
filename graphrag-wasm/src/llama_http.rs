@@ -1,23 +1,30 @@
-//! Ollama HTTP client for WASM
+//! llama.cpp (OpenAI-compatible) HTTP client for WASM
 //!
-//! This module provides HTTP-based integration with Ollama server running on localhost.
-//! It's an alternative to WebLLM for users who want to use their local GPU via Ollama.
+//! This module provides HTTP-based integration with a `llama-server` running on
+//! localhost. It's an alternative to WebLLM for users who want to use their
+//! local GPU via llama.cpp.
 //!
 //! Architecture:
-//! Browser (WASM) → HTTP Request → Ollama Server (localhost:11434) → Response
+//! Browser (WASM) → HTTP Request → llama-server (127.0.0.1:8080/v1) → Response
+//!
+//! No API key is sent: secrets must never be embedded in browser code. Use a
+//! local llama-server (CORS is enabled by default) or a server-side proxy.
 
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{Request, RequestInit, RequestMode, Response};
 
-/// Configuration for Ollama HTTP client
+/// Default llama-server OpenAI-compatible base URL.
+pub const DEFAULT_LLAMA_BASE_URL: &str = "http://127.0.0.1:8080/v1";
+
+/// Configuration for the llama.cpp HTTP client
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OllamaHttpConfig {
-    /// Ollama server endpoint (default: http://localhost:11434)
+pub struct LlamaCppHttpConfig {
+    /// OpenAI-compatible base URL (default: http://127.0.0.1:8080/v1)
     pub endpoint: String,
 
-    /// Model to use (e.g., "llama3.1:8b", "qwen2.5:7b")
+    /// Model to use (llama-server `--alias`, e.g. "qwen3.5-9b")
     pub model: String,
 
     /// Temperature for generation (0.0 - 1.0)
@@ -40,11 +47,11 @@ fn default_max_tokens() -> u32 {
     2000
 }
 
-impl Default for OllamaHttpConfig {
+impl Default for LlamaCppHttpConfig {
     fn default() -> Self {
         Self {
-            endpoint: "http://localhost:11434".to_string(),
-            model: "llama3.1:8b".to_string(),
+            endpoint: DEFAULT_LLAMA_BASE_URL.to_string(),
+            model: "qwen3.5-9b".to_string(),
             temperature: 0.7,
             max_tokens: 2000,
             system_prompt: None,
@@ -52,26 +59,14 @@ impl Default for OllamaHttpConfig {
     }
 }
 
-/// Request body for Ollama /api/generate endpoint
+/// Request body for the OpenAI-compatible /chat/completions endpoint
 #[derive(Debug, Serialize)]
-struct OllamaGenerateRequest {
-    model: String,
-    prompt: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    system: Option<String>,
-    stream: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    options: Option<OllamaOptions>,
-}
-
-/// Request body for Ollama /api/chat endpoint
-#[derive(Debug, Serialize)]
-struct OllamaChatRequest {
+struct ChatCompletionRequest {
     model: String,
     messages: Vec<ChatMessage>,
     stream: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    options: Option<OllamaOptions>,
+    temperature: f32,
+    max_tokens: u32,
 }
 
 #[derive(Debug, Serialize)]
@@ -80,72 +75,44 @@ struct ChatMessage {
     content: String,
 }
 
-/// Ollama generation options
-#[derive(Debug, Serialize)]
-struct OllamaOptions {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    temperature: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    num_predict: Option<u32>,
+/// Response from /chat/completions
+#[derive(Debug, Deserialize)]
+struct ChatCompletionResponse {
+    choices: Vec<ChatChoice>,
 }
 
-/// Response from Ollama /api/generate endpoint
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-struct OllamaGenerateResponse {
-    response: String,
-    #[allow(dead_code)]
-    done: bool,
-    #[serde(default)]
-    #[allow(dead_code)]
-    total_duration: Option<u64>,
-    #[serde(default)]
-    #[allow(dead_code)]
-    load_duration: Option<u64>,
-    #[serde(default)]
-    #[allow(dead_code)]
-    prompt_eval_count: Option<u32>,
-    #[serde(default)]
-    #[allow(dead_code)]
-    eval_count: Option<u32>,
-}
-
-/// Response from Ollama /api/chat endpoint
-#[derive(Debug, Deserialize)]
-struct OllamaChatResponse {
+struct ChatChoice {
     message: ChatMessageResponse,
-    #[allow(dead_code)]
-    done: bool,
 }
 
 #[derive(Debug, Deserialize)]
 struct ChatMessageResponse {
-    #[allow(dead_code)]
-    role: String,
-    content: String,
+    #[serde(default)]
+    content: Option<String>,
 }
 
-/// Ollama HTTP client for WASM
+/// llama.cpp HTTP client for WASM
 #[wasm_bindgen]
-pub struct OllamaHttpClient {
-    config: OllamaHttpConfig,
+pub struct LlamaCppHttpClient {
+    config: LlamaCppHttpConfig,
 }
 
 #[wasm_bindgen]
-impl OllamaHttpClient {
-    /// Create a new Ollama HTTP client with default configuration
+impl LlamaCppHttpClient {
+    /// Create a new llama.cpp HTTP client with default configuration
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
         Self {
-            config: OllamaHttpConfig::default(),
+            config: LlamaCppHttpConfig::default(),
         }
     }
 
-    /// Create client with custom endpoint and model
+    /// Create client with custom base URL and model
     #[wasm_bindgen(js_name = withConfig)]
     pub fn with_config(endpoint: String, model: String) -> Self {
         Self {
-            config: OllamaHttpConfig {
+            config: LlamaCppHttpConfig {
                 endpoint,
                 model,
                 ..Default::default()
@@ -171,73 +138,27 @@ impl OllamaHttpClient {
         self.config.system_prompt = Some(prompt);
     }
 
-    /// Generate text completion using /api/generate
+    /// Generate a completion for a single prompt (one user turn)
     #[wasm_bindgen(js_name = generate)]
     pub async fn generate(&self, prompt: String) -> Result<String, JsValue> {
-        let request_body = OllamaGenerateRequest {
-            model: self.config.model.clone(),
-            prompt,
-            system: self.config.system_prompt.clone(),
-            stream: false, // Non-streaming for simplicity
-            options: Some(OllamaOptions {
-                temperature: Some(self.config.temperature),
-                num_predict: Some(self.config.max_tokens),
-            }),
-        };
-
-        let url = format!("{}/api/generate", self.config.endpoint);
-        let response = self.make_request(&url, &request_body).await?;
-
-        let response_text = Self::get_response_text(response).await?;
-        let ollama_response: OllamaGenerateResponse = serde_json::from_str(&response_text)
-            .map_err(|e| JsValue::from_str(&format!("Failed to parse response: {}", e)))?;
-
-        Ok(ollama_response.response)
+        self.chat(prompt).await
     }
 
-    /// Generate chat-style completion using /api/chat
+    /// Generate chat-style completion using /chat/completions
     #[wasm_bindgen(js_name = chat)]
     pub async fn chat(&self, user_message: String) -> Result<String, JsValue> {
-        let mut messages = Vec::new();
-
-        // Add system prompt if configured
-        if let Some(ref system) = self.config.system_prompt {
-            messages.push(ChatMessage {
-                role: "system".to_string(),
-                content: system.clone(),
-            });
-        }
-
-        // Add user message
-        messages.push(ChatMessage {
-            role: "user".to_string(),
-            content: user_message,
-        });
-
-        let request_body = OllamaChatRequest {
-            model: self.config.model.clone(),
-            messages,
-            stream: false,
-            options: Some(OllamaOptions {
-                temperature: Some(self.config.temperature),
-                num_predict: Some(self.config.max_tokens),
-            }),
-        };
-
-        let url = format!("{}/api/chat", self.config.endpoint);
+        let request_body = self.chat_request(user_message);
+        let url = self.url("/chat/completions");
         let response = self.make_request(&url, &request_body).await?;
 
         let response_text = Self::get_response_text(response).await?;
-        let ollama_response: OllamaChatResponse = serde_json::from_str(&response_text)
-            .map_err(|e| JsValue::from_str(&format!("Failed to parse response: {}", e)))?;
-
-        Ok(ollama_response.message.content)
+        parse_chat_content(&response_text).map_err(|e| JsValue::from_str(&e))
     }
 
-    /// Check if Ollama server is available
+    /// Check if the llama.cpp server is available
     #[wasm_bindgen(js_name = checkAvailability)]
     pub async fn check_availability(&self) -> Result<bool, JsValue> {
-        let url = format!("{}/api/tags", self.config.endpoint);
+        let url = self.url("/models");
 
         match self.make_get_request(&url).await {
             Ok(_) => Ok(true),
@@ -245,10 +166,10 @@ impl OllamaHttpClient {
         }
     }
 
-    /// Get list of available models
+    /// Get list of available models (raw `/models` JSON)
     #[wasm_bindgen(js_name = listModels)]
     pub async fn list_models(&self) -> Result<JsValue, JsValue> {
-        let url = format!("{}/api/tags", self.config.endpoint);
+        let url = self.url("/models");
         let response = self.make_get_request(&url).await?;
         let response_text = Self::get_response_text(response).await?;
 
@@ -257,8 +178,46 @@ impl OllamaHttpClient {
     }
 }
 
+fn parse_chat_content(body: &str) -> Result<String, String> {
+    let parsed: ChatCompletionResponse =
+        serde_json::from_str(body).map_err(|e| format!("Failed to parse response: {}", e))?;
+    parsed
+        .choices
+        .into_iter()
+        .next()
+        .and_then(|choice| choice.message.content)
+        .ok_or_else(|| "Response has no choices[0].message.content".to_string())
+}
+
+impl LlamaCppHttpClient {
+    fn url(&self, path: &str) -> String {
+        format!("{}{}", self.config.endpoint.trim_end_matches('/'), path)
+    }
+
+    fn chat_request(&self, user_message: String) -> ChatCompletionRequest {
+        let mut messages = Vec::new();
+        if let Some(ref system) = self.config.system_prompt {
+            messages.push(ChatMessage {
+                role: "system".to_string(),
+                content: system.clone(),
+            });
+        }
+        messages.push(ChatMessage {
+            role: "user".to_string(),
+            content: user_message,
+        });
+        ChatCompletionRequest {
+            model: self.config.model.clone(),
+            messages,
+            stream: false,
+            temperature: self.config.temperature,
+            max_tokens: self.config.max_tokens,
+        }
+    }
+}
+
 // Private helper methods
-impl OllamaHttpClient {
+impl LlamaCppHttpClient {
     /// Make HTTP POST request
     async fn make_request<T: Serialize>(&self, url: &str, body: &T) -> Result<Response, JsValue> {
         let window = web_sys::window().ok_or_else(|| JsValue::from_str("No window object"))?;
@@ -325,7 +284,7 @@ impl OllamaHttpClient {
     }
 }
 
-impl Default for OllamaHttpClient {
+impl Default for LlamaCppHttpClient {
     fn default() -> Self {
         Self::new()
     }
@@ -337,25 +296,37 @@ mod tests {
 
     #[test]
     fn test_default_config() {
-        let config = OllamaHttpConfig::default();
-        assert_eq!(config.endpoint, "http://localhost:11434");
-        assert_eq!(config.model, "llama3.1:8b");
+        let config = LlamaCppHttpConfig::default();
+        assert_eq!(config.endpoint, "http://127.0.0.1:8080/v1");
+        assert_eq!(config.model, "qwen3.5-9b");
         assert_eq!(config.temperature, 0.7);
         assert_eq!(config.max_tokens, 2000);
     }
 
     #[test]
-    fn test_client_creation() {
-        let client = OllamaHttpClient::new();
-        assert_eq!(client.config.model, "llama3.1:8b");
+    fn test_custom_config_and_urls() {
+        let client = LlamaCppHttpClient::with_config(
+            "http://127.0.0.1:8080/v1/".to_string(),
+            "qwen3.5-9b".to_string(),
+        );
+        assert_eq!(client.config.model, "qwen3.5-9b");
+        assert_eq!(
+            client.url("/chat/completions"),
+            "http://127.0.0.1:8080/v1/chat/completions"
+        );
     }
 
     #[test]
-    fn test_custom_config() {
-        let client = OllamaHttpClient::with_config(
-            "http://localhost:11434".to_string(),
-            "qwen2.5:7b".to_string(),
-        );
-        assert_eq!(client.config.model, "qwen2.5:7b");
+    fn test_chat_request_and_response() {
+        let mut client = LlamaCppHttpClient::new();
+        client.set_system_prompt("sys".to_string());
+        let body = serde_json::to_value(client.chat_request("ciao".to_string())).unwrap();
+        assert_eq!(body["messages"][0]["role"], "system");
+        assert_eq!(body["messages"][1]["content"], "ciao");
+        assert_eq!(body["stream"], false);
+
+        let reply = r#"{"choices":[{"message":{"role":"assistant","content":"ok"}}]}"#;
+        assert_eq!(parse_chat_content(reply).unwrap(), "ok");
+        assert!(parse_chat_content(r#"{"choices":[]}"#).is_err());
     }
 }

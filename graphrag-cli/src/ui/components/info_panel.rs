@@ -13,6 +13,17 @@ use ratatui::{
     Frame,
 };
 
+/// Return a UTF-8-safe prefix whose encoded length is at most `max_bytes`.
+fn utf8_prefix(value: &str, max_bytes: usize) -> &str {
+    let end = value
+        .char_indices()
+        .take_while(|(index, character)| *index + character.len_utf8() <= max_bytes)
+        .map(|(index, character)| index + character.len_utf8())
+        .last()
+        .unwrap_or(0);
+    &value[..end.min(value.len())]
+}
+
 /// Query history entry
 #[derive(Debug, Clone)]
 pub struct QueryHistoryEntry {
@@ -315,7 +326,7 @@ impl InfoPanel {
 
         for (i, src) in self.sources.iter().skip(self.scroll_offset).enumerate() {
             let excerpt = if src.excerpt.len() > 60 {
-                format!("{}…", &src.excerpt[..57])
+                format!("{}…", utf8_prefix(&src.excerpt, 57))
             } else {
                 src.excerpt.clone()
             };
@@ -330,10 +341,7 @@ impl InfoPanel {
                         format!("[{:.2}] ", src.relevance_score),
                         Style::default().fg(Color::Cyan),
                     ),
-                    Span::styled(
-                        src.id[..src.id.len().min(20)].to_string(),
-                        self.theme.highlight(),
-                    ),
+                    Span::styled(utf8_prefix(&src.id, 20).to_string(), self.theme.highlight()),
                 ]),
                 Line::from(vec![
                     Span::raw("     ".to_owned()),
@@ -373,7 +381,7 @@ impl InfoPanel {
             .enumerate()
             .map(|(i, entry)| {
                 let query_display = if entry.query.len() > 28 {
-                    format!("{}…", &entry.query[..25])
+                    format!("{}…", utf8_prefix(&entry.query, 25))
                 } else {
                     entry.query.clone()
                 };
@@ -413,4 +421,17 @@ fn confidence_bar(score: f32, width: usize) -> String {
     let filled = (score * width as f32).round() as usize;
     let empty = width.saturating_sub(filled);
     format!("[{}{}]", "█".repeat(filled), "░".repeat(empty))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::utf8_prefix;
+
+    #[test]
+    fn utf8_prefix_handles_multilingual_text() {
+        let value = "Città — 東京";
+        assert_eq!(utf8_prefix(value, 6), "Città");
+        assert_eq!(utf8_prefix(value, 10), "Città —");
+        assert_eq!(utf8_prefix("東京", 1), "");
+    }
 }

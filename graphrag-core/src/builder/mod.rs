@@ -25,7 +25,7 @@
 //! // This won't compile until you configure required settings!
 //! let graphrag = TypedBuilder::new()
 //!     .with_output_dir("./my_output")  // Required - transitions state
-//!     .with_ollama()                    // Required - transitions state
+//!     .with_llm()                    // Required - transitions state
 //!     .with_chunk_size(512)             // Optional
 //!     .build()?;                        // Only available when properly configured
 //! # Ok(())
@@ -47,7 +47,7 @@ pub struct HasOutput;
 
 /// Marker: LLM/embedding not configured
 pub struct NoLlm;
-/// Marker: LLM/embedding is configured (Ollama, hash, or other)
+/// Marker: LLM/embedding is configured (llama.cpp/OpenAI-compatible, hash, or other)
 pub struct HasLlm;
 
 /// Typed builder with compile-time validation
@@ -57,7 +57,7 @@ pub struct HasLlm;
 ///
 /// ```text
 /// TypedBuilder<NoOutput, NoLlm>  -- with_output_dir() -->  TypedBuilder<HasOutput, NoLlm>
-/// TypedBuilder<HasOutput, NoLlm> -- with_ollama()     -->  TypedBuilder<HasOutput, HasLlm>
+/// TypedBuilder<HasOutput, NoLlm> -- with_llm()     -->  TypedBuilder<HasOutput, HasLlm>
 /// TypedBuilder<HasOutput, HasLlm> can call .build()
 /// ```
 ///
@@ -69,7 +69,7 @@ pub struct HasLlm;
 /// // Configure required settings to unlock build()
 /// let graphrag = TypedBuilder::new()
 ///     .with_output_dir("./output")
-///     .with_ollama()  // or .with_hash_embeddings()
+///     .with_llm()  // or .with_hash_embeddings()
 ///     .with_chunk_size(512)
 ///     .build()?;
 /// # Ok(())
@@ -87,7 +87,7 @@ impl TypedBuilder<NoOutput, NoLlm> {
     ///
     /// Starts in unconfigured state - you must call:
     /// - `with_output_dir()` to set the output directory
-    /// - `with_ollama()` or `with_hash_embeddings()` to configure LLM/embeddings
+    /// - `with_llm()` or `with_hash_embeddings()` to configure LLM/embeddings
     pub fn new() -> Self {
         Self {
             config: Config::default(),
@@ -120,39 +120,28 @@ impl<Llm> TypedBuilder<NoOutput, Llm> {
 
 // LLM configuration - transitions NoLlm -> HasLlm
 impl<Output> TypedBuilder<Output, NoLlm> {
-    /// Configure for Ollama LLM (enables semantic extraction)
+    /// Configure the OpenAI-compatible LLM (enables semantic extraction)
     ///
     /// This transitions the builder to the `HasLlm` state.
-    /// Sets up Ollama with default localhost:11434 configuration.
-    pub fn with_ollama(mut self) -> TypedBuilder<Output, HasLlm> {
-        self.config.ollama.enabled = true;
-        self.config.ollama.host = "localhost".to_string();
-        self.config.ollama.port = 11434;
-        self.config.embeddings.backend = "ollama".to_string();
+    /// Uses the local llama.cpp defaults: chat on `127.0.0.1:8080/v1`,
+    /// multilingual-e5-small embeddings on `127.0.0.1:8081/v1`.
+    pub fn with_llm(self) -> TypedBuilder<Output, HasLlm> {
         TypedBuilder {
-            config: self.config,
+            config: self.config.with_llm(),
             _output: PhantomData,
             _llm: PhantomData,
         }
     }
 
-    /// Configure for Ollama with custom settings
-    pub fn with_ollama_custom(
+    /// Configure the LLM with a custom chat base URL and model
+    pub fn with_llm_custom(
         mut self,
-        host: &str,
-        port: u16,
+        base_url: &str,
         chat_model: &str,
     ) -> TypedBuilder<Output, HasLlm> {
-        self.config.ollama.enabled = true;
-        self.config.ollama.host = host.to_string();
-        self.config.ollama.port = port;
-        self.config.ollama.chat_model = chat_model.to_string();
-        self.config.embeddings.backend = "ollama".to_string();
-        TypedBuilder {
-            config: self.config,
-            _output: PhantomData,
-            _llm: PhantomData,
-        }
+        self.config.llm.base_url = base_url.to_string();
+        self.config.llm.chat_model = chat_model.to_string();
+        self.with_llm()
     }
 
     /// Configure for hash-based embeddings (no LLM required, offline)
@@ -160,7 +149,7 @@ impl<Output> TypedBuilder<Output, NoLlm> {
     /// This transitions the builder to the `HasLlm` state.
     /// Uses deterministic hash embeddings - fast but less semantic understanding.
     pub fn with_hash_embeddings(mut self) -> TypedBuilder<Output, HasLlm> {
-        self.config.ollama.enabled = false;
+        self.config.llm.enabled = false;
         self.config.embeddings.backend = "hash".to_string();
         self.config.approach = "algorithmic".to_string();
         TypedBuilder {
@@ -185,21 +174,18 @@ impl<Output> TypedBuilder<Output, NoLlm> {
 impl<Output, Llm> TypedBuilder<Output, Llm> {
     /// Set the chunk size for text processing (optional)
     pub fn with_chunk_size(mut self, size: usize) -> Self {
-        self.config.chunk_size = size;
         self.config.text.chunk_size = size;
         self
     }
 
     /// Set the chunk overlap (optional)
     pub fn with_chunk_overlap(mut self, overlap: usize) -> Self {
-        self.config.chunk_overlap = overlap;
         self.config.text.chunk_overlap = overlap;
         self
     }
 
     /// Set the top-k results for retrieval (optional)
     pub fn with_top_k(mut self, k: usize) -> Self {
-        self.config.top_k_results = Some(k);
         self.config.retrieval.top_k = k;
         self
     }
@@ -224,7 +210,7 @@ impl<Output, Llm> TypedBuilder<Output, Llm> {
         self
     }
 
-    /// Enable entity gleaning with LLM (optional, requires Ollama)
+    /// Enable entity gleaning with LLM (optional, requires the LLM)
     pub fn with_gleaning(mut self, max_rounds: usize) -> Self {
         self.config.entities.use_gleaning = true;
         self.config.entities.max_gleaning_rounds = max_rounds;
@@ -251,7 +237,7 @@ impl TypedBuilder<HasOutput, HasLlm> {
     /// # fn example() -> graphrag_core::Result<()> {
     /// let graphrag = TypedBuilder::new()
     ///     .with_output_dir("./output")
-    ///     .with_ollama()
+    ///     .with_llm()
     ///     .build()?;
     /// # Ok(())
     /// # }
@@ -325,7 +311,6 @@ impl GraphRAGBuilder {
     ///     .with_chunk_size(512);
     /// ```
     pub fn with_chunk_size(mut self, size: usize) -> Self {
-        self.config.chunk_size = size;
         self.config.text.chunk_size = size;
         self
     }
@@ -339,7 +324,6 @@ impl GraphRAGBuilder {
     ///     .with_chunk_overlap(50);
     /// ```
     pub fn with_chunk_overlap(mut self, overlap: usize) -> Self {
-        self.config.chunk_overlap = overlap;
         self.config.text.chunk_overlap = overlap;
         self
     }
@@ -383,68 +367,55 @@ impl GraphRAGBuilder {
         self
     }
 
-    /// Set the Ollama host
+    /// Set the OpenAI-compatible chat base URL
     ///
     /// # Example
     /// ```no_run
     /// # use graphrag_core::builder::GraphRAGBuilder;
     /// let builder = GraphRAGBuilder::new()
-    ///     .with_ollama_host("localhost");
+    ///     .with_llm_base_url("http://127.0.0.1:8080/v1");
     /// ```
-    pub fn with_ollama_host(mut self, host: &str) -> Self {
-        self.config.ollama.host = host.to_string();
+    pub fn with_llm_base_url(mut self, base_url: &str) -> Self {
+        self.config.llm.base_url = base_url.to_string();
         self
     }
 
-    /// Set the Ollama port
+    /// Enable LLM integration
     ///
     /// # Example
     /// ```no_run
     /// # use graphrag_core::builder::GraphRAGBuilder;
     /// let builder = GraphRAGBuilder::new()
-    ///     .with_ollama_port(11434);
+    ///     .with_llm_enabled(true);
     /// ```
-    pub fn with_ollama_port(mut self, port: u16) -> Self {
-        self.config.ollama.port = port;
+    pub fn with_llm_enabled(mut self, enabled: bool) -> Self {
+        self.config.llm.enabled = enabled;
         self
     }
 
-    /// Enable Ollama integration
+    /// Set the LLM chat/generation model
     ///
     /// # Example
     /// ```no_run
     /// # use graphrag_core::builder::GraphRAGBuilder;
     /// let builder = GraphRAGBuilder::new()
-    ///     .with_ollama_enabled(true);
-    /// ```
-    pub fn with_ollama_enabled(mut self, enabled: bool) -> Self {
-        self.config.ollama.enabled = enabled;
-        self
-    }
-
-    /// Set the Ollama chat/generation model
-    ///
-    /// # Example
-    /// ```no_run
-    /// # use graphrag_core::builder::GraphRAGBuilder;
-    /// let builder = GraphRAGBuilder::new()
-    ///     .with_chat_model("llama3.2:latest");
+    ///     .with_chat_model("qwen3.5-9b");
     /// ```
     pub fn with_chat_model(mut self, model: &str) -> Self {
-        self.config.ollama.chat_model = model.to_string();
+        self.config.llm.chat_model = model.to_string();
         self
     }
 
-    /// Set the Ollama embedding model
+    /// Set the LLM server embedding model
     ///
     /// # Example
     /// ```no_run
     /// # use graphrag_core::builder::GraphRAGBuilder;
     /// let builder = GraphRAGBuilder::new()
-    ///     .with_ollama_embedding_model("nomic-embed-text:latest");
+    ///     .with_llm_embedding_model("multilingual-e5-small");
     /// ```
-    pub fn with_ollama_embedding_model(mut self, model: &str) -> Self {
-        self.config.ollama.embedding_model = model.to_string();
+    pub fn with_llm_embedding_model(mut self, model: &str) -> Self {
+        self.config.llm.embedding_model = model.to_string();
         self
     }
 
@@ -457,7 +428,6 @@ impl GraphRAGBuilder {
     ///     .with_top_k(10);
     /// ```
     pub fn with_top_k(mut self, k: usize) -> Self {
-        self.config.top_k_results = Some(k);
         self.config.retrieval.top_k = k;
         self
     }
@@ -542,12 +512,11 @@ impl GraphRAGBuilder {
         self
     }
 
-    /// Configure for local zero-config setup using Ollama
+    /// Configure for local zero-config setup using llama.cpp servers
     ///
     /// Sets up:
-    /// - Ollama enabled with localhost:11434
-    /// - Default models (nomic-embed-text for embeddings, llama3.2 for chat)
-    /// - Candle backend for local embeddings
+    /// - LLM enabled, chat on `127.0.0.1:8080/v1`
+    /// - multilingual-e5-small embeddings (384 dims) on `127.0.0.1:8081/v1`
     ///
     /// # Example
     /// ```no_run
@@ -556,10 +525,7 @@ impl GraphRAGBuilder {
     ///     .with_local_defaults();
     /// ```
     pub fn with_local_defaults(mut self) -> Self {
-        self.config.ollama.enabled = true;
-        self.config.ollama.host = "localhost".to_string();
-        self.config.ollama.port = 11434;
-        self.config.embeddings.backend = "candle".to_string();
+        self.config = self.config.with_llm();
         self
     }
 
@@ -616,7 +582,6 @@ mod tests {
     #[test]
     fn test_builder_with_chunk_size() {
         let builder = GraphRAGBuilder::new().with_chunk_size(512);
-        assert_eq!(builder.config().chunk_size, 512);
         assert_eq!(builder.config().text.chunk_size, 512);
     }
 
@@ -634,17 +599,15 @@ mod tests {
     }
 
     #[test]
-    fn test_builder_with_ollama() {
+    fn test_builder_with_llm() {
         let builder = GraphRAGBuilder::new()
-            .with_ollama_enabled(true)
-            .with_ollama_host("custom-host")
-            .with_ollama_port(8080)
+            .with_llm_enabled(true)
+            .with_llm_base_url("http://custom-host:8080/v1")
             .with_chat_model("custom-model");
 
-        assert!(builder.config().ollama.enabled);
-        assert_eq!(builder.config().ollama.host, "custom-host");
-        assert_eq!(builder.config().ollama.port, 8080);
-        assert_eq!(builder.config().ollama.chat_model, "custom-model");
+        assert!(builder.config().llm.enabled);
+        assert_eq!(builder.config().llm.base_url, "http://custom-host:8080/v1");
+        assert_eq!(builder.config().llm.chat_model, "custom-model");
     }
 
     #[test]
@@ -653,7 +616,7 @@ mod tests {
             .with_top_k(20)
             .with_similarity_threshold(0.8);
 
-        assert_eq!(builder.config().top_k_results, Some(20));
+        assert_eq!(builder.config().retrieval.top_k, 20);
         assert_eq!(builder.config().retrieval.top_k, 20);
         assert_eq!(builder.config().similarity_threshold, Some(0.8));
         assert_eq!(builder.config().graph.similarity_threshold, 0.8);
@@ -687,10 +650,9 @@ mod tests {
     fn test_builder_local_defaults() {
         let builder = GraphRAGBuilder::new().with_local_defaults();
 
-        assert!(builder.config().ollama.enabled);
-        assert_eq!(builder.config().ollama.host, "localhost");
-        assert_eq!(builder.config().ollama.port, 11434);
-        assert_eq!(builder.config().embeddings.backend, "candle");
+        assert!(builder.config().llm.enabled);
+        assert_eq!(builder.config().embeddings.backend, "llama_cpp");
+        assert_eq!(builder.config().embeddings.dimension, 384);
     }
 
     #[test]
@@ -703,9 +665,9 @@ mod tests {
             .with_approach("hybrid");
 
         assert_eq!(builder.config().output_dir, "./test");
-        assert_eq!(builder.config().chunk_size, 256);
-        assert_eq!(builder.config().chunk_overlap, 32);
-        assert_eq!(builder.config().top_k_results, Some(15));
+        assert_eq!(builder.config().text.chunk_size, 256);
+        assert_eq!(builder.config().text.chunk_overlap, 32);
+        assert_eq!(builder.config().retrieval.top_k, 15);
         assert_eq!(builder.config().approach, "hybrid");
     }
 
@@ -722,11 +684,15 @@ mod tests {
         let builder = builder.with_output_dir("./test_output");
         assert_eq!(builder.config().output_dir, "./test_output");
 
-        // Add Ollama - transitions to HasLlm
-        let builder = builder.with_ollama();
-        assert!(builder.config().ollama.enabled);
-        assert_eq!(builder.config().ollama.host, "localhost");
-        assert_eq!(builder.config().ollama.port, 11434);
+        // Add LLM - transitions to HasLlm
+        let builder = builder.with_llm();
+        assert!(builder.config().llm.enabled);
+        assert_eq!(
+            builder.config().llm.base_url,
+            crate::llm::DEFAULT_LLM_BASE_URL
+        );
+        assert_eq!(builder.config().embeddings.backend, "llama_cpp");
+        assert_eq!(builder.config().embeddings.dimension, 384);
     }
 
     #[test]
@@ -735,21 +701,20 @@ mod tests {
             .with_output_dir("./test")
             .with_hash_embeddings();
 
-        assert!(!builder.config().ollama.enabled);
+        assert!(!builder.config().llm.enabled);
         assert_eq!(builder.config().embeddings.backend, "hash");
         assert_eq!(builder.config().approach, "algorithmic");
     }
 
     #[test]
-    fn test_typed_builder_with_ollama_custom() {
+    fn test_typed_builder_with_llm_custom() {
         let builder = TypedBuilder::new()
             .with_output_dir("./test")
-            .with_ollama_custom("my-server", 8080, "mistral:latest");
+            .with_llm_custom("https://api.cerebras.ai/v1", "qwen-3-32b");
 
-        assert!(builder.config().ollama.enabled);
-        assert_eq!(builder.config().ollama.host, "my-server");
-        assert_eq!(builder.config().ollama.port, 8080);
-        assert_eq!(builder.config().ollama.chat_model, "mistral:latest");
+        assert!(builder.config().llm.enabled);
+        assert_eq!(builder.config().llm.base_url, "https://api.cerebras.ai/v1");
+        assert_eq!(builder.config().llm.chat_model, "qwen-3-32b");
     }
 
     #[test]
@@ -772,9 +737,9 @@ mod tests {
             .with_parallel(true)
             .with_gleaning(3);
 
-        assert_eq!(builder.config().chunk_size, 512);
-        assert_eq!(builder.config().chunk_overlap, 64);
-        assert_eq!(builder.config().top_k_results, Some(20));
+        assert_eq!(builder.config().text.chunk_size, 512);
+        assert_eq!(builder.config().text.chunk_overlap, 64);
+        assert_eq!(builder.config().retrieval.top_k, 20);
         assert_eq!(builder.config().similarity_threshold, Some(0.75));
         assert_eq!(builder.config().approach, "hybrid");
         assert!(builder.config().parallel.enabled);
@@ -788,24 +753,27 @@ mod tests {
         let builder1 = TypedBuilder::new()
             .with_chunk_size(512)
             .with_output_dir("./test1")
-            .with_ollama();
+            .with_llm();
 
         let builder2 = TypedBuilder::new()
             .with_output_dir("./test2")
             .with_chunk_size(512)
-            .with_ollama();
+            .with_llm();
 
-        assert_eq!(builder1.config().chunk_size, builder2.config().chunk_size);
+        assert_eq!(
+            builder1.config().text.chunk_size,
+            builder2.config().text.chunk_size
+        );
     }
 
     #[test]
     fn test_typed_builder_llm_before_output() {
         // Can configure LLM before output directory
         let builder = TypedBuilder::new()
-            .with_ollama()  // LLM first
+            .with_llm()  // LLM first
             .with_output_dir("./test"); // Output second
 
-        assert!(builder.config().ollama.enabled);
+        assert!(builder.config().llm.enabled);
         assert_eq!(builder.config().output_dir, "./test");
     }
 }

@@ -118,10 +118,10 @@
       "calculate_confidence": true
     }
   },
-  "ollama": {
+  "llm": {
     "enabled": false,
-    "host": "http://localhost",
-    "port": 11434,
+    "base_url": "http://127.0.0.1:8080/v1",
+    "embedding_base_url": "http://127.0.0.1:8081/v1",
     "timeout_seconds": 30,
     "max_retries": 1,
     "fallback_to_hash": true

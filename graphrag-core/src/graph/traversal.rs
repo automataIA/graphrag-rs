@@ -607,6 +607,7 @@ mod tests {
 
         // Add relationships
         let _ = graph.add_relationship(Relationship {
+            description: None,
             source: EntityId::new("A".to_string()),
             target: EntityId::new("B".to_string()),
             relation_type: "RELATED_TO".to_string(),
@@ -619,6 +620,7 @@ mod tests {
         });
 
         let _ = graph.add_relationship(Relationship {
+            description: None,
             source: EntityId::new("B".to_string()),
             target: EntityId::new("C".to_string()),
             relation_type: "RELATED_TO".to_string(),
@@ -631,6 +633,7 @@ mod tests {
         });
 
         let _ = graph.add_relationship(Relationship {
+            description: None,
             source: EntityId::new("A".to_string()),
             target: EntityId::new("D".to_string()),
             relation_type: "RELATED_TO".to_string(),

@@ -1,6 +1,6 @@
 {
   // ==========================================================================
-  // Symposium: GraphRAG-rs Philosophy (100% Zero-Cost)
+  // Symposium: GraphRAG-rs Philosophy (local zero-cost path)
   // ==========================================================================
   // 🎯 APPROACH: Segue DESIGN_CHOICES_ITALIANO.md - Zero costi su TUTTO
   // 💰 COST: $0 indexing, $0 query (NO LLM mai!)
@@ -20,7 +20,7 @@
   // MODE: Algorithmic (GraphRAG-rs Native Approach)
   // ---------------------------------------------------------------------------
   mode: {
-    approach: "algorithmic"  // 100% algorithmic, NO LLM mai
+    approach: "algorithmic"  // algorithmic extraction, NO LLM mai
   },
 
   // ---------------------------------------------------------------------------
@@ -35,7 +35,7 @@
   },
 
   // ---------------------------------------------------------------------------
-  // ALGORITHMIC PIPELINE: GraphRAG-rs Native (100% Zero-Cost)
+  // ALGORITHMIC PIPELINE: GraphRAG-rs Native (local zero-cost path)
   // ---------------------------------------------------------------------------
   algorithmic: {
     // Hash-based embeddings (NO neural models)
@@ -184,7 +184,7 @@
     // LLM config DISABILITATO (zero-cost approach)
     llm_config: {
       enabled: false,                       // NO LLM! Solo metodi statistici
-      model_name: "qwen3:8b-q4_k_m",
+      model_name: "qwen3.5-9b",
       temperature: 0.3,
       max_tokens: 180
     },
@@ -200,16 +200,16 @@
   },
 
   // ---------------------------------------------------------------------------
-  // OLLAMA: DISABILITATO (100% Zero-Cost)
+  // LLM (llama.cpp): DISABILITATO (local zero-cost path)
   // ---------------------------------------------------------------------------
   // Come da DESIGN_CHOICES_ITALIANO.md linea 52-73:
   // "Zero LLM in TUTTE le fasi" - anche per le query!
-  ollama: {
+  llm: {
     enabled: false,                         // DISABILITATO completamente!
-    host: "http://localhost",
-    port: 11434,
-    chat_model: "qwen3:8b-q4_k_m",
-    embedding_model: "nomic-embed-text",
+    base_url: "http://127.0.0.1:8080/v1",
+    embedding_base_url: "http://127.0.0.1:8081/v1",
+    chat_model: "qwen3.5-9b",
+    embedding_model: "multilingual-e5-small",
     timeout_seconds: 90,
     max_retries: 3,
     fallback_to_hash: true                  // Usa sempre hash
@@ -304,7 +304,7 @@
 // ==========================================================================
 // SUMMARY: GraphRAG-rs Philosophy (da DESIGN_CHOICES_ITALIANO.md)
 // ==========================================================================
-// ✅ 100% Zero-Cost: $0 indexing, $0 query
+// ✅ local zero-cost path: $0 indexing, $0 query
 // ✅ Pattern-based entity extraction (regex + capitalization)
 // ✅ Co-occurrence relationships (NO LLM)
 // ✅ Hash-based embeddings (NO neural models)
@@ -317,12 +317,12 @@
 //   - Strategy: Extractive-only (NO LLM)
 //   - Levels: 3 (chunk → section → document)
 //   - Methods: TF-IDF + TextRank (statistical)
-//   - Quality: Good summaries, privacy-preserving
+// Performance and quality depend on the selected pipeline and corpus.
 //   - Cost: $0 (no API calls)
 //
 // 💰 COSTS (Symposium 35k words):
-//   - Indexing: $0 (100% algorithmic + extractive summarization)
-//   - Query: $0 (100% algorithmic)
+//   - Indexing: $0 (algorithmic extraction + extractive summarization)
+//   - Query: $0 (algorithmic extraction)
 //   - Summarization: $0 (statistical methods only)
 //   - Totale: $0 ✅
 //
@@ -337,8 +337,8 @@
 //   - Binary: 10MB (vs 3.5GB)
 //   - Speedup: 24x meno memoria
 //
-// 🎯 QUALITY:
-//   - Accuracy: ~80% (vs 95% LLM)
+// Performance and quality depend on the selected pipeline and corpus.
+// Performance and quality depend on the selected pipeline and corpus.
 //   - Entity types: 4 (vs 18 SpaCy)
 //   - Trade-off accettabile per $0 costi!
 //

@@ -28,19 +28,20 @@ pub struct SimpleGraphRAG {
 impl SimpleGraphRAG {
     /// Create a new SimpleGraphRAG instance from text content
     pub fn from_text(text: &str) -> Result<Self> {
-        let inner = GraphRAG::from_text(text)?;
+        let inner = GraphRAG::quick_start_sync(text)?;
         Ok(Self { inner })
     }
 
     /// Create a new SimpleGraphRAG instance from a file
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let inner = GraphRAG::from_file(path)?;
+        let text = std::fs::read_to_string(path)?;
+        let inner = GraphRAG::quick_start_sync(&text)?;
         Ok(Self { inner })
     }
 
     /// Ask a question and get an answer
     pub fn ask(&mut self, question: &str) -> Result<String> {
-        self.inner.ask(question)
+        self.inner.ask_sync(question)
     }
 
     /// Add more text content to analyze

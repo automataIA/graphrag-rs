@@ -1,7 +1,9 @@
+#![allow(clippy::main_recursion)]
+
 //! ONNX Runtime Web Embeddings Demo
 //!
 //! Demonstrates real GPU-accelerated embeddings using ONNX Runtime Web.
-//! This provides production-ready BERT/MiniLM inference with 20-40x speedup.
+//! This demonstrates BERT/MiniLM inference in the browser.
 //!
 //! ## Setup
 //!
@@ -144,13 +146,7 @@ pub async fn example_onnx_performance() -> Result<JsValue, JsValue> {
     let time_ms = end - start;
 
     web_sys::console::log_1(&format!("⚡ ONNX + WebGPU: {:.2}ms", time_ms).into());
-    web_sys::console::log_1(
-        &format!(
-            "📊 Expected CPU time: ~{:.0}ms (25x slower)",
-            time_ms * 25.0
-        )
-        .into(),
-    );
+    web_sys::console::log_1(&format!("📊 Estimated CPU time: ~{:.0}ms", time_ms * 25.0).into());
 
     // Return results
     let result = js_sys::Object::new();

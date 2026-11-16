@@ -2,6 +2,7 @@
 name = "graphrag-wasm"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -27,7 +28,7 @@ hydrate = ["leptos/hydrate"]
 ssr = ["leptos/ssr"]
 
 [dependencies]
-# GraphRAG core library with WASM support (no async, no parallel-processing, no ollama)
+# GraphRAG core library with WASM support (no async, no parallel-processing, no LLM HTTP client)
 # Note: pagerank feature requires rayon which doesn't work in WASM
 # Added: leiden for hierarchical community detection
 graphrag-core = { path = "../graphrag-core", features = [

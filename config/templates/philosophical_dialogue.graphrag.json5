@@ -8,14 +8,14 @@
 // - Moderate size (30k-100k words)
 //
 // APPROACH: LazyGraphRAG - Cost-effective for large philosophical texts
-// - 0.1% of traditional indexing cost
+// - a lower-cost indexing path
 // - No LLM required for indexing
 // - Concept-based retrieval
 // - Perfect for philosophical concepts and relationships
 //
-// COST: $0.10 per 1M tokens vs $100 traditional (1000x cheaper!)
-// QUALITY: 92% accuracy (vs 95% traditional, -3% acceptable)
-// SPEED: 1000 docs/sec indexing (vs 10 docs/sec traditional, 100x faster)
+// Performance and quality depend on the selected pipeline and corpus.
+// Performance and quality depend on the selected pipeline and corpus.
+// Performance and quality depend on the selected pipeline and corpus.
 
 {
   // ========================================
@@ -205,17 +205,17 @@
   },
 
   // ========================================
-  // OLLAMA CONFIGURATION
+  // LLM CONFIGURATION (llama.cpp, OpenAI-compatible)
   // ========================================
-  ollama: {
-    // Ollama NOT required for LazyGraphRAG!
+  llm: {
+    // llama.cpp NOT required for LazyGraphRAG!
     enabled: false,                      // No LLM needed
     fallback_to_hash: true,              // Use hash embeddings
 
-    host: "localhost",
-    port: 11434,
-    chat_model: "llama3.1:8b",           // Not used
-    embedding_model: "nomic-embed-text", // Not used
+    base_url: "http://127.0.0.1:8080/v1",
+    embedding_base_url: "http://127.0.0.1:8081/v1",
+    chat_model: "qwen3.5-9b",           // Not used
+    embedding_model: "multilingual-e5-small", // Not used
     timeout_seconds: 120,
     max_retries: 3
   },
@@ -276,4 +276,4 @@
 //
 // Processing time: ~5-10 seconds (vs 5-10 minutes with LLM!)
 // Cost: $0 (vs $5-10 with LLM-based extraction)
-// Quality: 90-92% accuracy for philosophical concept retrieval
+// Performance and quality depend on the selected pipeline and corpus.

@@ -243,25 +243,20 @@ impl QueryComplexityAnalyzer {
     /// Generate explanation for the routing decision
     fn generate_explanation(&self, complexity: QueryComplexity, level: usize) -> String {
         match complexity {
-            QueryComplexity::VeryBroad => format!(
-                "Very broad query detected → using level {} for high-level overview",
-                level
-            ),
-            QueryComplexity::Broad => format!(
-                "Broad query detected → using level {} for general understanding",
-                level
-            ),
-            QueryComplexity::Medium => format!(
-                "Medium complexity query → using level {} for balanced detail",
-                level
-            ),
-            QueryComplexity::Specific => format!(
-                "Specific query detected → using level {} for detailed information",
-                level
-            ),
+            QueryComplexity::VeryBroad => {
+                format!("Very broad query detected → using level {level} for high-level overview")
+            },
+            QueryComplexity::Broad => {
+                format!("Broad query detected → using level {level} for general understanding")
+            },
+            QueryComplexity::Medium => {
+                format!("Medium complexity query → using level {level} for balanced detail")
+            },
+            QueryComplexity::Specific => {
+                format!("Specific query detected → using level {level} for detailed information")
+            },
             QueryComplexity::VerySpecific => format!(
-                "Very specific query detected → using level {} for precise relationships",
-                level
+                "Very specific query detected → using level {level} for precise relationships"
             ),
         }
     }

@@ -2,6 +2,7 @@
 name = "graphrag-server"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -16,17 +17,14 @@ path = "src/main.rs"
 
 [features]
 # Temporarily disabled auth feature (requires migration from Axum to Actix-web)
-default = ["qdrant"] # , "auth"]
+default = ["qdrant", "llm"] # , "auth"]
 qdrant = ["qdrant-client"]
 lancedb = ["dep:lancedb", "arrow-array", "arrow-schema"]
 auth = ["jsonwebtoken", "bcrypt"]
-ollama = ["ollama-rs"]
+llm = ["graphrag-core/llm"]
 
 [dependencies]
-graphrag-core = { path = "../graphrag-core", features = ["caching", "lightrag", "pagerank", "memory-storage"] }
-
-# Optional: Ollama embeddings (requires main graphrag crate)
-ollama-rs = { version = "0.2", optional = true }
+graphrag-core = { version = "0.3.0", path = "../graphrag-core", default-features = false, features = ["async", "caching", "lightrag", "pagerank", "parallel-processing", "memory-storage"] }
 
 # Web framework - Actix-web + Apistos for OpenAPI documentation
 actix-web = { workspace = true }

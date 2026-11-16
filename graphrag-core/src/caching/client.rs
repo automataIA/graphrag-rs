@@ -518,13 +518,11 @@ mod tests {
         let utilization = client.cache_utilization();
         assert!(
             utilization >= 0.0,
-            "Utilization should be >= 0.0, got: {}",
-            utilization
+            "Utilization should be >= 0.0, got: {utilization}"
         );
         assert!(
             utilization <= 1.0,
-            "Utilization should be <= 1.0, got: {}",
-            utilization
+            "Utilization should be <= 1.0, got: {utilization}"
         );
     }
 

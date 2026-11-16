@@ -82,8 +82,7 @@ impl<'a> PipelineExecutor<'a> {
     }
 
     /// Run the full pipeline (synchronous version)
-    #[cfg(not(feature = "async"))]
-    pub fn run_full_pipeline(&mut self) -> Result<PipelineReport> {
+    pub fn run_full_pipeline_sync(&mut self) -> Result<PipelineReport> {
         let start = std::time::Instant::now();
 
         if !self.graphrag.has_documents() {
@@ -93,7 +92,7 @@ impl<'a> PipelineExecutor<'a> {
             });
         }
 
-        self.graphrag.build_graph()?;
+        self.graphrag.build_graph_sync()?;
 
         let elapsed = start.elapsed().as_millis();
 
@@ -108,10 +107,9 @@ impl<'a> PipelineExecutor<'a> {
     }
 
     /// Add a document from text and run the full pipeline in one call (sync)
-    #[cfg(not(feature = "async"))]
-    pub fn ingest_and_build(&mut self, text: &str) -> Result<PipelineReport> {
+    pub fn ingest_and_build_sync(&mut self, text: &str) -> Result<PipelineReport> {
         self.graphrag.add_document_from_text(text)?;
-        self.run_full_pipeline()
+        self.run_full_pipeline_sync()
     }
 
     /// Get a snapshot report of the current graph state without running any pipeline

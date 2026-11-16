@@ -175,7 +175,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ Self-similarity = 1.0 (mathematically correct)");
     println!("  ✓ Cross-similarity < self-similarity (good separation)");
     println!("  ✓ Semantic retrieval producing ranked results");
-    println!("\n🚀 Implementation is production-ready!\n");
+    println!("\n🚀 Real-search example completed.\n");
 
     Ok(())
 }

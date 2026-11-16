@@ -2,10 +2,10 @@
 # GraphRAG Configuration Template - LEGAL DOCUMENTS
 # =============================================================================
 # 🎯 FULLY TEXT-AGNOSTIC: Works with ANY legal document without hardcoded assumptions
-# 🚀 100% DYNAMIC: No hardcoded party names, case names, or document-specific logic
+# 🚀 text-agnostic configuration: No hardcoded party names, case names, or document-specific logic
 # 📚 Use cases: ANY legal document - contracts, briefs, regulations, case law, statutes
 # ⚡ Breakthrough Features: PageRank, Caching, Incremental, ROGRAG, Async processing
-# Based on 2024 research: high precision parameters for legal accuracy and compliance
+# Performance and quality depend on the selected pipeline and corpus.
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -17,7 +17,7 @@
 # - LLM-based extraction with very high confidence thresholds (0.85)
 # - Deep understanding of legal relationships and dependencies
 # - Superior performance on complex legal terminology and citations
-# CRITICAL: Legal documents demand highest accuracy - semantic approach essential
+# Performance and quality depend on the selected pipeline and corpus.
 approach = "semantic"
 
 [general]
@@ -37,14 +37,14 @@ parallel_execution = true
 # LEGAL CHUNKING: Smaller chunks for precise legal clause analysis
 # Reference: Legal NLP Research (2024) "Optimal Chunking for Legal Document Analysis"
 chunk_size = 512              # Smaller chunks for precise legal provisions (Legal NLP 2024)
-chunk_overlap = 150           # 30% overlap for legal context preservation (Pinecone 2024)
+chunk_overlap = 150           # configured overlap for legal context
 min_chunk_size = 128          # Captures complete legal statements
 clean_control_chars = true
 normalize_whitespace = true
 
 [pipeline.entity_extraction]
 # LEGAL ENTITY TYPES: Specialized for legal document analysis
-model_name = "llama3.1:8b"
+model_name = "qwen3.5-9b"
 temperature = 0.05            # Very low for legal precision (Medium 2024)
 max_tokens = 1000             # Moderate length for legal descriptions
 entity_types = [
@@ -106,7 +106,7 @@ max_community_size = 15       # Smaller focused legal groups
 # LEGAL TEXT PROCESSING
 enabled = true
 chunk_size = 512              # Consistent with pipeline
-chunk_overlap = 150           # 30% overlap for legal context
+chunk_overlap = 150           # configured overlap for legal context
 min_chunk_size = 128
 max_chunk_size = 1024         # Moderate size for legal provisions
 normalize_whitespace = true
@@ -149,8 +149,8 @@ legal_precedence_boost = 1.8             # Boost legal precedence relationships
 [vector_processing]
 # LEGAL SEARCH: Maximum precision
 enabled = true
-embedding_model = "nomic-embed-text"
-embedding_dimensions = 768
+embedding_model = "multilingual-e5-small"
+embedding_dimensions = 384
 use_hnsw_index = true
 hnsw_ef_construction = 150    # Lower for precise legal search
 hnsw_m = 12                   # Fewer connections for legal precision
@@ -196,25 +196,18 @@ Context:
 
 Rights Analysis:"""
 
-[ollama]
-# LEGAL LLM: Maximum precision for legal accuracy
+[llm]
+# Performance and quality depend on the selected pipeline and corpus.
 enabled = true
-host = "http://localhost"
-port = 11434
-chat_model = "llama3.1:8b"
-embedding_model = "nomic-embed-text"
+base_url = "http://127.0.0.1:8080/v1"
+embedding_base_url = "http://127.0.0.1:8081/v1"
+chat_model = "qwen3.5-9b"
+embedding_model = "multilingual-e5-small"
 timeout_seconds = 90          # Higher timeout for complex legal analysis
 max_retries = 3
 fallback_to_hash = false
 max_tokens = 1200             # Sufficient for detailed legal analysis
 temperature = 0.05            # Research: very low for legal precision (IBM 2024)
-
-[ollama.generation]
-# LEGAL GENERATION: Maximum precision and consistency
-temperature = 0.05            # Extremely low for legal accuracy (phData 2024)
-top_p = 0.5                   # Very focused legal responses (AnalyticsVidhya 2024)
-max_tokens = 1500             # Detailed legal explanations
-stream = false
 
 [performance]
 # LEGAL PERFORMANCE: Precision over speed

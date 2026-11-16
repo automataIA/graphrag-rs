@@ -171,7 +171,7 @@ impl super::Component for HelpOverlay {
 /// Helper to create a keybinding line
 fn keybinding_line<'a>(key: &'a str, description: &'a str, theme: &'a Theme) -> Line<'a> {
     Line::from(vec![
-        Span::styled(format!("  {:15} ", key), theme.highlight()),
+        Span::styled(format!("  {key:15} "), theme.highlight()),
         Span::styled(description.to_string(), theme.text()),
     ])
 }

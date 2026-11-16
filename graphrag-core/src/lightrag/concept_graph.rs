@@ -8,7 +8,7 @@
 //!
 //! - **No LLM required**: Uses NLP noun phrase extraction instead of LLM calls
 //! - **Co-occurrence based**: Builds relationships from concept co-occurrence
-//! - **Cost efficient**: 0.1% of full GraphRAG indexing cost
+//! - **Lightweight**: uses noun phrases and co-occurrence counts
 //! - **Fast indexing**: Comparable to vector RAG indexing speed
 //!
 //! ## Architecture
@@ -39,12 +39,13 @@
 
 use indexmap::IndexMap;
 use petgraph::graph::{DiGraph, NodeIndex};
+use petgraph::visit::EdgeRef;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 /// A concept extracted from text (noun phrase or key term)
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Concept {
     /// The concept text (normalized)
     pub text: String,
@@ -238,7 +239,7 @@ impl ConceptExtractor {
 
         // Get top keywords by frequency
         let mut keywords: Vec<_> = word_freq.into_iter().collect();
-        keywords.sort_by(|a, b| b.1.cmp(&a.1));
+        keywords.sort_by_key(|k| std::cmp::Reverse(k.1));
 
         keywords.into_iter()
             .take(20) // Top 20 keywords
@@ -343,11 +344,19 @@ impl ConceptGraphBuilder {
         self.chunk_concepts
             .insert(chunk_id.to_string(), extracted_concepts.clone());
 
-        // Update concept chunk IDs
+        // Update concept chunk IDs (registering concepts not seen at document level)
         for concept_text in extracted_concepts {
-            if let Some(concept) = self.concepts.get_mut(&concept_text) {
-                concept.chunk_ids.insert(chunk_id.to_string());
-            }
+            self.concepts
+                .entry(concept_text.clone())
+                .or_insert_with(|| Concept {
+                    text: concept_text,
+                    concept_type: ConceptType::NounPhrase,
+                    frequency: 0,
+                    document_ids: HashSet::new(),
+                    chunk_ids: HashSet::new(),
+                })
+                .chunk_ids
+                .insert(chunk_id.to_string());
         }
     }
 

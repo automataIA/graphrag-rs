@@ -3,7 +3,7 @@
 //! This module provides a unified interface for multiple embedding providers:
 //! - OpenAI (Ada-2, text-embedding-3-small, text-embedding-3-large)
 //! - Cohere (embed-english-v3.0, embed-multilingual-v3.0)
-//! - Local models (Sentence Transformers via Ollama/Candle)
+//! - Local models (Sentence Transformers via llama.cpp/Candle)
 //! - HuggingFace Inference API
 //!
 //! ## Architecture
@@ -32,7 +32,7 @@ pub enum EmbeddingProvider {
     OpenAI,
     /// Cohere embeddings
     Cohere,
-    /// Local models (Ollama/Candle)
+    /// Local models (llama.cpp/Candle)
     Local,
     /// HuggingFace Inference API
     HuggingFace,
@@ -115,9 +115,9 @@ pub enum EmbeddingError {
 impl std::fmt::Display for EmbeddingError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            EmbeddingError::ApiError(msg) => write!(f, "API error: {}", msg),
-            EmbeddingError::NetworkError(msg) => write!(f, "Network error: {}", msg),
-            EmbeddingError::InvalidInput(msg) => write!(f, "Invalid input: {}", msg),
+            EmbeddingError::ApiError(msg) => write!(f, "API error: {msg}"),
+            EmbeddingError::NetworkError(msg) => write!(f, "Network error: {msg}"),
+            EmbeddingError::InvalidInput(msg) => write!(f, "Invalid input: {msg}"),
             EmbeddingError::RateLimited => write!(f, "Rate limit exceeded"),
             EmbeddingError::Unavailable => write!(f, "Provider unavailable"),
         }

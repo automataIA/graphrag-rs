@@ -1,7 +1,7 @@
 //! WebLLM Bindings for GPU-Accelerated LLM
 //!
 //! Provides Rust bindings to WebLLM (https://github.com/mlc-ai/web-llm),
-//! a production-ready WebGPU-accelerated LLM runtime for browsers.
+//! a WebGPU-accelerated LLM runtime for browsers.
 //!
 //! ## Performance
 //! - 40-62 tokens/second with WebGPU
@@ -21,7 +21,7 @@
 //!
 //! ## Usage
 //!
-//! ```rust
+//! ```rust,ignore
 //! let llm = WebLLM::new("Phi-3-mini-4k-instruct-q4f16_1-MLC").await?;
 //! let response = llm.chat("Hello!", |progress, text| {
 //!     console_log!("Loading: {}% - {}", progress * 100.0, text);
@@ -639,7 +639,7 @@ pub fn is_webllm_available() -> bool {
 
 /// WebLLM Client wrapper for compatibility with LLM provider abstraction
 ///
-/// This provides a similar API to OllamaHttpClient for seamless integration
+/// This provides a similar API to LlamaCppHttpClient for seamless integration
 #[wasm_bindgen]
 pub struct WebLLMClient {
     model: String,

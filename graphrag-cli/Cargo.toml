@@ -2,6 +2,7 @@
 name = "graphrag-cli"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -20,18 +21,18 @@ name = "graphrag-cli"
 path = "src/main.rs"
 
 [dependencies]
-# Lightweight HTTP client for pre-flight Ollama checks
-ureq = "2"
+# Lightweight HTTP client for pre-flight LLM server checks
+ureq = { workspace = true }
 
 # Core GraphRAG library (direct integration, no HTTP server)
-graphrag-core = { version = "0.2", path = "../graphrag-core", features = [
+graphrag-core = { version = "0.3.0", path = "../graphrag-core", default-features = false, features = [
     "async",
     "pagerank",
     "lightrag",
     "leiden",
     "caching",
     "parallel-processing",
-    "ollama",
+    "llm",
     "rograg",
     "cross-encoder",
     "incremental",
@@ -40,8 +41,8 @@ graphrag-core = { version = "0.2", path = "../graphrag-core", features = [
 ] }
 
 # TUI Framework
-ratatui = "0.29"
-crossterm = { version = "0.28", features = ["event-stream"] }
+ratatui = "0.30.2"
+crossterm = { version = "0.29", features = ["event-stream"] }
 
 # Async runtime
 tokio = { version = "1.32", features = ["full"] }
@@ -49,7 +50,7 @@ tokio-util = "0.7"
 futures = "0.3"
 
 # Text input widget
-tui-textarea = "0.7"
+tui-textarea = { package = "tui-textarea-2", version = "0.13.2" }
 
 # CLI argument parsing
 clap = { version = "4.5", features = ["derive", "cargo"] }
@@ -91,3 +92,6 @@ tempfile = "3.8"
 default = ["json5-support"]
 json5-support = ["graphrag-core/json5-support", "json5"]
 yaml-support = []
+# GLiNER ONNX NER (needed for the GLiNER -> LLM cascade, `gliner.llm_relations`)
+gliner = ["graphrag-core/gliner"]
+gliner2 = ["graphrag-core/gliner2"]

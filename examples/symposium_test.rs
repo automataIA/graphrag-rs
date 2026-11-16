@@ -241,7 +241,7 @@ async fn main() -> Result<()> {
     println!("  ✓ Monitoring and health checks");
     println!("  ✓ Simulated retrieval pipeline");
     println!("  ✓ Performance metrics collection");
-    println!("\n🚀 GraphRAG-RS is production-ready!\n");
+    println!("\n🚀 GraphRAG-RS example completed.\n");
 
     Ok(())
 }

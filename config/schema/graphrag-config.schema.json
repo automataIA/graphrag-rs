@@ -310,6 +310,38 @@
           "type": "boolean",
           "default": true
         },
+        "ontology_path": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "Path to a versioned ontology file (.toml or .json) with entity_types and relation_types. Default: built-in generic ontology."
+        },
+        "epistemic_status": {
+          "type": "boolean",
+          "default": false,
+          "description": "Ask the extraction LLM whether each relationship is narrated or only said by a character (status + said_by); said ones get a [detto da X] marker in the description. Changes prompt and schema (new extraction-cache keys): re-index to see any effect."
+        },
+        "selective_gleaning": {
+          "type": "boolean",
+          "default": false,
+          "description": "Second, relation-only LLM call for chunks the single-pass extraction left under-extracted (at least 3 entities and at most 1 relationship). Applies only to LLM single-pass extraction. One extra call only for the selected chunks: re-index to see any effect."
+        },
+        "selective_min_entities": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 3,
+          "description": "Selective gleaning: a chunk qualifies when the first pass found at least this many entities. No effect when selective_gleaning is false."
+        },
+        "selective_max_relationships": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 1,
+          "description": "Selective gleaning: a chunk qualifies when the first pass found at most this many relationships. No effect when selective_gleaning is false."
+        },
+        "extraction_max_tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Output token cap for LLM entity/relation extraction calls. Absent: uses llm.max_tokens (1500 when unset). Answers always use llm.max_tokens."
+        },
         "min_confidence": {
           "type": "number",
           "minimum": 0.0,
@@ -407,7 +439,7 @@
         },
         "pagerank_convergence": {
           "type": "number",
-          "minimum": 0.00001,
+          "minimum": 1e-05,
           "maximum": 0.01,
           "default": 0.0001
         },
@@ -512,40 +544,49 @@
         }
       }
     },
-    "ollama": {
+    "llm": {
       "type": "object",
-      "description": "Ollama LLM service configuration",
+      "description": "OpenAI-compatible LLM service (llama.cpp llama-server, Groq, Cerebras, ...). The legacy `ollama` section is rejected.",
+      "additionalProperties": false,
       "properties": {
         "enabled": {
           "type": "boolean",
           "default": true
         },
-        "host": {
+        "base_url": {
           "type": "string",
           "format": "uri",
-          "default": "http://localhost"
+          "description": "Chat API base URL including /v1",
+          "default": "http://127.0.0.1:8080/v1"
         },
-        "port": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 65535,
-          "default": 11434
+        "embedding_base_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Embedding API base URL including /v1 (llama-server --embeddings)",
+          "default": "http://127.0.0.1:8081/v1"
+        },
+        "api_key_env": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Name of the environment variable holding the API key (never the key itself)",
+          "default": null
         },
         "chat_model": {
           "type": "string",
-          "description": "Chat model name",
-          "default": "llama3.1:8b"
+          "description": "Chat model name (llama-server --alias)",
+          "default": "qwen3.5-9b"
         },
         "embedding_model": {
           "type": "string",
           "description": "Embedding model name",
-          "default": "nomic-embed-text"
+          "default": "multilingual-e5-small"
         },
         "timeout_seconds": {
           "type": "integer",
-          "minimum": 10,
-          "maximum": 600,
-          "default": 60
+          "minimum": 1,
+          "default": 120
         },
         "max_retries": {
           "type": "integer",
@@ -558,42 +599,198 @@
           "default": false
         },
         "max_tokens": {
-          "type": "integer",
-          "minimum": 100,
-          "maximum": 8000,
-          "default": 1000
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
         },
         "temperature": {
-          "type": "number",
+          "type": [
+            "number",
+            "null"
+          ],
           "minimum": 0.0,
-          "maximum": 2.0,
-          "default": 0.2
+          "maximum": 2.0
         },
-        "generation": {
+        "enable_caching": {
+          "type": "boolean",
+          "default": true
+        },
+        "max_context_tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 6000,
+          "description": "Max estimated tokens (chars/3) of retrieved context in an answer prompt"
+        },
+        "max_concurrent_requests": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 4,
+          "description": "Max LLM requests in flight during entity extraction (match llama-server -np)"
+        },
+        "extraction_cache": {
+          "type": "boolean",
+          "default": true,
+          "description": "Cache raw extraction responses in <auto_save workspace>/extraction_cache/ (needs auto_save enabled)"
+        },
+        "disable_thinking": {
+          "type": "boolean",
+          "default": true,
+          "description": "Send chat_template_kwargs {enable_thinking:false} with every chat request so reasoning models answer directly; auto-retried without it if the API rejects the field"
+        }
+      }
+    },
+    "reranker": {
+      "type": "object",
+      "description": "Opt-in cross-encoder reranking of candidate chunks in `ask` via a llama.cpp `llama-server --reranking` endpoint (/v1/rerank). On failure the default context order is used.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "api_endpoint": {
+          "type": "string",
+          "format": "uri",
+          "default": "http://localhost:8082"
+        },
+        "model": {
+          "type": "string",
+          "default": "bge-reranker-v2-m3"
+        },
+        "candidates": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 30,
+          "description": "Max distinct candidate chunks sent to the reranker"
+        },
+        "top_k": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 8,
+          "description": "Reranked chunks placed first in the answer context"
+        },
+        "api_key_env": {
+          "type": "string",
+          "description": "Name of the environment variable holding the API key (never the key itself)"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 30
+        }
+      }
+    },
+    "chapter_summaries": {
+      "type": "object",
+      "description": "Opt-in per-chapter summaries at index time: one LLM call per chapter of each document being indexed; each summary is stored as an extra retrievable chunk (never sent to entity extraction). Needs llm.enabled; without chapter headings the chunks are grouped by 12.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 400,
+          "description": "Output token budget of one summary"
+        },
+        "max_in_context": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 2,
+          "description": "Max chapter-summary chunks added to the answer context (0 = never)"
+        }
+      }
+    },
+    "chunk_context": {
+      "type": "object",
+      "description": "Opt-in index-time context line per chunk: one LLM call per chunk of each document being indexed (sequential, in document order); the stored chunk text becomes '[Contesto: <sentence>]' + blank line + original text. Extraction and chapter summaries still read the original text. Needs llm.enabled. The prompt is Italian-only for now.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "window": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 4,
+          "description": "Preceding chunks of the same document shown to the model"
+        },
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 120,
+          "description": "Output token budget of one context line"
+        }
+      }
+    },
+    "retrieval": {
+      "type": "object",
+      "description": "Retrieval options shared by all approaches.",
+      "properties": {
+        "hyde": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in HyDE fusion in `ask`: one extra LLM call writes a hypothetical passage (needs llm.enabled and reranker.enabled, otherwise skipped with a warning). Hybrid search and the answer prompt keep the original question; the reranker pool is extended with the candidates of question + passage and chunks are ranked with both queries and the two rankings are interleaved by rank, original first (scores are not comparable)."
+        },
+        "map_reduce": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in map-reduce at query time in `ask`: one short LLM call per candidate chunk (map_reduce_chunks extra calls per question) extracts the facts that help answer the question; the notes become a 'Fatti estratti dai passaggi' part of the answer context. Needs llm.enabled."
+        },
+        "map_reduce_chunks": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 60,
+          "description": "Max chunks mapped when map_reduce is on."
+        }
+      }
+    },
+    "gliner": {
+      "type": "object",
+      "description": "GLiNER ONNX entity (and optional relation) extractor; needs the `gliner` cargo feature.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean", "default": false},
+        "model_path": {"type": "string", "description": "Path to the ONNX model file (backend gline) or the GLiNER2.5 model directory (backend gliner2)"},
+        "backend": {"type": "string", "enum": ["gline", "gliner2"], "default": "gline", "description": "gline = ONNX via gline-rs (feature gliner); gliner2 = GLiNER2.5 via candle (feature gliner2)"},
+        "tokenizer_path": {"type": "string", "description": "Path to tokenizer.json (defaults to the model directory)"},
+        "mode": {"type": "string", "enum": ["span", "token"], "default": "span"},
+        "entity_labels": {"type": "array", "items": {"type": "string"}},
+        "relation_labels": {"type": "array", "items": {"type": "string"}, "description": "GLiNER's own relation stage; empty disables it. Ignored when llm_relations is true."},
+        "entity_threshold": {"type": "number", "minimum": 0, "maximum": 1, "default": 0.4},
+        "relation_threshold": {"type": "number", "minimum": 0, "maximum": 1, "default": 0.5},
+        "use_gpu": {"type": "boolean", "default": false},
+        "max_concurrent_chunks": {"type": ["integer", "null"], "minimum": 1, "default": null},
+        "llm_relations": {
+          "type": "boolean",
+          "default": false,
+          "description": "GLiNER finds the entities, the LLM extracts only the relationships among them (async build only; requires llm.enabled)."
+        },
+        "jev": {
           "type": "object",
+          "description": "TypeSafe Jev classifies entity types and relations of the GLiNER entities against the ontology (mode g5; replaces GLiNER relations; needs the ureq feature, implied by gliner2). Mutually exclusive with llm_relations.",
+          "additionalProperties": false,
           "properties": {
-            "temperature": {
-              "type": "number",
-              "minimum": 0.0,
-              "maximum": 2.0,
-              "default": 0.2
-            },
-            "top_p": {
-              "type": "number",
-              "minimum": 0.0,
-              "maximum": 1.0,
-              "default": 0.9
-            },
-            "max_tokens": {
-              "type": "integer",
-              "minimum": 100,
-              "maximum": 8000,
-              "default": 1000
-            },
-            "stream": {
-              "type": "boolean",
-              "default": false
-            }
+            "enabled": {"type": "boolean", "default": false},
+            "api_endpoint": {"type": "string", "default": "https://api.typesafe.ai/v1/systemone"},
+            "model": {"type": "string", "default": "jev-latest"},
+            "api_key_env": {"type": "string", "default": "TYPESAFE_API_KEY", "description": "Name of the env var holding the API key (never the key itself)"},
+            "max_entities_per_chunk": {"type": "integer", "minimum": 1, "default": 8, "description": "Highest-GLiNER-confidence entities sent to Jev; the rest keep their GLiNER type and get no relations"},
+            "filter_entities": {"type": "boolean", "default": true, "description": "Entity-existence filter (request E): candidates that are not specific identifiable referents are removed before pairs are built; false restores the g5 flow"},
+            "min_entity": {"type": "number", "minimum": 0, "maximum": 1, "default": 0.5, "description": "Entity filter: min existence score for a candidate to be kept"},
+            "candidate_floor": {"type": "number", "minimum": 0, "maximum": 1, "default": 0.2, "description": "Pairs with link below this get no evidence request"},
+            "min_type_prob": {"type": "number", "minimum": 0, "maximum": 1, "default": 0.0, "description": "Acceptance: min probability of the chosen relation type"},
+            "min_link": {"type": "number", "minimum": 0, "maximum": 1, "default": 0.5},
+            "min_evidence": {"type": "number", "minimum": 0, "maximum": 1, "default": 0.5},
+            "classify_entity_types": {"type": "boolean", "default": true},
+            "max_concurrent": {"type": "integer", "minimum": 1, "default": 4},
+            "raw_log_path": {"type": ["string", "null"], "default": null, "description": "JSONL raw log; default <workspace dir>/jev_raw.jsonl when auto_save is enabled"},
+            "timeout_secs": {"type": "integer", "minimum": 1, "default": 120}
           }
         }
       }

@@ -13,9 +13,8 @@ use std::fs;
 
 /// Helper function to load fixture files
 fn load_fixture(filename: &str) -> String {
-    let path = format!("tests/fixtures/documents/{}", filename);
-    fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("Failed to load fixture '{}': {}", filename, e))
+    let path = format!("tests/fixtures/documents/{filename}");
+    fs::read_to_string(&path).unwrap_or_else(|e| panic!("Failed to load fixture '{filename}': {e}"))
 }
 
 /// Test 1: Complete pipeline on real article
@@ -92,8 +91,7 @@ fn test_complete_pipeline_on_real_article() {
     for (i, chunk) in chunks.iter().enumerate() {
         assert!(
             !chunk.content.is_empty(),
-            "Chunk {} should have non-empty content",
-            i
+            "Chunk {i} should have non-empty content"
         );
         assert!(
             chunk.content.len() <= 600, // 500 + some tolerance for word boundaries

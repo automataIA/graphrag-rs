@@ -1,7 +1,8 @@
 //! LightRAG: Simple and Fast Retrieval-Augmented Generation
 //!
 //! This module implements LightRAG's dual-level retrieval optimization,
-//! achieving 6000x token reduction compared to traditional GraphRAG.
+//! which can reduce the context considered by a query through two-level
+//! keyword selection.
 //!
 //! Key innovation: Extract keywords at TWO levels:
 //! - High-level: Broader topics, themes, concepts (abstract)
@@ -15,8 +16,8 @@
 //! This module also includes LazyGraphRAG components:
 //! - Concept-based retrieval (no prior summarization)
 //! - Noun phrase extraction (no LLM required)
-//! - 0.1% of full GraphRAG indexing cost
-//! - 700x cheaper query costs
+//! - avoids prior summarization for concept-based retrieval
+//! - uses lightweight indexing components
 
 pub mod dual_retrieval;
 pub mod graph_indexer;

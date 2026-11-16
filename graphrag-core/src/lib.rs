@@ -58,6 +58,8 @@ pub mod entity;
 pub mod generation;
 /// Graph data structures and algorithms
 pub mod graph;
+/// Shared, versioned extraction ontology (entity types + closed relation list)
+pub mod ontology;
 /// Retrieval strategies and implementations
 pub mod retrieval;
 /// Storage backends and persistence
@@ -76,14 +78,20 @@ pub mod vector;
 pub mod builder;
 /// Embedding generation and providers
 pub mod embeddings;
+/// llama.cpp-specific multilingual-e5 embedding provider.
+#[cfg(feature = "llm")]
+pub mod llama_cpp;
+/// OpenAI-compatible LLM integration (llama.cpp server, Cerebras, Groq)
+pub mod llm;
 /// Natural language processing utilities
 pub mod nlp;
-/// Ollama LLM integration
-pub mod ollama;
 /// Persistence layer for knowledge graphs (workspace management always available)
 pub mod persistence;
 /// Query processing and execution
 pub mod query;
+/// llama.cpp cross-encoder reranker client (`/v1/rerank`).
+#[cfg(feature = "llm")]
+pub mod reranker;
 /// Text summarization capabilities
 pub mod summarization;
 
@@ -179,6 +187,8 @@ pub mod rograg;
 pub mod prelude {
     // Main entry point
     pub use crate::GraphRAG;
+    #[cfg(feature = "async")]
+    pub use crate::{AnswerResponse, TokenUsage};
 
     // Configuration & Builders
     pub use crate::builder::GraphRAGBuilder;
@@ -260,3 +270,5 @@ pub use crate::retrieval::hipporag_ppr::{Fact, HippoRAGConfig, HippoRAGRetriever
 
 mod graphrag;
 pub use graphrag::GraphRAG;
+#[cfg(feature = "async")]
+pub use graphrag::{AnswerResponse, TokenUsage};

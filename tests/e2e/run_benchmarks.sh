@@ -54,20 +54,19 @@ QUESTIONS[tom_sawyer]="Who is Tom Sawyer and what are his main characteristics?|
 # Format: pipeline_<name>() prints the 7 dimensions as key=value pairs
 # Dimensions:
 #   approach:      algorithmic | semantic | hybrid
-#   embedding:     hash | ollama
-#   embed_model:   (model name, only if embedding=ollama)
+#   embedding:     hash | llama_cpp
+#   embed_model:   (llama-server --alias, only if embedding=llama_cpp)
 #   chunk_size:    integer
 #   chunk_overlap: integer
 #   use_gleaning:  true | false
 #   gleaning_rounds: integer
-#   llm_model:     (ollama model name)
+#   llm_model:     (llama-server --alias of the chat model)
 #   llm_temp:      float
 #   lightrag:      true | false
 #   leiden:        true | false
 #   cross_encoder: true | false
-#   keep_alive:    none | 5m | 30m | 1h  (Ollama KV cache — keeps model in VRAM between requests)
-#   num_ctx:       0 (use Ollama default) | integer (explicit context window, e.g. 32768)
-#   ollama_timeout: integer seconds (default 120; use 300+ for KV-cache pipelines)
+#   llm_timeout:   integer seconds (default 120; use 300+ for long extraction pipelines)
+#   Context window and prompt cache are llama-server settings (-c, cache_prompt on by default).
 # =============================================================================
 
 # --- Algorithmic pipelines (no LLM needed, fast) ---
@@ -85,13 +84,11 @@ use_gleaning=false
 gleaning_rounds=0
 llm_model=none
 llm_temp=0.0
-ollama_enabled=false
+llm_enabled=false
 lightrag=false
 leiden=false
 cross_encoder=false
-keep_alive=none
-num_ctx=0
-ollama_timeout=120
+llm_timeout=120
 PARAMS
 }
 
@@ -108,13 +105,11 @@ use_gleaning=false
 gleaning_rounds=0
 llm_model=none
 llm_temp=0.0
-ollama_enabled=false
+llm_enabled=false
 lightrag=false
 leiden=false
 cross_encoder=false
-keep_alive=none
-num_ctx=0
-ollama_timeout=120
+llm_timeout=120
 PARAMS
 }
 
@@ -131,36 +126,32 @@ use_gleaning=false
 gleaning_rounds=0
 llm_model=none
 llm_temp=0.0
-ollama_enabled=false
+llm_enabled=false
 lightrag=false
 leiden=true
 cross_encoder=false
-keep_alive=none
-num_ctx=0
-ollama_timeout=120
+llm_timeout=120
 PARAMS
 }
 
-pipeline_algo_ollama_embed() {
+pipeline_algo_llama_embed() {
     cat <<-PARAMS
-name=algo_ollama_embed
+name=algo_llama_embed
 approach=algorithmic
-embedding=ollama
-embed_model=nomic-embed-text
-embed_dim=768
+embedding=llama_cpp
+embed_model=multilingual-e5-small
+embed_dim=384
 chunk_size=512
 chunk_overlap=100
 use_gleaning=false
 gleaning_rounds=0
 llm_model=none
 llm_temp=0.0
-ollama_enabled=true
+llm_enabled=true
 lightrag=false
 leiden=false
 cross_encoder=false
-keep_alive=30m
-num_ctx=0
-ollama_timeout=120
+llm_timeout=120
 PARAMS
 }
 
@@ -170,22 +161,20 @@ pipeline_semantic_qwen3() {
     cat <<-PARAMS
 name=semantic_qwen3
 approach=semantic
-embedding=ollama
-embed_model=nomic-embed-text
-embed_dim=768
+embedding=llama_cpp
+embed_model=multilingual-e5-small
+embed_dim=384
 chunk_size=800
 chunk_overlap=300
 use_gleaning=true
 gleaning_rounds=2
-llm_model=qwen3:8b-q4_k_m
+llm_model=qwen3.5-9b
 llm_temp=0.1
-ollama_enabled=true
+llm_enabled=true
 lightrag=true
 leiden=true
 cross_encoder=false
-keep_alive=30m
-num_ctx=0
-ollama_timeout=120
+llm_timeout=120
 PARAMS
 }
 
@@ -193,22 +182,20 @@ pipeline_semantic_llama31() {
     cat <<-PARAMS
 name=semantic_llama31
 approach=semantic
-embedding=ollama
-embed_model=nomic-embed-text
-embed_dim=768
+embedding=llama_cpp
+embed_model=multilingual-e5-small
+embed_dim=384
 chunk_size=800
 chunk_overlap=300
 use_gleaning=true
 gleaning_rounds=2
-llm_model=llama3.1:8b
+llm_model=qwen3.5-9b
 llm_temp=0.1
-ollama_enabled=true
+llm_enabled=true
 lightrag=true
 leiden=true
 cross_encoder=false
-keep_alive=30m
-num_ctx=0
-ollama_timeout=120
+llm_timeout=120
 PARAMS
 }
 
@@ -216,22 +203,20 @@ pipeline_semantic_mistral() {
     cat <<-PARAMS
 name=semantic_mistral
 approach=semantic
-embedding=ollama
-embed_model=nomic-embed-text
-embed_dim=768
+embedding=llama_cpp
+embed_model=multilingual-e5-small
+embed_dim=384
 chunk_size=800
 chunk_overlap=300
 use_gleaning=true
 gleaning_rounds=4
-llm_model=mistral-nemo:latest
+llm_model=qwen3.5-9b
 llm_temp=0.2
-ollama_enabled=true
+llm_enabled=true
 lightrag=true
 leiden=true
 cross_encoder=false
-keep_alive=30m
-num_ctx=0
-ollama_timeout=120
+llm_timeout=120
 PARAMS
 }
 
@@ -239,22 +224,20 @@ pipeline_semantic_no_gleaning() {
     cat <<-PARAMS
 name=semantic_no_gleaning
 approach=semantic
-embedding=ollama
-embed_model=nomic-embed-text
-embed_dim=768
+embedding=llama_cpp
+embed_model=multilingual-e5-small
+embed_dim=384
 chunk_size=512
 chunk_overlap=100
 use_gleaning=false
 gleaning_rounds=0
-llm_model=qwen3:8b-q4_k_m
+llm_model=qwen3.5-9b
 llm_temp=0.1
-ollama_enabled=true
+llm_enabled=true
 lightrag=false
 leiden=false
 cross_encoder=false
-keep_alive=30m
-num_ctx=0
-ollama_timeout=120
+llm_timeout=120
 PARAMS
 }
 
@@ -264,22 +247,20 @@ pipeline_hybrid_qwen3() {
     cat <<-PARAMS
 name=hybrid_qwen3
 approach=hybrid
-embedding=ollama
-embed_model=nomic-embed-text
-embed_dim=768
+embedding=llama_cpp
+embed_model=multilingual-e5-small
+embed_dim=384
 chunk_size=512
 chunk_overlap=100
 use_gleaning=true
 gleaning_rounds=2
-llm_model=qwen3:8b-q4_k_m
+llm_model=qwen3.5-9b
 llm_temp=0.15
-ollama_enabled=true
+llm_enabled=true
 lightrag=true
 leiden=true
 cross_encoder=false
-keep_alive=30m
-num_ctx=0
-ollama_timeout=120
+llm_timeout=120
 PARAMS
 }
 
@@ -287,22 +268,20 @@ pipeline_hybrid_small_chunks() {
     cat <<-PARAMS
 name=hybrid_small_chunks
 approach=hybrid
-embedding=ollama
-embed_model=nomic-embed-text
-embed_dim=768
+embedding=llama_cpp
+embed_model=multilingual-e5-small
+embed_dim=384
 chunk_size=256
 chunk_overlap=50
 use_gleaning=true
 gleaning_rounds=1
-llm_model=qwen3:8b-q4_k_m
+llm_model=qwen3.5-9b
 llm_temp=0.1
-ollama_enabled=true
+llm_enabled=true
 lightrag=true
 leiden=true
 cross_encoder=false
-keep_alive=30m
-num_ctx=0
-ollama_timeout=120
+llm_timeout=120
 PARAMS
 }
 
@@ -311,22 +290,20 @@ pipeline_future_rag_2026() {
     cat <<-PARAMS
 name=future_rag_2026
 approach=hybrid
-embedding=ollama
-embed_model=nomic-embed-text
-embed_dim=768
+embedding=llama_cpp
+embed_model=multilingual-e5-small
+embed_dim=384
 chunk_size=512
 chunk_overlap=100
 use_gleaning=true
 gleaning_rounds=2
-llm_model=qwen3:8b-q4_k_m
+llm_model=qwen3.5-9b
 llm_temp=0.1
-ollama_enabled=true
+llm_enabled=true
 lightrag=true
 leiden=true
 cross_encoder=true
-keep_alive=30m
-num_ctx=0
-ollama_timeout=120
+llm_timeout=120
 PARAMS
 }
 
@@ -344,13 +321,11 @@ use_gleaning=false
 gleaning_rounds=0
 llm_model=none
 llm_temp=0.0
-ollama_enabled=false
+llm_enabled=false
 lightrag=true
 leiden=true
 cross_encoder=false
-keep_alive=none
-num_ctx=0
-ollama_timeout=120
+llm_timeout=120
 PARAMS
 }
 
@@ -359,28 +334,26 @@ pipeline_fast_future_rag() {
     cat <<-PARAMS
 name=fast_future_rag
 approach=hybrid
-embedding=ollama
-embed_model=nomic-embed-text
-embed_dim=768
+embedding=llama_cpp
+embed_model=multilingual-e5-small
+embed_dim=384
 chunk_size=2048
 chunk_overlap=300
 use_gleaning=false
 gleaning_rounds=0
-llm_model=qwen3:8b-q4_k_m
+llm_model=qwen3.5-9b
 llm_temp=0.1
-ollama_enabled=true
+llm_enabled=true
 lightrag=true
 leiden=true
 cross_encoder=true
-keep_alive=30m
-num_ctx=0
-ollama_timeout=120
+llm_timeout=120
 PARAMS
 }
 
 
-# --- KV Cache pipelines (keep_alive=1h, explicit num_ctx) ---
-# These pipelines keep the Ollama model in VRAM between all requests.
+# --- Prompt-cache pipelines (llama-server reuses the shared prompt prefix) ---
+# These pipelines rely on llama-server prompt caching (shared prefix reuse).
 # With KV Cache active, the model avoids re-evaluating shared token prefixes
 # across consecutive calls in the same document processing session.
 # Recommended for long documents (books, reports) on GPUs with ≥12GB VRAM.
@@ -389,22 +362,20 @@ pipeline_kv_semantic_mistral() {
     cat <<-PARAMS
 name=kv_semantic_mistral
 approach=semantic
-embedding=ollama
-embed_model=nomic-embed-text
-embed_dim=768
+embedding=llama_cpp
+embed_model=multilingual-e5-small
+embed_dim=384
 chunk_size=512
 chunk_overlap=100
 use_gleaning=true
 gleaning_rounds=2
-llm_model=mistral-nemo:latest
+llm_model=qwen3.5-9b
 llm_temp=0.1
-ollama_enabled=true
+llm_enabled=true
 lightrag=true
 leiden=true
 cross_encoder=false
-keep_alive=1h
-num_ctx=32768
-ollama_timeout=300
+llm_timeout=300
 PARAMS
 }
 
@@ -412,22 +383,20 @@ pipeline_kv_hybrid_mistral() {
     cat <<-PARAMS
 name=kv_hybrid_mistral
 approach=hybrid
-embedding=ollama
-embed_model=nomic-embed-text
-embed_dim=768
+embedding=llama_cpp
+embed_model=multilingual-e5-small
+embed_dim=384
 chunk_size=512
 chunk_overlap=100
 use_gleaning=true
 gleaning_rounds=2
-llm_model=mistral-nemo:latest
+llm_model=qwen3.5-9b
 llm_temp=0.1
-ollama_enabled=true
+llm_enabled=true
 lightrag=true
 leiden=true
 cross_encoder=false
-keep_alive=1h
-num_ctx=32768
-ollama_timeout=300
+llm_timeout=300
 PARAMS
 }
 
@@ -435,22 +404,20 @@ pipeline_kv_semantic_qwen3() {
     cat <<-PARAMS
 name=kv_semantic_qwen3
 approach=semantic
-embedding=ollama
-embed_model=nomic-embed-text
-embed_dim=768
+embedding=llama_cpp
+embed_model=multilingual-e5-small
+embed_dim=384
 chunk_size=512
 chunk_overlap=100
 use_gleaning=true
 gleaning_rounds=2
-llm_model=qwen3:8b-q4_k_m
+llm_model=qwen3.5-9b
 llm_temp=0.1
-ollama_enabled=true
+llm_enabled=true
 lightrag=true
 leiden=true
 cross_encoder=false
-keep_alive=1h
-num_ctx=16384
-ollama_timeout=300
+llm_timeout=300
 PARAMS
 }
 
@@ -471,13 +438,11 @@ use_gleaning=false
 gleaning_rounds=0
 llm_model=none
 llm_temp=0.0
-ollama_enabled=false
+llm_enabled=false
 lightrag=false
 leiden=true
 cross_encoder=false
-keep_alive=none
-num_ctx=0
-ollama_timeout=120
+llm_timeout=120
 gliner_enabled=true
 gliner_model_path=${GLINER_MODEL_PATH}
 gliner_mode=span
@@ -494,7 +459,7 @@ ALL_PIPELINES=(
     pipeline_algo_hash_small
     pipeline_algo_hash_medium
     pipeline_algo_hash_large
-    pipeline_algo_ollama_embed
+    pipeline_algo_llama_embed
     pipeline_semantic_qwen3
     pipeline_semantic_llama31
     pipeline_semantic_mistral
@@ -536,20 +501,7 @@ generate_config() {
     local output_file="$1"
     local output_dir="$2"
 
-    # Build optional KV-cache fields — only included when explicitly set by the pipeline.
-    # keep_alive keeps the Ollama model in VRAM between requests (prevents KV cache eviction).
-    # num_ctx sets the context window; 0 means "use Ollama's default" (typically 2k-8k).
-    local ka="${P[keep_alive]:-none}"
-    local nc="${P[num_ctx]:-0}"
-    local ot="${P[ollama_timeout]:-120}"
-    local keep_alive_field=""
-    local num_ctx_field=""
-    if [[ "$ka" != "none" && -n "$ka" ]]; then
-        keep_alive_field="    \"keep_alive\": \"$ka\","
-    fi
-    if [[ "$nc" != "0" && -n "$nc" ]]; then
-        num_ctx_field="    \"num_ctx\": $nc,"
-    fi
+    local ot="${P[llm_timeout]:-120}"
 
     # GLiNER-Relex fields (optional; only active when gliner_enabled=true)
     local gliner_enabled="${P[gliner_enabled]:-false}"
@@ -560,9 +512,9 @@ generate_config() {
     local gliner_use_gpu="${P[gliner_use_gpu]:-false}"
     local gliner_entity_labels
     local gliner_relation_labels
-    gliner_entity_labels="${P[gliner_entity_labels]}"
+    gliner_entity_labels="${P[gliner_entity_labels]:-}"
     [[ -z "$gliner_entity_labels" ]] && gliner_entity_labels='["person","organization","location"]'
-    gliner_relation_labels="${P[gliner_relation_labels]}"
+    gliner_relation_labels="${P[gliner_relation_labels]:-}"
     [[ -z "$gliner_relation_labels" ]] && gliner_relation_labels='["related to","part of"]'
 
     cat > "$output_file" <<EOF
@@ -678,25 +630,17 @@ generate_config() {
     "use_temporal_parsing": false,
     "confidence_threshold": 0.5
   },
-  "ollama": {
-    "enabled": ${P[ollama_enabled]},
-    "host": "http://localhost",
-    "port": 11434,
+  "llm": {
+    "enabled": ${P[llm_enabled]},
+    "base_url": "${LLM_BASE_URL:-http://127.0.0.1:8080/v1}",
+    "embedding_base_url": "${LLM_EMBEDDING_BASE_URL:-http://127.0.0.1:8081/v1}",
     "chat_model": "${P[llm_model]}",
     "embedding_model": "${P[embed_model]}",
     "timeout_seconds": $ot,
     "max_retries": 3,
-    "fallback_to_hash": true,
+    "fallback_to_hash": false,
     "max_tokens": 1200,
-    "temperature": ${P[llm_temp]},
-$keep_alive_field
-$num_ctx_field
-    "generation": {
-      "temperature": ${P[llm_temp]},
-      "top_p": 0.9,
-      "max_tokens": 1500,
-      "stream": false
-    }
+    "temperature": ${P[llm_temp]}
   },
   "performance": {
     "batch_processing": true,
@@ -813,11 +757,6 @@ run_pipeline_book() {
     echo -e "${BLUE}Chunks:${NC}   ${P[chunk_size]}/${P[chunk_overlap]} | Gleaning: ${P[use_gleaning]}×${P[gleaning_rounds]}"
     echo -e "${BLUE}LLM:${NC}     ${P[llm_model]} (T=${P[llm_temp]})"
     echo -e "${BLUE}Features:${NC} LightRAG=${P[lightrag]} Leiden=${P[leiden]} CrossEnc=${P[cross_encoder]}"
-    local ka_display="${P[keep_alive]:-none}"
-    local nc_display="${P[num_ctx]:-0}"
-    if [[ "$ka_display" != "none" || "$nc_display" != "0" ]]; then
-        echo -e "${BLUE}KV Cache:${NC} keep_alive=${ka_display} num_ctx=${nc_display} timeout=${P[ollama_timeout]:-120}s"
-    fi
     if [[ "${P[gliner_enabled]:-false}" == "true" ]]; then
         echo -e "${BLUE}GLiNER:${NC}   model=${P[gliner_model_path]:-N/A} mode=${P[gliner_mode]:-span} (entity_thr=${P[gliner_entity_threshold]:-0.4})"
     fi
@@ -848,13 +787,11 @@ run_pipeline_book() {
     "gleaning_rounds": ${P[gleaning_rounds]},
     "llm_model": "${P[llm_model]}",
     "llm_temperature": ${P[llm_temp]},
-    "ollama_enabled": ${P[ollama_enabled]},
+    "llm_enabled": ${P[llm_enabled]},
     "lightrag": ${P[lightrag]},
     "leiden": ${P[leiden]},
     "cross_encoder": ${P[cross_encoder]},
-    "keep_alive": "${P[keep_alive]:-none}",
-    "num_ctx": ${P[num_ctx]:-0},
-    "ollama_timeout": ${P[ollama_timeout]:-120},
+    "llm_timeout": ${P[llm_timeout]:-120},
     "gliner_enabled": ${P[gliner_enabled]:-false},
     "gliner_model_path": "${P[gliner_model_path]:-}",
     "gliner_mode": "${P[gliner_mode]:-span}"
@@ -899,13 +836,11 @@ EOF
             --argjson gleaning_rounds "${P[gleaning_rounds]}" \
             --arg llm_model "${P[llm_model]}" \
             --argjson llm_temp "${P[llm_temp]}" \
-            --argjson ollama_enabled "${P[ollama_enabled]}" \
+            --argjson llm_enabled "${P[llm_enabled]}" \
             --argjson lightrag "${P[lightrag]}" \
             --argjson leiden "${P[leiden]}" \
             --argjson cross_encoder "${P[cross_encoder]}" \
-            --arg keep_alive "${P[keep_alive]:-none}" \
-            --argjson num_ctx "${P[num_ctx]:-0}" \
-            --argjson ollama_timeout "${P[ollama_timeout]:-120}" \
+            --argjson llm_timeout "${P[llm_timeout]:-120}" \
             --argjson gliner_enabled "${P[gliner_enabled]:-false}" \
             --arg gliner_model "${P[gliner_model_path]:-}" \
             --arg gliner_mode "${P[gliner_mode]:-span}" \
@@ -920,13 +855,11 @@ EOF
               gleaning_rounds: $gleaning_rounds,
               llm_model: $llm_model,
               llm_temperature: $llm_temp,
-              ollama_enabled: $ollama_enabled,
+              llm_enabled: $llm_enabled,
               lightrag: $lightrag,
               leiden: $leiden,
               cross_encoder: $cross_encoder,
-              keep_alive: $keep_alive,
-              num_ctx: $num_ctx,
-              ollama_timeout: $ollama_timeout,
+              llm_timeout: $llm_timeout,
               gliner_enabled: $gliner_enabled,
               gliner_model: $gliner_model,
               gliner_mode: $gliner_mode

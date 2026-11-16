@@ -241,8 +241,7 @@ mod tests {
             keyword_terms.contains(&"learning")
                 || keyword_terms.contains(&"machine")
                 || keyword_terms.contains(&"neural"),
-            "Expected high-frequency terms not found. Got: {:?}",
-            keyword_terms
+            "Expected high-frequency terms not found. Got: {keyword_terms:?}"
         );
     }
 

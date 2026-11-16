@@ -14,9 +14,9 @@ pub mod registry;
 #[cfg(feature = "async")]
 pub mod traits;
 
-// Ollama adapters require both async and ollama features
-#[cfg(all(feature = "async", feature = "ollama"))]
-pub mod ollama_adapters;
+// LLM adapters require both async and llm features
+#[cfg(all(feature = "async", feature = "llm"))]
+pub mod llm_adapters;
 
 // Entity extraction adapters require async feature
 #[cfg(feature = "async")]
@@ -30,7 +30,7 @@ pub mod retrieval_adapters;
 #[cfg(feature = "async")]
 pub mod test_utils;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "async"))]
 pub mod test_traits;
 
 // Re-export key items for convenience
@@ -129,6 +129,21 @@ impl EntityId {
     /// Creates a new EntityId from a string
     pub fn new(id: String) -> Self {
         Self(id)
+    }
+
+    /// Builds the canonical entity ID from an entity type and a surface name.
+    ///
+    /// Shared by every extractor so the same entity always maps to the same ID:
+    /// `lowercase(type) + "_" + lowercase(name)` with whitespace runs collapsed to
+    /// a single `_`. Punctuation and articles are intentionally preserved.
+    pub fn from_type_and_name(entity_type: &str, name: &str) -> Self {
+        let norm = |s: &str| {
+            s.to_lowercase()
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join("_")
+        };
+        Self(format!("{}_{}", norm(entity_type), norm(name)))
     }
 }
 
@@ -256,6 +271,16 @@ pub struct EntityMention {
     pub confidence: f32,
 }
 
+/// Prefix of the marker (`[detto da <chi>]`) that tags a relationship description as only
+/// said by a character (epistemic status). Single source of truth: `said_description`
+/// builds the marker from it and the merge in `add_relationship` detects it with it.
+pub const SAID_MARKER_PREFIX: &str = "[detto da ";
+
+/// True when `description` starts with the "said" marker ([`SAID_MARKER_PREFIX`]).
+pub fn is_said_description(description: Option<&str>) -> bool {
+    description.is_some_and(|d| d.starts_with(SAID_MARKER_PREFIX))
+}
+
 /// Relationship between entities
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Relationship {
@@ -269,6 +294,10 @@ pub struct Relationship {
     pub confidence: f32,
     /// Chunk IDs providing context for this relationship
     pub context: Vec<ChunkId>,
+    /// Free-text description; for `OTHER` relations it keeps the original
+    /// extractor label so no information is lost (see [`crate::ontology`])
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub description: Option<String>,
 
     /// Optional embedding vector for semantic similarity matching
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -290,6 +319,7 @@ impl Relationship {
     /// Create a new relationship
     pub fn new(source: EntityId, target: EntityId, relation_type: String, confidence: f32) -> Self {
         Self {
+            description: None,
             source,
             target,
             relation_type,
@@ -384,8 +414,45 @@ impl KnowledgeGraph {
     }
 
     /// Add an entity to the knowledge graph
+    ///
+    /// Idempotent upsert: if an entity with the same ID already exists, the new
+    /// one is merged into it (mentions deduped by chunk/offsets, max confidence,
+    /// existing name/type kept, embedding filled if missing) and the existing
+    /// `NodeIndex` is returned. Chunks referenced by the mentions also get the
+    /// entity ID recorded in their `entities` list.
     pub fn add_entity(&mut self, entity: Entity) -> Result<NodeIndex> {
         let entity_id = entity.id.clone();
+
+        for mention in &entity.mentions {
+            if let Some(chunk) = self.chunks.get_mut(&mention.chunk_id) {
+                if !chunk.entities.contains(&entity_id) {
+                    chunk.entities.push(entity_id.clone());
+                }
+            }
+        }
+
+        if let Some(&node_index) = self.entity_index.get(&entity_id) {
+            if let Some(existing) = self.graph.node_weight_mut(node_index) {
+                for m in entity.mentions {
+                    let dup = existing.mentions.iter().any(|e| {
+                        e.chunk_id == m.chunk_id
+                            && e.start_offset == m.start_offset
+                            && e.end_offset == m.end_offset
+                    });
+                    if !dup {
+                        existing.mentions.push(m);
+                    }
+                }
+                if entity.confidence > existing.confidence {
+                    existing.confidence = entity.confidence;
+                }
+                if existing.embedding.is_none() {
+                    existing.embedding = entity.embedding;
+                }
+            }
+            return Ok(node_index);
+        }
+
         let node_index = self.graph.add_node(entity);
         self.entity_index.insert(entity_id, node_index);
         Ok(node_index)
@@ -405,7 +472,48 @@ impl KnowledgeGraph {
             }
         })?;
 
-        self.graph.add_edge(*source_idx, *target_idx, relationship);
+        let (source_idx, target_idx) = (*source_idx, *target_idx);
+
+        // Upsert on (source, target, relation_type): merge instead of duplicating.
+        let existing_edge = self
+            .graph
+            .edges_connecting(source_idx, target_idx)
+            .find(|e| e.weight().relation_type == relationship.relation_type)
+            .map(|e| {
+                use petgraph::visit::EdgeRef;
+                e.id()
+            });
+
+        if let Some(edge_id) = existing_edge {
+            if let Some(existing) = self.graph.edge_weight_mut(edge_id) {
+                for c in relationship.context {
+                    if !existing.context.contains(&c) {
+                        existing.context.push(c);
+                    }
+                }
+                if relationship.confidence > existing.confidence {
+                    existing.confidence = relationship.confidence;
+                }
+                if existing.embedding.is_none() {
+                    existing.embedding = relationship.embedding;
+                }
+                // A narrated description replaces a "said" one, whatever the arrival order.
+                // Known limit: said + incoming None/blank keeps the said text.
+                let replace = existing.description.is_none()
+                    || (is_said_description(existing.description.as_deref())
+                        && relationship
+                            .description
+                            .as_deref()
+                            .is_some_and(|d| !d.trim().is_empty())
+                        && !is_said_description(relationship.description.as_deref()));
+                if replace {
+                    existing.description = relationship.description;
+                }
+            }
+            return Ok(());
+        }
+
+        self.graph.add_edge(source_idx, target_idx, relationship);
         Ok(())
     }
 
@@ -501,7 +609,7 @@ impl KnowledgeGraph {
         // Read and parse JSON
         let json_str = fs::read_to_string(file_path)?;
         let json_data = json::parse(&json_str).map_err(|e| GraphRAGError::Config {
-            message: format!("Failed to parse JSON: {}", e),
+            message: format!("Failed to parse JSON: {e}"),
         })?;
 
         let mut kg = KnowledgeGraph::new();
@@ -564,6 +672,7 @@ impl KnowledgeGraph {
                 }
 
                 let relationship = Relationship {
+                    description: rel_obj["description"].as_str().map(str::to_string),
                     source,
                     target,
                     relation_type,
@@ -705,7 +814,7 @@ impl KnowledgeGraph {
         // Add relationships with detailed information
         let mut relationships_array = json::JsonValue::new_array();
         for relationship in self.get_all_relationships() {
-            let rel_obj = json::object! {
+            let mut rel_obj = json::object! {
                 "source_id" => relationship.source.to_string(),
                 "target_id" => relationship.target.to_string(),
                 "relation_type" => relationship.relation_type.clone(),
@@ -714,6 +823,9 @@ impl KnowledgeGraph {
                     .map(|c| c.to_string())
                     .collect::<Vec<String>>()
             };
+            if let Some(description) = &relationship.description {
+                rel_obj["description"] = description.as_str().into();
+            }
             relationships_array.push(rel_obj).unwrap();
         }
         json_data["relationships"] = relationships_array;
@@ -913,6 +1025,129 @@ impl KnowledgeGraph {
         self.graph.clear();
         self.entity_index.clear();
         // Note: documents and chunks are preserved
+    }
+
+    /// Merge entities that share the same normalized name but differ in type.
+    ///
+    /// Extractors derive ids as `<type>_<name>`, so the same surface form tagged with
+    /// different types (`person_burattino`, `object_burattino`, ...) ends up as several
+    /// nodes. Names are compared trimmed, whitespace-collapsed and lowercased; different
+    /// names are never merged. Per group the entity with the most mentions wins (tie:
+    /// higher confidence, then first seen) and keeps its id, name and type; mentions are
+    /// unioned (deduped by chunk/offsets), confidence is the max. Relationships of the
+    /// absorbed entities are re-pointed to the winner; self-loops created by the merge
+    /// are dropped and identical `(source, target, relation_type)` edges are merged
+    /// (contexts unioned, first non-empty description kept). Chunk `entities` lists are
+    /// remapped too. Returns the number of entities absorbed.
+    ///
+    /// Run it before entity embeddings are computed: the surviving entity keeps its own
+    /// embedding and absorbed ones are discarded.
+    pub fn merge_same_name_entities(&mut self) -> usize {
+        // Lowercase, collapse whitespace and drop one leading article
+        // ("il babbo" == "babbo", "l'albero" == "albero"), never the whole name.
+        const ARTICLES: &[&str] = &[
+            "il", "lo", "la", "i", "gli", "le", "un", "uno", "una", "the", "a", "an",
+        ];
+        const ELIDED: &[&str] = &["l'", "l’", "un'", "un’"];
+        let normalize = |n: &str| {
+            let name = n
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .to_lowercase();
+            if let Some((first, rest)) = name.split_once(' ') {
+                if ARTICLES.contains(&first) {
+                    return rest.to_string();
+                }
+            }
+            for prefix in ELIDED {
+                if let Some(rest) = name.strip_prefix(prefix) {
+                    if !rest.is_empty() {
+                        return rest.to_string();
+                    }
+                }
+            }
+            name
+        };
+
+        let entities: Vec<Entity> = self.graph.node_weights().cloned().collect();
+        let mut groups: IndexMap<String, Vec<usize>> = IndexMap::new();
+        for (i, e) in entities.iter().enumerate() {
+            groups.entry(normalize(&e.name)).or_default().push(i);
+        }
+        if groups.values().all(|g| g.len() < 2) {
+            return 0;
+        }
+
+        let mut remap: HashMap<EntityId, EntityId> = HashMap::new();
+        let mut merged_by_winner: HashMap<usize, Entity> = HashMap::new();
+        let mut absorbed_idx: std::collections::HashSet<usize> = std::collections::HashSet::new();
+        for group in groups.values().filter(|g| g.len() > 1) {
+            let mut winner = group[0];
+            for &i in &group[1..] {
+                let (w, c) = (&entities[winner], &entities[i]);
+                if (c.mentions.len(), c.confidence) > (w.mentions.len(), w.confidence) {
+                    winner = i;
+                }
+            }
+            let mut merged = entities[winner].clone();
+            for &i in group.iter().filter(|&&i| i != winner) {
+                let loser = &entities[i];
+                for m in &loser.mentions {
+                    let dup = merged.mentions.iter().any(|e| {
+                        e.chunk_id == m.chunk_id
+                            && e.start_offset == m.start_offset
+                            && e.end_offset == m.end_offset
+                    });
+                    if !dup {
+                        merged.mentions.push(m.clone());
+                    }
+                }
+                merged.confidence = merged.confidence.max(loser.confidence);
+                if merged.embedding.is_none() {
+                    merged.embedding = loser.embedding.clone();
+                }
+                remap.insert(loser.id.clone(), merged.id.clone());
+                absorbed_idx.insert(i);
+            }
+            merged_by_winner.insert(winner, merged);
+        }
+
+        let relationships: Vec<Relationship> = self.graph.edge_weights().cloned().collect();
+
+        for chunk in self.chunks.values_mut() {
+            let mut remapped: Vec<EntityId> = Vec::with_capacity(chunk.entities.len());
+            for id in chunk.entities.drain(..) {
+                let id = remap.get(&id).cloned().unwrap_or(id);
+                if !remapped.contains(&id) {
+                    remapped.push(id);
+                }
+            }
+            chunk.entities = remapped;
+        }
+
+        self.clear_entities_and_relationships();
+        for (i, entity) in entities.into_iter().enumerate() {
+            if absorbed_idx.contains(&i) {
+                continue;
+            }
+            let entity = merged_by_winner.remove(&i).unwrap_or(entity);
+            // IDs are unique per node, so this never merges again.
+            let _ = self.add_entity(entity);
+        }
+        for mut rel in relationships {
+            if let Some(to) = remap.get(&rel.source) {
+                rel.source = to.clone();
+            }
+            if let Some(to) = remap.get(&rel.target) {
+                rel.target = to.clone();
+            }
+            if rel.source == rel.target {
+                continue;
+            }
+            let _ = self.add_relationship(rel);
+        }
+        absorbed_idx.len()
     }
 
     /// Calculate cosine similarity between two embedding vectors
@@ -1143,33 +1378,33 @@ impl KnowledgeGraph {
     ///
     /// # Arguments
     /// * `num_levels` - Number of hierarchy levels to create (default: 3)
-    /// * `ollama_client` - Optional Ollama client for generating cluster summaries
+    /// * `llm_client` - Optional LLM client for generating cluster summaries
     ///
     /// # Returns
     /// Result containing the built hierarchy or an error
     ///
     /// # Example
     /// ```ignore
-    /// use graphrag_core::{KnowledgeGraph, ollama::OllamaClient};
+    /// use graphrag_core::{KnowledgeGraph, llm::{LlmClient, LlmConfig}};
     ///
     /// let mut graph = KnowledgeGraph::new();
     /// // ... build graph ...
     ///
-    /// let ollama = OllamaClient::new("http://localhost:11434", "llama3.2");
-    /// graph.build_relationship_hierarchy(3, Some(ollama)).await.unwrap();
+    /// let llm = LlmClient::new(LlmConfig { enabled: true, ..LlmConfig::default() });
+    /// graph.build_relationship_hierarchy(3, Some(llm)).await.unwrap();
     /// ```
     #[cfg(feature = "async")]
     pub async fn build_relationship_hierarchy(
         &mut self,
         num_levels: usize,
-        ollama_client: Option<crate::ollama::OllamaClient>,
+        llm_client: Option<crate::llm::LlmClient>,
     ) -> Result<()> {
         use crate::graph::hierarchical_relationships::HierarchyBuilder;
 
         let builder = HierarchyBuilder::from_graph(self).with_num_levels(num_levels);
 
-        let builder = if let Some(client) = ollama_client {
-            builder.with_ollama_client(client)
+        let builder = if let Some(client) = llm_client {
+            builder.with_llm_client(client)
         } else {
             builder
         };
@@ -1455,5 +1690,370 @@ mod temporal_tests {
         assert!(!json.contains("temporal_type"));
         assert!(!json.contains("temporal_range"));
         assert!(!json.contains("causal_strength"));
+    }
+
+    // ---- graph consistency regression tests ----
+
+    fn mention(chunk: &str, start: usize, end: usize) -> EntityMention {
+        EntityMention {
+            chunk_id: ChunkId::new(chunk.to_string()),
+            start_offset: start,
+            end_offset: end,
+            confidence: 0.8,
+        }
+    }
+
+    fn ent(id: &str, mentions: Vec<EntityMention>, confidence: f32) -> Entity {
+        Entity::new(
+            EntityId::new(id.to_string()),
+            id.to_string(),
+            "person".to_string(),
+            confidence,
+        )
+        .with_mentions(mentions)
+    }
+
+    #[test]
+    fn test_add_entity_is_idempotent_upsert() {
+        let mut kg = KnowledgeGraph::new();
+        let a = kg
+            .add_entity(ent("person_x", vec![mention("c1", 0, 3)], 0.5))
+            .unwrap();
+        let b = kg
+            .add_entity(ent(
+                "person_x",
+                vec![mention("c1", 0, 3), mention("c2", 5, 8)],
+                0.9,
+            ))
+            .unwrap();
+
+        assert_eq!(a, b);
+        assert_eq!(kg.entity_count(), 1);
+        let e = kg
+            .get_entity(&EntityId::new("person_x".to_string()))
+            .unwrap();
+        assert_eq!(e.mentions.len(), 2, "mentions merged and deduped");
+        assert_eq!(e.confidence, 0.9, "max confidence kept");
+    }
+
+    /// Merge two relationships (a, b, KNOWS) with the given descriptions; returns the result.
+    fn merge_descriptions(first: Option<&str>, second: Option<&str>) -> Relationship {
+        let mut kg = KnowledgeGraph::new();
+        kg.add_entity(ent("a", vec![], 0.5)).unwrap();
+        kg.add_entity(ent("b", vec![], 0.5)).unwrap();
+        for (d, ctx, conf) in [(first, "c1", 0.4), (second, "c2", 0.9)] {
+            let mut r = Relationship::new(
+                EntityId::new("a".to_string()),
+                EntityId::new("b".to_string()),
+                "KNOWS".to_string(),
+                conf,
+            );
+            r.context = vec![ChunkId::new(ctx.to_string())];
+            r.description = d.map(str::to_string);
+            kg.add_relationship(r).unwrap();
+        }
+        assert_eq!(kg.relationship_count(), 1);
+        kg.get_all_relationships()[0].clone()
+    }
+
+    #[test]
+    fn test_merge_narrated_replaces_said_description() {
+        let said = "[detto da Volpe] x";
+        let cases = [
+            (Some(said), Some("narrato"), Some("narrato")),
+            (Some("narrato"), Some(said), Some("narrato")),
+            (Some(said), Some("[detto da Gatto] y"), Some(said)),
+            (Some("uno"), Some("due"), Some("uno")),
+            (Some(said), None, Some(said)),
+            (Some(said), Some("  "), Some(said)),
+            (None, Some(said), Some(said)),
+            (None, Some("narrato"), Some("narrato")),
+        ];
+        for (first, second, expected) in cases {
+            let r = merge_descriptions(first, second);
+            assert_eq!(r.description.as_deref(), expected, "{first:?} + {second:?}");
+            let ctx: Vec<_> = r.context.iter().map(|c| c.0.as_str()).collect();
+            assert_eq!(ctx, vec!["c1", "c2"]);
+            assert_eq!(r.confidence, 0.9);
+        }
+    }
+
+    #[test]
+    fn test_add_relationship_is_upsert_merging_context() {
+        let mut kg = KnowledgeGraph::new();
+        kg.add_entity(ent("a", vec![], 0.5)).unwrap();
+        kg.add_entity(ent("b", vec![], 0.5)).unwrap();
+        let mk = |ctx: &[&str], conf: f32, ty: &str| {
+            let mut r = Relationship::new(
+                EntityId::new("a".to_string()),
+                EntityId::new("b".to_string()),
+                ty.to_string(),
+                conf,
+            );
+            r.context = ctx.iter().map(|c| ChunkId::new(c.to_string())).collect();
+            r
+        };
+        kg.add_relationship(mk(&["c1", "c2"], 0.4, "KNOWS"))
+            .unwrap();
+        kg.add_relationship(mk(&["c2", "c3"], 0.9, "KNOWS"))
+            .unwrap();
+        kg.add_relationship(mk(&["c1"], 0.5, "LOVES")).unwrap();
+
+        assert_eq!(kg.relationship_count(), 2, "different type stays separate");
+        let knows = kg
+            .get_all_relationships()
+            .into_iter()
+            .find(|r| r.relation_type == "KNOWS")
+            .unwrap();
+        let ctx: Vec<_> = knows.context.iter().map(|c| c.0.as_str()).collect();
+        assert_eq!(ctx, vec!["c1", "c2", "c3"]);
+        assert_eq!(knows.confidence, 0.9);
+    }
+
+    #[test]
+    fn test_add_entity_records_id_in_chunk_entities() {
+        let mut kg = KnowledgeGraph::new();
+        kg.add_chunk(TextChunk::new(
+            ChunkId::new("c1".to_string()),
+            DocumentId::new("d".to_string()),
+            "text".to_string(),
+            0,
+            4,
+        ))
+        .unwrap();
+        kg.add_entity(ent("person_x", vec![mention("c1", 0, 2)], 0.5))
+            .unwrap();
+        kg.add_entity(ent("person_x", vec![mention("c1", 2, 4)], 0.5))
+            .unwrap();
+        let chunk = kg.get_chunk(&ChunkId::new("c1".to_string())).unwrap();
+        assert_eq!(chunk.entities, vec![EntityId::new("person_x".to_string())]);
+    }
+
+    #[test]
+    fn test_json_roundtrip_preserves_counts_without_duplication() {
+        let mut kg = KnowledgeGraph::new();
+        kg.add_entity(ent("a", vec![mention("c1", 0, 1)], 0.5))
+            .unwrap();
+        kg.add_entity(ent("b", vec![mention("c1", 2, 3)], 0.5))
+            .unwrap();
+        let mut r = Relationship::new(
+            EntityId::new("a".to_string()),
+            EntityId::new("b".to_string()),
+            "KNOWS".to_string(),
+            0.7,
+        );
+        r.context = vec![ChunkId::new("c1".to_string())];
+        kg.add_relationship(r).unwrap();
+
+        let path = std::env::temp_dir().join(format!(
+            "graphrag_roundtrip_{}_{:?}.json",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let path_str = path.to_str().unwrap();
+        kg.save_to_json(path_str).unwrap();
+        let loaded = KnowledgeGraph::load_from_json(path_str).unwrap();
+        // Save the reloaded graph and reload again: still stable.
+        loaded.save_to_json(path_str).unwrap();
+        let loaded2 = KnowledgeGraph::load_from_json(path_str).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        for g in [&loaded, &loaded2] {
+            assert_eq!(g.entity_count(), 2);
+            assert_eq!(g.relationship_count(), 1);
+            assert_eq!(g.get_all_relationships()[0].context.len(), 1);
+        }
+    }
+
+    #[test]
+    fn test_entity_id_from_type_and_name_is_canonical() {
+        assert_eq!(
+            EntityId::from_type_and_name("PERSON", "  John   Doe ").0,
+            "person_john_doe"
+        );
+        // Punctuation and articles are preserved.
+        assert_eq!(
+            EntityId::from_type_and_name("Concept", "The Good, Truth").0,
+            "concept_the_good,_truth"
+        );
+    }
+}
+
+#[cfg(test)]
+mod merge_same_name_tests {
+    use super::*;
+
+    fn ent(ty: &str, name: &str, chunk: &str, offsets: &[usize], conf: f32) -> Entity {
+        let mut e = Entity::new(
+            EntityId::from_type_and_name(ty, name),
+            name.to_string(),
+            ty.to_string(),
+            conf,
+        );
+        e.mentions = offsets
+            .iter()
+            .map(|&o| EntityMention {
+                chunk_id: ChunkId::new(chunk.to_string()),
+                start_offset: o,
+                end_offset: o + 5,
+                confidence: conf,
+            })
+            .collect();
+        e
+    }
+
+    fn graph() -> KnowledgeGraph {
+        let mut g = KnowledgeGraph::new();
+        for c in ["c0", "c1"] {
+            g.add_chunk(TextChunk::new(
+                ChunkId::new(c.to_string()),
+                DocumentId::new("d".to_string()),
+                "testo".to_string(),
+                0,
+                5,
+            ))
+            .unwrap();
+        }
+        g
+    }
+
+    fn rel(s: &str, t: &str, ty: &str, ctx: &str) -> Relationship {
+        let mut r = Relationship::new(
+            EntityId::new(s.to_string()),
+            EntityId::new(t.to_string()),
+            ty.to_string(),
+            0.8,
+        );
+        r.context = vec![ChunkId::new(ctx.to_string())];
+        r
+    }
+
+    #[test]
+    fn merges_same_name_keeps_type_with_most_mentions_and_unions_mentions() {
+        let mut g = graph();
+        g.add_entity(ent("OBJECT", "Burattino", "c0", &[1], 0.9))
+            .unwrap();
+        g.add_entity(ent("PERSON", "burattino", "c0", &[1, 20, 40], 0.7))
+            .unwrap();
+        g.add_entity(ent("CONCEPT", " Burattino ", "c1", &[3], 0.95))
+            .unwrap();
+        g.add_entity(ent("PERSON", "Geppetto", "c1", &[9], 0.9))
+            .unwrap();
+
+        assert_eq!(g.merge_same_name_entities(), 2);
+        assert_eq!(g.entities().count(), 2);
+        let w = g
+            .get_entity(&EntityId::new("person_burattino".to_string()))
+            .unwrap();
+        assert_eq!(w.entity_type, "PERSON");
+        // 3 own + c0@1 (dup of own c0@1, deduped) + c1@3
+        assert_eq!(w.mentions.len(), 4);
+        assert!((w.confidence - 0.95).abs() < 1e-6);
+        assert!(g
+            .get_entity(&EntityId::new("object_burattino".to_string()))
+            .is_none());
+        // different name untouched
+        assert!(g
+            .get_entity(&EntityId::new("person_geppetto".to_string()))
+            .is_some());
+        // chunk entity lists remapped, no stale ids
+        let c0 = g.get_chunk(&ChunkId::new("c0".to_string())).unwrap();
+        assert_eq!(
+            c0.entities,
+            vec![EntityId::new("person_burattino".to_string())]
+        );
+    }
+
+    #[test]
+    fn tie_keeps_first_seen_unless_confidence_higher() {
+        let mut g = graph();
+        g.add_entity(ent("OBJECT", "Acqua", "c0", &[1], 0.8))
+            .unwrap();
+        g.add_entity(ent("LOCATION", "Acqua", "c1", &[2], 0.8))
+            .unwrap();
+        g.merge_same_name_entities();
+        assert!(g
+            .get_entity(&EntityId::new("object_acqua".to_string()))
+            .is_some());
+
+        let mut g = graph();
+        g.add_entity(ent("OBJECT", "Acqua", "c0", &[1], 0.8))
+            .unwrap();
+        g.add_entity(ent("LOCATION", "Acqua", "c1", &[2], 0.9))
+            .unwrap();
+        g.merge_same_name_entities();
+        assert!(g
+            .get_entity(&EntityId::new("location_acqua".to_string()))
+            .is_some());
+    }
+
+    #[test]
+    fn relationships_are_remapped_deduped_and_self_loops_dropped() {
+        let mut g = graph();
+        g.add_entity(ent("OBJECT", "Burattino", "c0", &[1], 0.9))
+            .unwrap();
+        g.add_entity(ent("PERSON", "Burattino", "c0", &[1, 20], 0.9))
+            .unwrap();
+        g.add_entity(ent("PERSON", "Geppetto", "c1", &[9], 0.9))
+            .unwrap();
+        g.add_relationship(rel("object_burattino", "person_geppetto", "KNOWS", "c0"))
+            .unwrap();
+        let mut with_desc = rel("person_burattino", "person_geppetto", "KNOWS", "c1");
+        with_desc.description = Some("figlio".to_string());
+        g.add_relationship(with_desc).unwrap();
+        g.add_relationship(rel("object_burattino", "person_burattino", "SAME", "c0"))
+            .unwrap();
+
+        g.merge_same_name_entities();
+        let rels: Vec<_> = g.relationships().collect();
+        assert_eq!(rels.len(), 1, "self-loop dropped, duplicates merged");
+        assert_eq!(rels[0].source.0, "person_burattino");
+        assert_eq!(rels[0].target.0, "person_geppetto");
+        assert_eq!(rels[0].context.len(), 2);
+        assert_eq!(rels[0].description.as_deref(), Some("figlio"));
+    }
+
+    #[test]
+    fn no_op_without_same_name_entities() {
+        let mut g = graph();
+        g.add_entity(ent("PERSON", "Geppetto", "c0", &[1], 0.9))
+            .unwrap();
+        g.add_entity(ent("PERSON", "Pinocchio", "c1", &[2], 0.9))
+            .unwrap();
+        assert_eq!(g.merge_same_name_entities(), 0);
+        assert_eq!(g.entities().count(), 2);
+    }
+
+    #[test]
+    fn leading_article_does_not_split_same_entity() {
+        let mut g = graph();
+        g.add_entity(ent("OBJECT", "albero", "c0", &[1, 9], 0.9))
+            .unwrap();
+        g.add_entity(ent("LOCATION", "l'albero", "c1", &[2], 0.9))
+            .unwrap();
+        g.add_entity(ent("PERSON", "babbo", "c0", &[3, 20], 0.9))
+            .unwrap();
+        g.add_entity(ent("PERSON", "Il babbo", "c1", &[4], 0.9))
+            .unwrap();
+        g.add_entity(ent("ANIMAL", "La Volpe", "c0", &[5, 30], 0.9))
+            .unwrap();
+        g.add_entity(ent("ANIMAL", "Volpe", "c1", &[6], 0.9))
+            .unwrap();
+        assert_eq!(g.merge_same_name_entities(), 3);
+        let mut names: Vec<String> = g.entities().map(|e| e.name.clone()).collect();
+        names.sort();
+        assert_eq!(names, vec!["La Volpe", "albero", "babbo"]);
+    }
+
+    #[test]
+    fn article_alone_or_inside_name_is_kept() {
+        let mut g = graph();
+        g.add_entity(ent("PERSON", "Il Gatto", "c0", &[1], 0.9))
+            .unwrap();
+        g.add_entity(ent("CONCEPT", "il", "c1", &[2], 0.9)).unwrap();
+        g.add_entity(ent("OBJECT", "gatto il grande", "c1", &[3], 0.9))
+            .unwrap();
+        assert_eq!(g.merge_same_name_entities(), 0);
+        assert_eq!(g.entities().count(), 3);
     }
 }

@@ -240,8 +240,7 @@ impl Observability {
         output.push_str("# TYPE graphrag_queries_total counter\n");
         for (query_type, count) in &metrics.query_count {
             output.push_str(&format!(
-                "graphrag_queries_total{{query_type=\"{}\"}} {}\n",
-                query_type, count
+                "graphrag_queries_total{{query_type=\"{query_type}\"}} {count}\n"
             ));
         }
 
@@ -315,24 +314,11 @@ impl Observability {
 /// # Example
 ///
 /// ```rust,no_run
-/// use axum::{Router, routing::get};
-/// use tower::ServiceBuilder;
-/// use graphrag_server::observability::Observability;
+/// use std::sync::Arc;
+/// use graphrag_server::observability::{Observability, TracingMiddleware};
 ///
-/// async fn handler() -> &'static str {
-///     "Hello, World!"
-/// }
-///
-/// #[tokio::main]
-/// async fn main() {
-///     let obs = Observability::new("graphrag-api", None, None);
-///
-///     let app = Router::new()
-///         .route("/", get(handler));
-///         // Add tracing middleware here if needed
-///
-///     // Run server...
-/// }
+/// let observability = Arc::new(Observability::new("graphrag-api", None, None));
+/// let _middleware = TracingMiddleware::new(observability);
 /// ```
 pub struct TracingMiddleware {
     #[allow(dead_code)]

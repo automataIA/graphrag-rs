@@ -12,7 +12,7 @@
 
 use crate::{
     core::{GraphRAGError, KnowledgeGraph, Result},
-    ollama::OllamaClient,
+    llm::LlmClient,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -154,7 +154,7 @@ pub struct OptimizerConfig {
     /// Objective weights
     pub objective_weights: ObjectiveWeights,
 
-    /// Use LLM for quality evaluation (default: true if Ollama available)
+    /// Use LLM for quality evaluation (default: true if an LLM endpoint is configured)
     pub use_llm_eval: bool,
 }
 
@@ -179,8 +179,8 @@ pub struct GraphWeightOptimizer {
     /// Optimization history
     history: Vec<OptimizationStep>,
 
-    /// Ollama client for LLM-based evaluation
-    ollama_client: Option<OllamaClient>,
+    /// LLM client for LLM-based evaluation
+    llm_client: Option<LlmClient>,
 
     /// Current objective weights (dynamic)
     current_weights: ObjectiveWeights,
@@ -192,7 +192,7 @@ impl GraphWeightOptimizer {
         Self {
             config: OptimizerConfig::default(),
             history: Vec::new(),
-            ollama_client: None,
+            llm_client: None,
             current_weights: ObjectiveWeights::default(),
         }
     }
@@ -203,14 +203,14 @@ impl GraphWeightOptimizer {
         Self {
             config,
             history: Vec::new(),
-            ollama_client: None,
+            llm_client: None,
             current_weights,
         }
     }
 
-    /// Set Ollama client for LLM-based evaluation
-    pub fn with_ollama_client(mut self, client: OllamaClient) -> Self {
-        self.ollama_client = Some(client);
+    /// Set LLM client for LLM-based evaluation
+    pub fn with_llm_client(mut self, client: LlmClient) -> Self {
+        self.llm_client = Some(client);
         self
     }
 
@@ -322,11 +322,11 @@ impl GraphWeightOptimizer {
             // ✅ IMPLEMENTED: Real evaluation with heuristic and LLM-based metrics
             //
             // Strategy:
-            // 1. If use_llm_eval=true and ollama_client available: Use LLM evaluation
+            // 1. If use_llm_eval=true and llm_client available: Use LLM evaluation
             // 2. Otherwise: Use heuristic metrics (entity matching, string similarity)
 
             let (relevance, faithfulness, conciseness) =
-                if self.config.use_llm_eval && self.ollama_client.is_some() {
+                if self.config.use_llm_eval && self.llm_client.is_some() {
                     // LLM-based evaluation
                     self.evaluate_with_llm(graph, test_query).await?
                 } else {
@@ -439,18 +439,18 @@ impl GraphWeightOptimizer {
 
     /// Evaluate query quality using LLM
     ///
-    /// Uses Ollama to judge relevance, faithfulness, and conciseness.
+    /// Uses the LLM to judge relevance, faithfulness, and conciseness.
     #[cfg(feature = "async")]
     async fn evaluate_with_llm(
         &self,
         graph: &KnowledgeGraph,
         test_query: &TestQuery,
     ) -> Result<(f32, f32, f32)> {
-        let ollama_client = self
-            .ollama_client
+        let llm_client = self
+            .llm_client
             .as_ref()
             .ok_or_else(|| GraphRAGError::Config {
-                message: "LLM evaluation requested but no Ollama client available".to_string(),
+                message: "LLM evaluation requested but no LLM client available".to_string(),
             })?;
 
         // Build context from graph
@@ -473,11 +473,11 @@ impl GraphWeightOptimizer {
 
         // Call LLM
         let response =
-            ollama_client
+            llm_client
                 .generate(&prompt)
                 .await
                 .map_err(|e| GraphRAGError::LanguageModel {
-                    message: format!("LLM evaluation failed: {}", e),
+                    message: format!("LLM evaluation failed: {e}"),
                 })?;
 
         // Parse JSON response
@@ -860,33 +860,28 @@ mod tests {
         // Check results are in valid range
         assert!(
             (0.0..=1.0).contains(&relevance),
-            "Relevance out of range: {}",
-            relevance
+            "Relevance out of range: {relevance}"
         );
         assert!(
             (0.0..=1.0).contains(&faithfulness),
-            "Faithfulness out of range: {}",
-            faithfulness
+            "Faithfulness out of range: {faithfulness}"
         );
         assert!(
             (0.0..=1.0).contains(&conciseness),
-            "Conciseness out of range: {}",
-            conciseness
+            "Conciseness out of range: {conciseness}"
         );
 
         // Should have some relevance since entities match query tokens
         // Query has "Socrates" and "philosophy" which should match entity names
         assert!(
             relevance > 0.0,
-            "Should find some relevant entities (relevance={})",
-            relevance
+            "Should find some relevant entities (relevance={relevance})"
         );
 
         // Should have some faithfulness since expected answer mentions "Socrates", "founded", "philosophy"
         assert!(
             faithfulness > 0.0,
-            "Should match expected answer (faithfulness={})",
-            faithfulness
+            "Should match expected answer (faithfulness={faithfulness})"
         );
     }
 
@@ -915,8 +910,8 @@ mod tests {
         // Add entities
         for i in 0..5 {
             let entity = Entity {
-                id: EntityId(format!("entity_{}", i)),
-                name: format!("Entity {}", i),
+                id: EntityId(format!("entity_{i}")),
+                name: format!("Entity {i}"),
                 entity_type: "TEST".to_string(),
                 confidence: 0.9,
                 mentions: vec![],
@@ -931,7 +926,7 @@ mod tests {
         // Add relationships
         for i in 0..4 {
             let rel = Relationship::new(
-                EntityId(format!("entity_{}", i)),
+                EntityId(format!("entity_{i}")),
                 EntityId(format!("entity_{}", i + 1)),
                 "RELATES_TO".to_string(),
                 0.8,

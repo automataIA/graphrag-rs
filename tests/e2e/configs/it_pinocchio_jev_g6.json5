@@ -1,9 +1,9 @@
 {
   "mode": {
-    "approach": "algorithmic"
+    "approach": "semantic"
   },
   "general": {
-    "output_dir": "/home/dio/graphrag-rs/tests/e2e/results/output_algo_ollama_embed__symposium",
+    "output_dir": "/home/dio/graphrag-rs/tests/e2e/results/output_it_pinocchio_jev_g6",
     "log_level": "info",
     "max_threads": 4
   },
@@ -16,15 +16,15 @@
     ],
     "parallel_execution": true,
     "text_extraction": {
-      "chunk_size": 512,
-      "chunk_overlap": 100,
+      "chunk_size": 1000,
+      "chunk_overlap": 200,
       "min_chunk_size": 100,
       "clean_control_chars": true,
       "normalize_whitespace": true
     },
     "entity_extraction": {
-      "model_name": "none",
-      "temperature": 0.0,
+      "model_name": "qwen3.5-9b",
+      "temperature": 0.1,
       "max_tokens": 1200,
       "entity_types": ["PERSON", "CONCEPT", "LOCATION", "OBJECT", "EVENT", "RELATIONSHIP"],
       "confidence_threshold": 0.6
@@ -44,10 +44,10 @@
   },
   "text_processing": {
     "enabled": true,
-    "chunk_size": 512,
-    "chunk_overlap": 100,
+    "chunk_size": 1000,
+    "chunk_overlap": 200,
     "min_chunk_size": 100,
-    "max_chunk_size": 1500,
+    "max_chunk_size": 2000,
     "normalize_whitespace": true,
     "remove_artifacts": true,
     "extract_keywords": true,
@@ -59,7 +59,7 @@
       "extract_keywords": true,
       "max_keywords_per_chunk": 5,
       "use_tfidf": true,
-      "generate_summaries": true,
+      "generate_summaries": false,
       "min_chunk_length_for_summary": 150,
       "max_summary_length": 150,
       "extract_chapter": true,
@@ -76,7 +76,7 @@
     "enabled": true,
     "min_confidence": 0.6,
     "use_gleaning": false,
-    "max_gleaning_rounds": 0,
+    "max_gleaning_rounds": 2,
     "gleaning_improvement_threshold": 0.08,
     "semantic_merging": true,
     "merge_similarity_threshold": 0.85,
@@ -95,8 +95,8 @@
   },
   "vector_processing": {
     "enabled": true,
-    "embedding_model": "nomic-embed-text",
-    "embedding_dimensions": 768,
+    "embedding_model": "multilingual-e5-small",
+    "embedding_dimensions": 384,
     "use_hnsw_index": true,
     "hnsw_ef_construction": 200,
     "hnsw_m": 16,
@@ -110,23 +110,60 @@
     "use_temporal_parsing": false,
     "confidence_threshold": 0.5
   },
-  "ollama": {
+  "llm": {
     "enabled": true,
-    "host": "http://localhost",
-    "port": 11434,
-    "chat_model": "none",
-    "embedding_model": "nomic-embed-text",
-    "timeout_seconds": 120,
+    "base_url": "https://api.cerebras.ai/v1",
+    "api_key_env": "CEREBRAS_API_KEY",  // name of the env var holding the key, never the key itself
+    "embedding_base_url": "http://127.0.0.1:8081/v1",
+    "chat_model": "qwen-3.8-27b",
+    "embedding_model": "multilingual-e5-small",
+    "timeout_seconds": 300,
     "max_retries": 3,
-    "fallback_to_hash": true,
+    "fallback_to_hash": false,  // llama.cpp embeddings never fall back to hash
     "max_tokens": 1200,
-    "temperature": 0.0,
-    "generation": {
-      "temperature": 0.0,
-      "top_p": 0.9,
-      "max_tokens": 1500,
-      "stream": false
-    }
+    "temperature": 0.1,
+    "max_context_tokens": 6000,
+  },
+  // GLiNER2.5 (candle, `--features gliner2`) extracts entities AND relations on every chunk, no LLM
+  // at index time; Cerebras (llm above) is used only for answers. Needs gliner.enabled to take
+  // precedence over llm.enabled (extraction_path routing). model_path is a model DIRECTORY.
+  "gliner": {
+    "enabled": true,
+    "backend": "gliner2",
+    "model_path": "/home/dio/modelli/gliner2.5-multi",
+    "entity_labels": ["character", "place", "event"],
+    "relation_labels": ["father_of", "friend_of", "enemy_of", "located_in", "meets", "deceives", "helps"],
+    "entity_threshold": 0.5,
+    "relation_threshold": 0.65,
+    "llm_relations": false,
+    "jev": {
+      "enabled": true,
+      "api_key_env": "TYPESAFE_API_KEY",
+      "max_entities_per_chunk": 8,
+      "candidate_floor": 0.2,
+      "min_link": 0.5,
+      "min_evidence": 0.5,
+      "min_type_prob": 0.0,
+      "classify_entity_types": true,
+      // g6: Request E (noul di esistenza, prompt v2) scarta i candidati GLiNER che non sono entità della storia
+      "filter_entities": true,
+      "min_entity": 0.7,
+      "max_concurrent": 4,
+    },
+  },
+  // Cross-encoder reranking of candidate chunks (llama-server --reranking on :8082)
+  "reranker": {
+    "enabled": true,
+    "api_endpoint": "http://localhost:8082",
+    "model": "bge-reranker-v2-m3",
+    "candidates": 30,
+    "top_k": 12,
+  },
+  // Persist the index: bench re-runs reload it from <base_dir>/<workspace_name>/ (tests/e2e/results is gitignored)
+  "auto_save": {
+    "enabled": true,
+    "base_dir": "/home/dio/graphrag-rs/tests/e2e/results/workspaces",
+    "workspace_name": "it_pinocchio_jev_g6"
   },
   "performance": {
     "batch_processing": true,
@@ -153,16 +190,16 @@
       "enable_confidence_weighting": true
     },
     "lightrag": {
-      "enabled": false,
+      "enabled": true,
       "max_keywords": 15,
       "high_level_weight": 0.6,
       "low_level_weight": 0.4,
       "merge_strategy": "weighted",
-      "language": "English",
+      "language": "Italian",
       "enable_cache": true
     },
     "leiden": {
-      "enabled": false,
+      "enabled": true,
       "max_cluster_size": 15,
       "use_lcc": true,
       "seed": 42,
@@ -170,7 +207,7 @@
       "max_levels": 4,
       "min_improvement": 0.001,
       "enable_hierarchical": true,
-      "generate_summaries": true,
+      "generate_summaries": false,
       "max_summary_length": 5,
       "use_extractive_summary": true,
       "adaptive_routing": {

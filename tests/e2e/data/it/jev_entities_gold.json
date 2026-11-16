@@ -1,0 +1,294 @@
+{
+ "_doc": "Gold entita' per chunk (Pinocchio, workspace it_pinocchio_jev, candidati = GLiNER2.5 soglia 0.5 dal jev_raw.jsonl di g5). Chunk campionati ogni 24 + chunk 3. Annotatore unico (2026-11-11). Etichette: PERSON/LOCATION/EVENT = entita' specifica della storia, da tenere con quel tipo; ALIAS = rimanda a un'entita' esistente con un termine comune o un epiteto (babbo, burattino), nodo rumoroso senza alias resolution; GENERIC = luogo o oggetto usato genericamente, senza referente univoco (mare, scuola, bosco); un luogo specifico e persistente nella storia e' LOCATION anche senza nome proprio (bottega di mastr'Antonio, grotta del pescatore, casa della Fata); casi dubbi decisi dal contesto narrativo, altrimenti AMBIG (regola approvata dall'utente 2026-11-11, revisione v2); JUNK = frammento, parte del corpo, verbo; AMBIG = escluso dal punteggio. missed = entita' presenti nel testo ma non tra i candidati GLiNER. split: dev = soglie esplorate qui; heldout = annotato dopo aver visto lo sweep dev, solo per verifica.",
+ "chunks": [
+  {
+   "chunk": 0,
+   "labels": {
+    "mastr'Antonio": "PERSON",
+    "Maestro Ciliegia": "PERSON",
+    "bottega": "LOCATION",
+    "falegname": "ALIAS"
+   },
+   "missed": [],
+   "split": "dev"
+  },
+  {
+   "chunk": 3,
+   "labels": {
+    "ontana": "JUNK",
+    "caminetto": "GENERIC",
+    "stanza": "GENERIC",
+    "vocina": "GENERIC"
+   },
+   "missed": [],
+   "split": "dev"
+  },
+  {
+   "chunk": 24,
+   "labels": {
+    "Pinocchio": "PERSON",
+    "spedale": "GENERIC",
+    "Grillo-parlante": "PERSON",
+    "prigione": "GENERIC"
+   },
+   "missed": [],
+   "split": "dev"
+  },
+  {
+   "chunk": 48,
+   "labels": {
+    "scuola": "GENERIC",
+    "babbo": "ALIAS"
+   },
+   "missed": [],
+   "split": "dev"
+  },
+  {
+   "chunk": 72,
+   "labels": {
+    "Pinocchio": "PERSON",
+    "paese dei Barbagianni": "LOCATION",
+    "Volpe": "PERSON",
+    "Gatto": "PERSON",
+    "burattino": "ALIAS"
+   },
+   "missed": [
+    "Merlo"
+   ],
+   "split": "dev"
+  },
+  {
+   "chunk": 96,
+   "labels": {
+    "Quercia grande": "LOCATION",
+    "gli": "JUNK",
+    "reni": "JUNK",
+    "pianta": "ALIAS",
+    "gola": "JUNK",
+    "lingua": "JUNK"
+   },
+   "missed": [],
+   "split": "dev"
+  },
+  {
+   "chunk": 120,
+   "labels": {
+    "Pinocchio": "PERSON",
+    "burattino": "ALIAS",
+    "babbo": "ALIAS",
+    "bosco": "GENERIC",
+    "Fata mia": "ALIAS",
+    "Fata": "PERSON"
+   },
+   "missed": [],
+   "split": "dev"
+  },
+  {
+   "chunk": 144,
+   "labels": {
+    "Pinocchio": "PERSON",
+    "campo": "GENERIC",
+    "cielo": "GENERIC"
+   },
+   "missed": [],
+   "split": "dev"
+  },
+  {
+   "chunk": 168,
+   "labels": {
+    "Pinocchio": "PERSON",
+    "Geppetto": "PERSON",
+    "spiaggia": "GENERIC",
+    "mare": "GENERIC",
+    "terra": "GENERIC",
+    "scoglio": "GENERIC"
+   },
+   "missed": [],
+   "split": "dev"
+  },
+  {
+   "chunk": 192,
+   "labels": {
+    "Pinocchio": "PERSON",
+    "scuola": "GENERIC",
+    "calcio": "JUNK",
+    "tavola": "GENERIC"
+   },
+   "missed": [],
+   "split": "dev"
+  },
+  {
+   "chunk": 216,
+   "labels": {
+    "Pinocchio": "PERSON",
+    "spiaggia": "GENERIC",
+    "scogliera": "GENERIC",
+    "grotta": "LOCATION"
+   },
+   "missed": [],
+   "split": "dev"
+  },
+  {
+   "chunk": 240,
+   "labels": {
+    "Pinocchio": "PERSON",
+    "esami delle vacanze": "AMBIG",
+    "Fata": "PERSON",
+    "sofà": "GENERIC",
+    "scuola": "GENERIC"
+   },
+   "missed": [],
+   "split": "dev"
+  },
+  {
+   "chunk": 264,
+   "labels": {
+    "piazze": "GENERIC",
+    "case": "GENERIC",
+    "gallina": "GENERIC"
+   },
+   "missed": [],
+   "split": "dev"
+  },
+  {
+   "chunk": 288,
+   "labels": {
+    "Circo": "AMBIG",
+    "Pinocchio": "PERSON"
+   },
+   "missed": [],
+   "split": "dev"
+  },
+  {
+   "chunk": 312,
+   "labels": {
+    "Pinocchio": "PERSON",
+    "mare": "GENERIC",
+    "scoglio": "AMBIG",
+    "caprettina": "AMBIG",
+    "burattino": "ALIAS",
+    "mostro": "ALIAS",
+    "nuotare": "JUNK"
+   },
+   "missed": [
+    "Pesce-cane"
+   ],
+   "split": "dev"
+  },
+  {
+   "chunk": 336,
+   "labels": {
+    "Pinocchio": "PERSON",
+    "mascherine": "ALIAS",
+    "Gatto": "PERSON",
+    "Volpe": "PERSON",
+    "burattino": "ALIAS",
+    "ladracchiola": "ALIAS"
+   },
+   "missed": [],
+   "split": "dev"
+  },
+  {
+   "chunk": 12,
+   "split": "heldout",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "Pinocchi": "AMBIG",
+    "Pinocchia": "PERSON",
+    "Geppetto": "PERSON"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 60,
+   "split": "heldout",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "Arlecchino": "PERSON"
+   },
+   "missed": [
+    "Mangiafoco"
+   ]
+  },
+  {
+   "chunk": 108,
+   "split": "heldout",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "camera": "AMBIG",
+    "Fata": "PERSON",
+    "burattino": "ALIAS",
+    "Bevila": "JUNK",
+    "febbrone": "GENERIC",
+    "zuccheriera d'oro": "GENERIC"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 156,
+   "split": "heldout",
+   "labels": {
+    "cane": "ALIAS",
+    "Pinocchio": "PERSON",
+    "aia": "AMBIG",
+    "contadino": "ALIAS",
+    "faine": "AMBIG",
+    "casotto": "LOCATION"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 204,
+   "split": "heldout",
+   "labels": {
+    "infreddatura di gola": "GENERIC",
+    "Pinocchio": "PERSON",
+    "burattino": "ALIAS",
+    "monelli": "GENERIC"
+   },
+   "missed": [
+    "Granchio"
+   ]
+  },
+  {
+   "chunk": 252,
+   "split": "heldout",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "Lucignolo": "PERSON",
+    "paese": "ALIAS",
+    "burattino": "ALIAS"
+   },
+   "missed": []
+  },
+  {
+   "chunk": 300,
+   "split": "heldout",
+   "labels": {
+    "Pinocchio": "PERSON",
+    "mare": "GENERIC",
+    "ino": "JUNK",
+    "scoglio": "GENERIC",
+    "acqua": "GENERIC",
+    "nuota": "JUNK",
+    "affogato": "JUNK"
+   },
+   "missed": [
+    "Pesce-cane"
+   ]
+  },
+  {
+   "chunk": 348,
+   "split": "heldout",
+   "labels": {
+    "Lumaca": "PERSON",
+    "Pinocchio": "PERSON",
+    "cameriera": "ALIAS",
+    "Fata": "PERSON",
+    "spedale": "GENERIC",
+    "casa": "LOCATION"
+   },
+   "missed": []
+  }
+ ]
+}

@@ -33,7 +33,7 @@
       "normalize_whitespace": true
     },
     "entity_extraction": {
-      "model_name": "llama3.1:8b",
+      "model_name": "qwen3.5-9b",
       "temperature": 0.15,
       "max_tokens": 1200,
       "entity_types": [
@@ -136,8 +136,8 @@
   },
   "vector_processing": {
     "enabled": true,
-    "embedding_model": "nomic-embed-text",
-    "embedding_dimensions": 768,
+    "embedding_model": "multilingual-e5-small",
+    "embedding_dimensions": 384,
     "use_hnsw_index": true,
     "hnsw_ef_construction": 250,
     "hnsw_m": 20,
@@ -193,23 +193,17 @@
       "findings": "Summarize the research findings and their implications described in the context for: {query}\n\nContext:\n{context}\n\nFindings Summary:"
     }
   },
-  "ollama": {
+  "llm": {
     "enabled": true,
-    "host": "http://localhost",
-    "port": 11434,
-    "chat_model": "llama3.1:8b",
-    "embedding_model": "nomic-embed-text",
+    "base_url": "http://127.0.0.1:8080/v1",
+    "embedding_base_url": "http://127.0.0.1:8081/v1",
+    "chat_model": "qwen3.5-9b",
+    "embedding_model": "multilingual-e5-small",
     "timeout_seconds": 120,
     "max_retries": 3,
     "fallback_to_hash": false,
     "max_tokens": 1500,
     "temperature": 0.2,
-    "generation": {
-      "temperature": 0.25,
-      "top_p": 0.9,
-      "max_tokens": 2000,
-      "stream": false
-    }
   },
   "performance": {
     "batch_processing": true,

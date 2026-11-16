@@ -81,103 +81,90 @@ impl GraphRAGHandler {
         Ok(())
     }
 
-    /// Pre-flight check: verify required Ollama models are available.
+    /// Pre-flight check: verify the configured LLM/embedding servers serve the
+    /// required models.
     ///
-    /// Queries Ollama's `/api/tags` (3-second timeout) and checks that every
-    /// model the current configuration needs is present. Returns a descriptive
-    /// error with `ollama pull` commands if any are missing, preventing the TUI
-    /// from freezing inside `build_graph()`.
-    async fn check_ollama_models(&self) -> Result<()> {
+    /// Queries the OpenAI-compatible `GET {base}/models` endpoint (3-second
+    /// timeout) of the chat server and, for the `llama_cpp` embedding backend,
+    /// of the embedding server. Returns a descriptive error if a server is
+    /// unreachable or does not list the model, preventing the TUI from freezing
+    /// inside `build_graph()`.
+    async fn check_llm_models(&self) -> Result<()> {
         // Read the config under the lock, then drop it before doing IO.
-        let (needs_ollama, host, port, embedding_backend, embedding_model, chat_model) = {
+        let (llm, embedding_backend, embedding_endpoint) = {
             let guard = self.graphrag.lock().await;
             match guard.as_ref() {
                 Some(g) => {
                     let c = g.config();
                     (
-                        c.ollama.enabled,
-                        c.ollama.host.clone(),
-                        c.ollama.port,
+                        c.llm.clone(),
                         c.embeddings.backend.clone(),
-                        c.ollama.embedding_model.clone(),
-                        c.ollama.chat_model.clone(),
+                        c.embeddings.api_endpoint.clone(),
                     )
                 },
                 None => return Ok(()), // not initialised – other code will handle this
             }
         };
 
-        // Determine which models we actually need.
-        let mut required: Vec<String> = Vec::new();
-        if embedding_backend == "ollama" {
-            required.push(embedding_model);
+        // (models URL, required model, needs API key)
+        let mut checks: Vec<(String, String, bool)> = Vec::new();
+        if llm.enabled {
+            let base = llm.base_url.trim_end_matches('/');
+            checks.push((format!("{base}/models"), llm.chat_model.clone(), true));
         }
-        if needs_ollama {
-            required.push(chat_model);
+        if matches!(embedding_backend.as_str(), "llama_cpp" | "llama.cpp") {
+            if let Some(endpoint) = embedding_endpoint {
+                let base = endpoint.trim_end_matches('/');
+                let base = base.strip_suffix("/embeddings").unwrap_or(base);
+                checks.push((format!("{base}/models"), llm.embedding_model.clone(), false));
+            }
         }
-        // De-duplicate (e.g. if both fields point to the same model).
-        required.sort();
-        required.dedup();
+        if checks.is_empty() {
+            return Ok(()); // purely algorithmic config, no LLM server needed
+        }
 
-        if required.is_empty() {
-            return Ok(()); // purely algorithmic config, no Ollama needed
-        }
-
-        // Quick HTTP check with a short timeout.
-        let url = format!("{}:{}/api/tags", host, port);
+        let api_key = llm.api_key().map_err(|e| eyre!("{e}"))?;
         let agent = ureq::AgentBuilder::new()
             .timeout(std::time::Duration::from_secs(3))
             .build();
 
-        let available: Vec<String> = match agent.get(&url).call() {
-            Ok(resp) => {
-                let body: serde_json::Value = resp
-                    .into_json()
-                    .unwrap_or_else(|_| serde_json::json!({"models": []}));
-                body["models"]
-                    .as_array()
-                    .map(|arr| {
-                        arr.iter()
-                            .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
-                            .collect()
-                    })
-                    .unwrap_or_default()
-            },
-            Err(e) => {
+        for (url, model, send_key) in checks {
+            let mut request = agent.get(&url);
+            if let (true, Some(key)) = (send_key, api_key.as_deref()) {
+                request = request.set("Authorization", &format!("Bearer {key}"));
+            }
+            let available: Vec<String> = match request.call() {
+                Ok(resp) => {
+                    let body: serde_json::Value = resp
+                        .into_json()
+                        .unwrap_or_else(|_| serde_json::json!({"data": []}));
+                    body["data"]
+                        .as_array()
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|m| m["id"].as_str().map(|s| s.to_string()))
+                                .collect()
+                        })
+                        .unwrap_or_default()
+                },
+                Err(e) => {
+                    return Err(eyre!(
+                        "Cannot reach LLM server at {} — is llama-server running?\nError: {}",
+                        url,
+                        e
+                    ));
+                },
+            };
+            // An empty list means the server does not enumerate models: accept it.
+            if !available.is_empty() && !available.iter().any(|id| id == &model) {
                 return Err(eyre!(
-                    "Cannot reach Ollama at {} — is it running?\nError: {}",
+                    "Model '{}' is not served at {}. Available: {}\n\nStart llama-server with `--alias {}` or update the config.",
+                    model,
                     url,
-                    e
+                    available.join(", "),
+                    model
                 ));
-            },
-        };
-
-        // Compare required vs available (Ollama names may include `:latest`).
-        let missing: Vec<&String> = required
-            .iter()
-            .filter(|req| {
-                !available.iter().any(|avail| {
-                    avail == req.as_str()
-                        || avail.starts_with(&format!("{}:", req))
-                        || req.ends_with(":latest") && avail == req.trim_end_matches(":latest")
-                })
-            })
-            .collect();
-
-        if !missing.is_empty() {
-            let pull_cmds: Vec<String> = missing
-                .iter()
-                .map(|m| format!("ollama pull {}", m))
-                .collect();
-            return Err(eyre!(
-                "Missing Ollama models: {}\n\nPull them first:\n  {}",
-                missing
-                    .iter()
-                    .map(|s| s.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", "),
-                pull_cmds.join("\n  ")
-            ));
+            }
         }
 
         Ok(())
@@ -187,10 +174,11 @@ impl GraphRAGHandler {
     ///
     /// # Arguments
     /// * `path` - Path to the document to load
-    /// * `rebuild` - If true, clears existing graph AND documents before loading (forces complete rebuild)
+    /// * `rebuild` - If true, reopens the workspace and rebuilds the graph from
+    ///   its preserved documents plus the document being loaded
     pub async fn load_document_with_options(&self, path: &Path, rebuild: bool) -> Result<String> {
-        // Pre-flight: check Ollama models BEFORE acquiring the long-held lock.
-        self.check_ollama_models().await?;
+        // Pre-flight: check LLM server models BEFORE acquiring the long-held lock.
+        self.check_llm_models().await?;
 
         tracing::info!("Loading document: {:?} (rebuild: {})", path, rebuild);
 
@@ -208,10 +196,11 @@ impl GraphRAGHandler {
         // Add document and build graph with tokio::sync::Mutex
         let mut guard = self.graphrag.lock().await;
         if let Some(ref mut graphrag) = *guard {
-            // Clear graph AND documents if rebuild is requested (BEFORE adding new document)
+            // Reopen the workspace before rebuilding when requested. `initialize`
+            // preserves persisted documents; the graph is rebuilt from those
+            // documents and the newly loaded document below.
             if rebuild {
-                tracing::info!("Clearing existing graph and documents for rebuild");
-                // Re-initialize to clear everything including documents and chunks
+                tracing::info!("Reopening workspace and rebuilding graph from existing documents");
                 graphrag.initialize()?;
             }
 
@@ -223,11 +212,10 @@ impl GraphRAGHandler {
 
             let message = if rebuild {
                 format!(
-                    "Document '{}' loaded successfully (complete rebuild from scratch)",
-                    filename
+                    "Document '{filename}' loaded successfully (graph rebuilt from workspace documents)"
                 )
             } else {
-                format!("Document '{}' loaded successfully", filename)
+                format!("Document '{filename}' loaded successfully")
             };
 
             Ok(message)
@@ -293,11 +281,12 @@ impl GraphRAGHandler {
 
         let mut guard = self.graphrag.lock().await;
         if let Some(ref mut graphrag) = *guard {
-            // Get raw search results first
-            let raw_results = graphrag.query_internal(query_text).await?;
-
-            // Then get the LLM-processed answer
-            let answer = graphrag.ask(query_text).await?;
+            // One retrieval pass feeds both the answer and the raw sources.
+            let (answer, results) = graphrag.ask_with_results(query_text).await?;
+            let raw_results = results
+                .into_iter()
+                .map(|r| format!("{} (score: {:.2})", r.content, r.score))
+                .collect();
 
             Ok((answer, raw_results))
         } else {
@@ -464,7 +453,7 @@ impl GraphRAGHandler {
                 ws.metadata.created_at.format("%Y-%m-%d %H:%M:%S")
             ));
             if let Some(desc) = &ws.metadata.description {
-                output.push_str(&format!("   Description: {}\n", desc));
+                output.push_str(&format!("   Description: {desc}\n"));
             }
             output.push('\n');
         }
@@ -543,7 +532,7 @@ impl GraphRAGHandler {
         // Confirm deletion (in TUI this would be a confirmation dialog)
         workspace_manager.delete_workspace(name)?;
 
-        Ok(format!("✅ Workspace '{}' deleted successfully.", name))
+        Ok(format!("✅ Workspace '{name}' deleted successfully."))
     }
 }
 

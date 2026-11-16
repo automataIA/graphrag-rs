@@ -11,7 +11,7 @@
 
 use crate::{
     core::{KnowledgeGraph, Relationship, Result},
-    ollama::OllamaClient,
+    llm::LlmClient,
 };
 use petgraph::visit::EdgeRef;
 use serde::{Deserialize, Serialize};
@@ -184,8 +184,8 @@ pub struct HierarchyBuilder {
     /// Relationships to cluster
     relationships: Vec<Relationship>,
 
-    /// Ollama client for generating summaries
-    ollama_client: Option<OllamaClient>,
+    /// LLM client for generating summaries
+    llm_client: Option<LlmClient>,
 
     /// Number of levels to create
     num_levels: usize,
@@ -206,7 +206,7 @@ impl HierarchyBuilder {
     pub fn new(relationships: Vec<Relationship>) -> Self {
         Self {
             relationships,
-            ollama_client: None,
+            llm_client: None,
             num_levels: 3,
             resolutions: vec![1.0, 0.5, 0.2], // High to low resolution
             min_cluster_size: 2,
@@ -218,9 +218,9 @@ impl HierarchyBuilder {
         Self::new(graph.get_all_relationships().into_iter().cloned().collect())
     }
 
-    /// Set Ollama client for summary generation
-    pub fn with_ollama_client(mut self, client: OllamaClient) -> Self {
-        self.ollama_client = Some(client);
+    /// Set LLM client for summary generation
+    pub fn with_llm_client(mut self, client: LlmClient) -> Self {
+        self.llm_client = Some(client);
         self
     }
 
@@ -290,7 +290,7 @@ impl HierarchyBuilder {
 
         // Create clusters from communities
         for (community_id, rel_indices) in communities {
-            let cluster_id = format!("L{}C{}", level_id, community_id);
+            let cluster_id = format!("L{level_id}C{community_id}");
             let mut cluster = RelationshipCluster::new(cluster_id.clone());
 
             // Add relationships to cluster
@@ -306,10 +306,10 @@ impl HierarchyBuilder {
                 continue;
             }
 
-            // Generate summary if Ollama client available
-            if let Some(ref ollama_client) = self.ollama_client {
+            // Generate summary if LLM client available
+            if let Some(ref llm_client) = self.llm_client {
                 let summary = self
-                    .generate_cluster_summary(&cluster, &self.relationships, ollama_client)
+                    .generate_cluster_summary(&cluster, &self.relationships, llm_client)
                     .await?;
                 cluster.summary = summary;
             } else {
@@ -532,7 +532,7 @@ impl HierarchyBuilder {
         &self,
         cluster: &RelationshipCluster,
         _all_relationships: &[Relationship],
-        ollama_client: &OllamaClient,
+        llm_client: &LlmClient,
     ) -> Result<String> {
         // Collect relationship descriptions
         let mut rel_descriptions = Vec::new();
@@ -560,7 +560,7 @@ Theme:"#,
             sample.join("\n")
         );
 
-        match ollama_client.generate(&prompt).await {
+        match llm_client.generate(&prompt).await {
             Ok(summary) => Ok(summary.trim().to_string()),
             Err(e) => {
                 #[cfg(feature = "tracing")]
@@ -570,7 +570,7 @@ Theme:"#,
                     "Failed to generate cluster summary, using fallback"
                 );
 
-                Ok(format!("Cluster of {} relationships", total))
+                Ok(format!("Cluster of {total} relationships"))
             },
         }
     }
@@ -667,8 +667,8 @@ mod tests {
         // Create test entities
         for i in 0..5 {
             let entity = Entity::new(
-                EntityId::new(format!("entity{}", i)),
-                format!("Entity {}", i),
+                EntityId::new(format!("entity{i}")),
+                format!("Entity {i}"),
                 "CONCEPT".to_string(),
                 0.9,
             );
@@ -797,8 +797,7 @@ mod tests {
         // Exact value depends on implementation but should be > 0.5
         assert!(
             cohesion > 0.5,
-            "Expected high cohesion for fully connected cluster, got {}",
-            cohesion
+            "Expected high cohesion for fully connected cluster, got {cohesion}"
         );
     }
 
@@ -912,8 +911,7 @@ mod tests {
         let community_sizes: Vec<usize> = communities.values().map(|c| c.len()).collect();
         assert!(
             community_sizes.contains(&3) || community_sizes.contains(&2),
-            "Expected communities of size 3 or 2, got {:?}",
-            community_sizes
+            "Expected communities of size 3 or 2, got {community_sizes:?}"
         );
     }
 }

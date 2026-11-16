@@ -242,11 +242,17 @@ impl Default for FunctionCaller {
 /// Statistics about function call usage
 #[derive(Debug, Clone)]
 pub struct FunctionCallStatistics {
+    /// Number of function calls made
     pub total_calls: usize,
+    /// Calls that returned successfully
     pub successful_calls: usize,
+    /// Calls that returned an error
     pub failed_calls: usize,
+    /// Sum of execution times in milliseconds
     pub total_execution_time_ms: u64,
+    /// Mean execution time in milliseconds
     pub average_execution_time_ms: u64,
+    /// Number of calls per function name
     pub function_usage: HashMap<String, usize>,
 }
 

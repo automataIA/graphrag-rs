@@ -1,3 +1,5 @@
+#![allow(clippy::manual_range_contains, clippy::useless_vec)]
+
 //! Complete pipeline integration tests
 //!
 //! Tests the full GraphRAG pipeline including:

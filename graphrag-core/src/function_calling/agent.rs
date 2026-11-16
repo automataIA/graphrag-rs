@@ -369,15 +369,13 @@ impl GraphRAGAgent {
                         }
                     }
                 },
-                "get_entity_context" => {
-                    if result.result["context_chunks"].is_array() {
-                        let chunks: Vec<_> = result.result["context_chunks"].members().collect();
-                        if !chunks.is_empty() {
-                            answer_parts.push(format!(
-                                "Found {} text contexts mentioning the entity",
-                                chunks.len()
-                            ));
-                        }
+                "get_entity_context" if result.result["context_chunks"].is_array() => {
+                    let chunks: Vec<_> = result.result["context_chunks"].members().collect();
+                    if !chunks.is_empty() {
+                        answer_parts.push(format!(
+                            "Found {} text contexts mentioning the entity",
+                            chunks.len()
+                        ));
                     }
                 },
                 _ => {},

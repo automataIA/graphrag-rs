@@ -1,7 +1,7 @@
 # Clippy configuration for GraphRAG-RS
 
 # Set MSRV (Minimum Supported Rust Version)
-msrv = "1.70.0"
+msrv = "1.88.0"
 
 # Lint configuration
 cognitive-complexity-threshold = 30

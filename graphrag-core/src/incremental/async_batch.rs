@@ -281,7 +281,7 @@ impl AsyncBatchUpdater {
             .send(operation)
             .await
             .map_err(|e| crate::GraphRAGError::IncrementalUpdate {
-                message: format!("Failed to submit operation: {}", e),
+                message: format!("Failed to submit operation: {e}"),
             })?;
 
         Ok(())
@@ -444,7 +444,11 @@ impl AsyncBatchUpdater {
 
     /// Get current statistics
     pub fn get_statistics(&self) -> BatchStatistics {
-        self.stats.read().clone()
+        let mut stats = self.stats.read().clone();
+        // Operations still buffered in the channel (not yet collected into a batch)
+        // are part of the queue too.
+        stats.queue_size += self.sender.max_capacity() - self.sender.capacity();
+        stats
     }
 
     /// Get completed batch results
@@ -609,10 +613,10 @@ mod tests {
         // Submit operations
         for i in 0..5 {
             let operation = UpdateOperation {
-                operation_id: format!("op_{}", i),
+                operation_id: format!("op_{i}"),
                 operation_type: OperationType::AddNode,
                 data: UpdateData::Node {
-                    node_id: format!("node_{}", i),
+                    node_id: format!("node_{i}"),
                     properties: HashMap::new(),
                     embeddings: None,
                 },
@@ -625,7 +629,7 @@ mod tests {
 
         // Check that operations were queued
         let stats = updater.get_statistics();
-        assert!(stats.queue_size >= 0);
+        assert_eq!(stats.queue_size, 5);
     }
 
     #[tokio::test]
@@ -645,10 +649,10 @@ mod tests {
         // Submit operations
         for i in 0..6 {
             let operation = UpdateOperation {
-                operation_id: format!("op_{}", i),
+                operation_id: format!("op_{i}"),
                 operation_type: OperationType::AddNode,
                 data: UpdateData::Node {
-                    node_id: format!("node_{}", i),
+                    node_id: format!("node_{i}"),
                     properties: HashMap::new(),
                     embeddings: None,
                 },
@@ -721,10 +725,10 @@ mod tests {
             let updater_clone = updater.get_sender();
             let handle = tokio::spawn(async move {
                 let operation = UpdateOperation {
-                    operation_id: format!("op_{}", i),
+                    operation_id: format!("op_{i}"),
                     operation_type: OperationType::AddNode,
                     data: UpdateData::Node {
-                        node_id: format!("node_{}", i),
+                        node_id: format!("node_{i}"),
                         properties: HashMap::new(),
                         embeddings: None,
                     },

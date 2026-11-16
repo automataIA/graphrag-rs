@@ -255,7 +255,7 @@ async fn query(
             };
 
             let excerpt = if doc.content.len() > 200 {
-                format!("{}...", &doc.content[..200])
+                format!("{}...", doc.content.chars().take(200).collect::<String>())
             } else {
                 doc.content.clone()
             };

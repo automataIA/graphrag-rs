@@ -65,8 +65,8 @@ pub struct ExtractedEntity {
 /// This extractor uses a language model to identify entities and their relationships
 /// in text. It follows Microsoft GraphRAG methodology for high-quality extraction.
 pub struct LLMRelationshipExtractor {
-    /// Optional Ollama client for LLM-based extraction
-    pub ollama_client: Option<crate::ollama::OllamaClient>,
+    /// Optional LLM client for LLM-based extraction
+    pub llm_client: Option<crate::llm::LlmClient>,
 }
 
 impl LLMRelationshipExtractor {
@@ -74,33 +74,24 @@ impl LLMRelationshipExtractor {
     ///
     /// # Arguments
     ///
-    /// * `ollama_config` - Optional Ollama configuration. If provided and enabled,
+    /// * `llm_config` - optional LLM configuration. If provided and enabled,
     ///   the extractor will use LLM-based extraction. Otherwise, it will fall back
     ///   to pattern-based extraction.
     ///
     /// # Returns
     ///
     /// Returns a new extractor instance or an error if initialization fails.
-    pub fn new(ollama_config: Option<&crate::ollama::OllamaConfig>) -> Result<Self> {
-        let ollama_client = if let Some(config) = ollama_config {
+    pub fn new(llm_config: Option<&crate::llm::LlmConfig>) -> Result<Self> {
+        let llm_client = if let Some(config) = llm_config {
             if config.enabled {
-                let local_config = crate::ollama::OllamaConfig {
-                    enabled: config.enabled,
-                    host: config.host.clone(),
-                    port: config.port,
-                    chat_model: config.chat_model.clone(),
-                    embedding_model: config.embedding_model.clone(),
-                    timeout_seconds: config.timeout_seconds,
-                    max_retries: config.max_retries,
-                    fallback_to_hash: config.fallback_to_hash,
+                let local_config = crate::llm::LlmConfig {
                     max_tokens: None,
                     temperature: None,
                     enable_caching: true,
-                    keep_alive: config.keep_alive.clone(),
-                    num_ctx: config.num_ctx,
+                    ..config.clone()
                 };
 
-                Some(crate::ollama::OllamaClient::new(local_config))
+                Some(crate::llm::LlmClient::new(local_config))
             } else {
                 None
             }
@@ -108,7 +99,7 @@ impl LLMRelationshipExtractor {
             None
         };
 
-        Ok(Self { ollama_client })
+        Ok(Self { llm_client })
     }
 
     /// Build the extraction prompt following Microsoft GraphRAG methodology
@@ -166,8 +157,7 @@ For each relationship provide:
   ]
 }}
 
-Return ONLY valid JSON, nothing else."#,
-            chunk_content = chunk_content
+Return ONLY valid JSON, nothing else."#
         )
     }
 
@@ -188,10 +178,10 @@ Return ONLY valid JSON, nothing else."#,
     ///
     /// # Errors
     ///
-    /// - Returns `GraphRAGError::Config` if Ollama client is not configured
+    /// - Returns `GraphRAGError::Config` if LLM client is not configured
     /// - Returns `GraphRAGError::EntityExtraction` if LLM generation fails
     pub async fn extract_with_llm(&self, chunk: &TextChunk) -> Result<ExtractionResult> {
-        if let Some(client) = &self.ollama_client {
+        if let Some(client) = &self.llm_client {
             let prompt = self.build_extraction_prompt(&chunk.content);
 
             #[cfg(feature = "tracing")]
@@ -251,13 +241,13 @@ Return ONLY valid JSON, nothing else."#,
                         "LLM extraction failed"
                     );
                     Err(GraphRAGError::EntityExtraction {
-                        message: format!("LLM extraction failed: {}", e),
+                        message: format!("LLM extraction failed: {e}"),
                     })
                 },
             }
         } else {
             Err(GraphRAGError::Config {
-                message: "Ollama client not configured".to_string(),
+                message: "LLM client not configured".to_string(),
             })
         }
     }
@@ -285,16 +275,16 @@ Return ONLY valid JSON, nothing else."#,
         target: &str,
         source_text: &str,
     ) -> Result<TripleValidation> {
-        if let Some(client) = &self.ollama_client {
+        if let Some(client) = &self.llm_client {
             let prompt = format!(
                 r#"You are validating a relationship extracted from text.
 
-Text: "{}"
+Text: "{source_text}"
 
 Extracted Relationship:
-- Source: {}
-- Relationship: {}
-- Target: {}
+- Source: {source}
+- Relationship: {relation_type}
+- Target: {target}
 
 Does this text EXPLICITLY support this relationship?
 Consider:
@@ -310,8 +300,7 @@ Respond ONLY with valid JSON in this exact format:
   "suggested_fix": "optional fix if invalid"
 }}
 
-JSON:"#,
-                source_text, source, relation_type, target
+JSON:"#
             );
 
             #[cfg(feature = "tracing")]
@@ -392,7 +381,7 @@ JSON:"#,
                     Ok(TripleValidation {
                         is_valid: true,
                         confidence: 0.5,
-                        reason: format!("Validation LLM call failed: {}", e),
+                        reason: format!("Validation LLM call failed: {e}"),
                         suggested_fix: None,
                     })
                 },
@@ -402,7 +391,7 @@ JSON:"#,
             Ok(TripleValidation {
                 is_valid: true,
                 confidence: 1.0,
-                reason: "Ollama client not configured, skipping validation".to_string(),
+                reason: "LLM client not configured, skipping validation".to_string(),
                 suggested_fix: None,
             })
         }
@@ -709,8 +698,8 @@ mod tests {
 
     #[cfg(feature = "async")]
     #[tokio::test]
-    async fn test_validate_triple_without_ollama() {
-        // Test validation method when Ollama is not configured
+    async fn test_validate_triple_without_llm() {
+        // Test validation method when the LLM is not configured
         let extractor = LLMRelationshipExtractor::new(None).unwrap();
 
         let result = extractor
@@ -720,7 +709,7 @@ mod tests {
         // Should gracefully fallback with high confidence when no LLM is available
         assert!(
             result.is_ok(),
-            "Should gracefully handle missing Ollama client"
+            "Should gracefully handle missing LLM client"
         );
 
         let validation = result.unwrap();
@@ -731,7 +720,7 @@ mod tests {
         );
         assert!(
             validation.reason.contains("not configured"),
-            "Reason should explain Ollama is not configured"
+            "Reason should explain the LLM is not configured"
         );
     }
 }

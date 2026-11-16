@@ -41,6 +41,4 @@ fn test_prelude_imports() {
 
     // Test that prelude imports work
     let _builder = GraphRAGBuilder::new();
-    let _preset = ConfigPreset::Basic;
-    let _llm = LLMProvider::Mock;
 }

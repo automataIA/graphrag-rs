@@ -1,3 +1,5 @@
+#![allow(clippy::manual_range_contains)]
+
 //! Integration test for complete pipeline with REAL embeddings and vector search
 //!
 //! This test verifies:

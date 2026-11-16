@@ -1,30 +1,47 @@
 //! Tests for Triple Reflection validation feature (Phase 1.1 - DEG-RAG methodology)
 
-#[cfg(all(feature = "ollama", feature = "async"))]
+#[cfg(all(feature = "llm", feature = "async"))]
 mod triple_validation_tests {
-    use graphrag_core::{entity::LLMRelationshipExtractor, ollama::OllamaConfig};
+    use graphrag_core::{entity::LLMRelationshipExtractor, llm::LlmConfig};
 
-    fn create_test_ollama_config() -> OllamaConfig {
-        OllamaConfig {
+    /// These tests talk to a real llama.cpp server (`llama-server` on :8080).
+    /// `validate_triple` never returns `Err` (it falls back to `confidence = 0.5`
+    /// on LLM failure), so skip explicitly when nothing listens on the port.
+    fn llm_available() -> bool {
+        use std::net::{TcpStream, ToSocketAddrs};
+        use std::time::Duration;
+        ("127.0.0.1", 8080)
+            .to_socket_addrs()
+            .ok()
+            .and_then(|mut addrs| addrs.next())
+            .is_some_and(|addr| {
+                TcpStream::connect_timeout(&addr, Duration::from_millis(500)).is_ok()
+            })
+    }
+
+    macro_rules! require_llm {
+        () => {
+            if !llm_available() {
+                eprintln!("skipping: llama-server not reachable on 127.0.0.1:8080");
+                return;
+            }
+        };
+    }
+
+    fn create_test_llm_config() -> LlmConfig {
+        LlmConfig {
             enabled: true,
-            host: "http://localhost".to_string(),
-            port: 11434,
-            embedding_model: "nomic-embed-text".to_string(),
-            chat_model: "llama3.2:3b".to_string(),
             timeout_seconds: 30,
-            max_retries: 3,
             fallback_to_hash: false,
             max_tokens: Some(500),
             temperature: Some(0.1),
-            enable_caching: true,
-            keep_alive: None,
-            num_ctx: None,
+            ..LlmConfig::default()
         }
     }
 
     #[tokio::test]
     async fn test_triple_validation_struct_creation() {
-        let config = create_test_ollama_config();
+        let config = create_test_llm_config();
         let extractor = LLMRelationshipExtractor::new(Some(&config));
 
         assert!(extractor.is_ok(), "Should create extractor successfully");
@@ -32,19 +49,20 @@ mod triple_validation_tests {
 
     #[tokio::test]
     async fn test_validate_triple_valid_relationship() {
-        let config = create_test_ollama_config();
+        require_llm!();
+        let config = create_test_llm_config();
         let extractor =
             LLMRelationshipExtractor::new(Some(&config)).expect("Failed to create extractor");
 
         let text = "Socrates taught Plato philosophy in ancient Athens.";
 
-        // This test requires actual Ollama service running
-        // It's marked as integration test and can be skipped if Ollama is not available
+        // This test requires an actual llama-server running
+        // It's marked as integration test and can be skipped if the LLM is not available
         let result = extractor
             .validate_triple("Socrates", "TAUGHT", "Plato", text)
             .await;
 
-        // If Ollama is not available, this will fail gracefully
+        // If the LLM is not available, this will fail gracefully
         if let Ok(validation) = result {
             // If validation succeeds, check the structure
             assert!(
@@ -69,7 +87,8 @@ mod triple_validation_tests {
 
     #[tokio::test]
     async fn test_validate_triple_invalid_relationship() {
-        let config = create_test_ollama_config();
+        require_llm!();
+        let config = create_test_llm_config();
         let extractor =
             LLMRelationshipExtractor::new(Some(&config)).expect("Failed to create extractor");
 
@@ -105,7 +124,8 @@ mod triple_validation_tests {
 
     #[tokio::test]
     async fn test_validate_triple_partial_match() {
-        let config = create_test_ollama_config();
+        require_llm!();
+        let config = create_test_llm_config();
         let extractor =
             LLMRelationshipExtractor::new(Some(&config)).expect("Failed to create extractor");
 
@@ -127,14 +147,14 @@ mod triple_validation_tests {
     }
 
     #[tokio::test]
-    async fn test_validation_with_disabled_ollama() {
-        let config = OllamaConfig {
+    async fn test_validation_with_disabled_llm() {
+        let config = LlmConfig {
             enabled: false, // Disabled
-            ..create_test_ollama_config()
+            ..create_test_llm_config()
         };
 
         let extractor = LLMRelationshipExtractor::new(Some(&config))
-            .expect("Should create extractor even with disabled Ollama");
+            .expect("Should create extractor even with disabled LLM");
 
         let text = "Test text";
 
@@ -142,25 +162,19 @@ mod triple_validation_tests {
             .validate_triple("Entity1", "RELATES_TO", "Entity2", text)
             .await;
 
-        // With Ollama disabled, should return error or fallback behavior
-        // This tests graceful degradation
-        match result {
-            Ok(validation) => {
-                // If it succeeds with fallback, should have low confidence
-                assert!(
-                    validation.confidence < 0.5,
-                    "Fallback validation should have low confidence"
-                );
-            },
-            Err(_) => {
-                // Error is also acceptable with Ollama disabled
-            },
-        }
+        // With the LLM disabled no client is built, so validation is skipped:
+        // the triple passes through unchanged (same contract as the lib unit
+        // test `test_validate_triple_without_llm`).
+        let validation = result.expect("disabled LLM must not error");
+        assert!(validation.is_valid);
+        assert_eq!(validation.confidence, 1.0);
+        assert!(validation.reason.contains("not configured"));
     }
 
     #[tokio::test]
     async fn test_validation_confidence_thresholds() {
-        let config = create_test_ollama_config();
+        require_llm!();
+        let config = create_test_llm_config();
         let extractor =
             LLMRelationshipExtractor::new(Some(&config)).expect("Failed to create extractor");
 
@@ -189,7 +203,8 @@ mod triple_validation_tests {
 
     #[tokio::test]
     async fn test_validation_with_empty_text() {
-        let config = create_test_ollama_config();
+        require_llm!();
+        let config = create_test_llm_config();
         let extractor =
             LLMRelationshipExtractor::new(Some(&config)).expect("Failed to create extractor");
 
@@ -210,7 +225,8 @@ mod triple_validation_tests {
 
     #[tokio::test]
     async fn test_validation_json_parsing() {
-        let config = create_test_ollama_config();
+        require_llm!();
+        let config = create_test_llm_config();
         let extractor =
             LLMRelationshipExtractor::new(Some(&config)).expect("Failed to create extractor");
 
@@ -223,7 +239,7 @@ mod triple_validation_tests {
         if let Ok(validation) = result {
             // Verify all fields are properly parsed
             assert!(
-                validation.reason.len() > 0,
+                !validation.reason.is_empty(),
                 "Reason should be parsed from JSON"
             );
 
@@ -243,11 +259,11 @@ mod triple_validation_tests {
     }
 }
 
-#[cfg(not(all(feature = "ollama", feature = "async")))]
+#[cfg(not(all(feature = "llm", feature = "async")))]
 mod triple_validation_tests {
     // Placeholder module when features are not enabled
     #[test]
     fn test_features_required() {
-        println!("Triple validation tests require 'ollama' and 'async' features");
+        println!("Triple validation tests require 'llm' and 'async' features");
     }
 }

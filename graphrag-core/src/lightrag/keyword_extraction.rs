@@ -122,7 +122,7 @@ Now extract keywords:"#,
         // Parse JSON
         let keywords: DualLevelKeywords =
             serde_json::from_str(&json_str).map_err(|e| GraphRAGError::Serialization {
-                message: format!("Failed to parse keywords JSON: {}", e),
+                message: format!("Failed to parse keywords JSON: {e}"),
             })?;
 
         Ok(keywords)
@@ -178,7 +178,7 @@ Now extract keywords:"#,
         match self.extract(query).await {
             Ok(keywords) => Ok(keywords),
             Err(e) => {
-                log::warn!("Keyword extraction failed: {}, using fallback", e);
+                log::warn!("Keyword extraction failed: {e}, using fallback");
 
                 // Fallback: use query terms as low-level keywords
                 let words: Vec<String> = query
@@ -225,7 +225,7 @@ mod tests {
                 if let Some(end) = response.rfind('}') {
                     let json_str = &response[start..=end];
                     let parsed: Result<serde_json::Value, _> = serde_json::from_str(json_str);
-                    assert!(parsed.is_ok(), "Failed to parse JSON from: {}", response);
+                    assert!(parsed.is_ok(), "Failed to parse JSON from: {response}");
                 }
             }
         }
@@ -248,8 +248,8 @@ mod tests {
 
         // Too many keywords
         let too_many = DualLevelKeywords {
-            high_level: (0..15).map(|i| format!("topic{}", i)).collect(),
-            low_level: (0..15).map(|i| format!("entity{}", i)).collect(),
+            high_level: (0..15).map(|i| format!("topic{i}")).collect(),
+            low_level: (0..15).map(|i| format!("entity{i}")).collect(),
         };
         let total = too_many.high_level.len() + too_many.low_level.len();
         assert!(total > config.max_keywords);

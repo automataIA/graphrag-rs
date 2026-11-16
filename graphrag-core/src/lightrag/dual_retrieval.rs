@@ -155,7 +155,7 @@ impl DualLevelRetriever {
         // Combine keywords into query
         let combined_query = keywords.join(" ");
 
-        log::debug!("High-level query: '{}'", combined_query);
+        log::debug!("High-level query: '{combined_query}'");
 
         // Search in topic-level index (community summaries, abstracts)
         let results = self.high_level_store.search(&combined_query, top_k).await?;
@@ -177,7 +177,7 @@ impl DualLevelRetriever {
         // Combine keywords
         let combined_query = keywords.join(" ");
 
-        log::debug!("Low-level query: '{}'", combined_query);
+        log::debug!("Low-level query: '{combined_query}'");
 
         // Search in entity-level index (chunks, entities)
         let results = self.low_level_store.search(&combined_query, top_k).await?;
@@ -324,7 +324,7 @@ mod tests {
     fn create_test_result(id: &str, score: f32) -> SearchResult {
         SearchResult {
             id: id.to_string(),
-            content: format!("Content of {}", id),
+            content: format!("Content of {id}"),
             score,
             result_type: ResultType::Chunk,
             entities: Vec::new(),

@@ -21,7 +21,7 @@ top_k_results = 10
 similarity_threshold = 0.7
 
 [embeddings]
-# Embedding backend: "hash" (fast, offline), "ollama" (local LLM), "candle" (neural)
+# Embedding backend: "hash" (fast, offline), "llama_cpp" (local LLM), "candle" (neural)
 backend = "hash"
 dimension = 384
 fallback_to_hash = true
@@ -55,12 +55,12 @@ enabled = true
 num_threads = 0  # 0 = auto-detect
 min_batch_size = 10
 
-[ollama]
+[llm]
 enabled = false
-host = "localhost"
-port = 11434
-chat_model = "llama3.2:3b"
-embedding_model = "nomic-embed-text"
+base_url = "http://127.0.0.1:8080/v1"
+embedding_base_url = "http://127.0.0.1:8081/v1"
+chat_model = "qwen3.5-9b"
+embedding_model = "multilingual-e5-small"
 timeout_seconds = 30
 enable_caching = true
 

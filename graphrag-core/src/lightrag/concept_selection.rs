@@ -6,9 +6,8 @@
 //!
 //! ## Key Benefits
 //!
-//! - **80% cost reduction**: By selecting only salient chunks containing top concepts
-//! - **+31% accuracy improvement**: Better signal-to-noise ratio in retrieval
-//! - **Query-aware selection**: Dynamically selects concepts relevant to each query
+//! - Selects salient chunks containing the highest-ranked concepts
+//! - Uses query-aware concept matching to focus retrieval
 //!
 //! ## Architecture
 //!
@@ -229,7 +228,7 @@ impl ConceptRanker {
         let pr_scores = page_rank(
             &graph.graph,
             self.config.pagerank_damping,
-            None, // max_iterations (None = use default)
+            100, // iterations (petgraph has no convergence check)
         );
 
         // Find max score for normalization
@@ -280,7 +279,7 @@ impl ConceptRanker {
             // Very common terms (IDF < 0.5) → 0.0
             let normalized_idf = (idf / 5.0).tanh();
 
-            scores.insert(concept_text.clone(), normalized_idf as f32);
+            scores.insert(concept_text.clone(), normalized_idf);
         }
 
         scores
@@ -412,7 +411,7 @@ impl ConceptRanker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lightrag::concept_graph::{ConceptExtractor, ConceptGraphBuilder};
+    use crate::lightrag::concept_graph::ConceptGraphBuilder;
 
     #[test]
     fn test_concept_ranking() {

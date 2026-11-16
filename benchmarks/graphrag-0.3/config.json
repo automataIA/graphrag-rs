@@ -1,0 +1,16 @@
+{
+  "schema_version": "graphrag-0.3",
+  "config_version": "graphrag-0.3-benchmark-config-v1",
+  "runner_version": "graphrag-core-example-v1",
+  "seed": 42,
+  "top_k": 3,
+  "context_limit_chars": 1024,
+  "chunking": {"strategy": "versioned one-source-per-chunk", "chunk_size": 512, "chunk_overlap": 0},
+  "hybrid_fusion": {"kind": "reciprocal_rank", "k": 60, "lexical_weight": 1.0, "vector_weight": 1.0},
+  "embedding": {"provider": "llama_cpp", "model": "multilingual-e5-small", "dimension": 384, "max_tokens": 512},
+  "generation": {"provider": "llama_cpp", "model": "Ornith-1.5-9B-MTP-Q6_K", "context_budget_chars": 1024, "max_tokens": 128, "temperature": 0.0},
+  "provider_revisions": {
+    "llama_cpp": "cc231cb0da565440cf6a3e5b55dfeba477972cb6",
+    "e5_source": "614241f622f53c4eeff9890bdc4f31cfecc418b3"
+  }
+}

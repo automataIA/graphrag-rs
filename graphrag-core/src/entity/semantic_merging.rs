@@ -1,6 +1,6 @@
 use crate::{
     core::{Entity, Result},
-    ollama::OllamaClient,
+    llm::LlmClient,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -23,7 +23,7 @@ pub struct EntityMergeDecision {
 /// Entity merger using semantic similarity and optional LLM
 #[derive(Clone)]
 pub struct SemanticEntityMerger {
-    llm_client: Option<OllamaClient>,
+    llm_client: Option<LlmClient>,
     similarity_threshold: f64,
     max_description_tokens: usize,
     use_llm_merging: bool,
@@ -41,7 +41,7 @@ impl SemanticEntityMerger {
     }
 
     /// Add an LLM client for intelligent merging
-    pub fn with_llm_client(mut self, client: OllamaClient) -> Self {
+    pub fn with_llm_client(mut self, client: LlmClient) -> Self {
         self.llm_client = Some(client);
         self.use_llm_merging = true;
         self
@@ -113,7 +113,7 @@ impl SemanticEntityMerger {
 
     async fn try_llm_merge_decision(
         &self,
-        _llm_client: &OllamaClient,
+        _llm_client: &LlmClient,
         prompt: &str,
     ) -> Result<EntityMergeDecision> {
         // For now, simulate an LLM response with a simple heuristic
@@ -427,6 +427,7 @@ mod tests {
     use super::*;
     use crate::core::{ChunkId, EntityId, EntityMention};
 
+    #[cfg(feature = "async")]
     fn create_test_entities() -> Vec<Entity> {
         vec![
             Entity::new(
@@ -460,6 +461,7 @@ mod tests {
         assert!(!stats.llm_available);
     }
 
+    #[cfg(feature = "async")]
     #[tokio::test]
     async fn test_entity_grouping() {
         let merger = SemanticEntityMerger::new(0.7);

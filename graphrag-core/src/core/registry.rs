@@ -207,9 +207,9 @@ impl RegistryBuilder {
         self.registry
     }
 
-    /// Create a registry with default Ollama-based services
-    #[cfg(feature = "ollama")]
-    pub fn with_ollama_defaults() -> Self {
+    /// Create a registry with default LLM-backed services
+    #[cfg(feature = "llm")]
+    pub fn with_llm_defaults() -> Self {
         #[cfg(feature = "memory-storage")]
         use crate::storage::MemoryStorage;
 
@@ -303,8 +303,10 @@ impl ServiceContext {
 /// Configuration for service creation
 #[derive(Debug, Clone)]
 pub struct ServiceConfig {
-    /// Base URL for Ollama API server
-    pub ollama_base_url: Option<String>,
+    /// Base URL of the OpenAI-compatible chat server (e.g. llama-server `/v1`)
+    pub llm_base_url: Option<String>,
+    /// Base URL of the OpenAI-compatible embedding server
+    pub embedding_base_url: Option<String>,
     /// Model name for text embeddings
     pub embedding_model: Option<String>,
     /// Model name for text generation
@@ -324,9 +326,10 @@ pub struct ServiceConfig {
 impl Default for ServiceConfig {
     fn default() -> Self {
         Self {
-            ollama_base_url: Some("http://localhost:11434".to_string()),
-            embedding_model: Some("nomic-embed-text:latest".to_string()),
-            language_model: Some("llama3.2:latest".to_string()),
+            llm_base_url: Some(crate::llm::DEFAULT_LLM_BASE_URL.to_string()),
+            embedding_base_url: Some(crate::llm::DEFAULT_EMBEDDING_BASE_URL.to_string()),
+            embedding_model: Some("multilingual-e5-small".to_string()),
+            language_model: Some("qwen3.5-9b".to_string()),
             vector_dimension: Some(384),
             entity_confidence_threshold: Some(0.7),
             enable_parallel_processing: true,
@@ -407,21 +410,47 @@ impl ServiceConfig {
 
         // 3. Embedding Provider
         // Create embedder based on configuration and available features
-        #[cfg(feature = "ollama")]
+        #[cfg(feature = "llm")]
         {
-            if let Some(model) = &self.embedding_model {
-                if let Some(dimension) = self.vector_dimension {
-                    use crate::core::ollama_adapters::OllamaEmbedderAdapter;
+            if let (Some(base_url), Some(model), Some(dimension)) = (
+                &self.embedding_base_url,
+                &self.embedding_model,
+                self.vector_dimension,
+            ) {
+                use crate::core::llm_adapters::LlamaCppEmbedderAdapter;
+                use crate::llama_cpp::LlamaCppEmbeddingProvider;
 
-                    let embedder = OllamaEmbedderAdapter::new(model.clone(), dimension);
-                    builder = builder.with_service(embedder);
-
-                    #[cfg(feature = "tracing")]
-                    tracing::info!(
-                        "Registered Ollama embedder with model: {}, dimension: {}",
-                        model,
-                        dimension
-                    );
+                let urls = crate::llm::LlmConfig {
+                    embedding_base_url: base_url.clone(),
+                    ..Default::default()
+                };
+                let embedding_config = crate::config::EmbeddingConfig {
+                    dimension,
+                    backend: "llama_cpp".to_string(),
+                    model: Some(model.clone()),
+                    fallback_to_hash: false,
+                    api_endpoint: Some(urls.embeddings_url()),
+                    api_key: None,
+                    cache_dir: None,
+                    batch_size: 32,
+                };
+                match LlamaCppEmbeddingProvider::from_config(
+                    &embedding_config,
+                    urls.timeout_seconds,
+                ) {
+                    Ok(provider) => {
+                        builder = builder.with_service(LlamaCppEmbedderAdapter::new(provider));
+                        #[cfg(feature = "tracing")]
+                        tracing::info!(
+                            "Registered llama.cpp embedder with model: {}, dimension: {}",
+                            model,
+                            dimension
+                        );
+                    },
+                    Err(_e) => {
+                        #[cfg(feature = "tracing")]
+                        tracing::warn!("Skipping llama.cpp embedder: {_e}");
+                    },
                 }
             }
         }
@@ -475,36 +504,22 @@ impl ServiceConfig {
 
         // 6. Language Model
         // Register LLM client for text generation
-        #[cfg(feature = "ollama")]
+        #[cfg(feature = "llm")]
         {
-            if let (Some(base_url), Some(model)) = (&self.ollama_base_url, &self.language_model) {
-                use crate::core::ollama_adapters::OllamaLanguageModelAdapter;
-                use crate::ollama::OllamaConfig;
+            if let (Some(base_url), Some(model)) = (&self.llm_base_url, &self.language_model) {
+                use crate::core::llm_adapters::LlmLanguageModelAdapter;
+                use crate::llm::LlmConfig;
 
-                // Build OllamaConfig from ServiceConfig
-                let mut ollama_config = OllamaConfig::default();
-                // Parse host and port from base_url (format: "http://localhost:11434")
-                if let Some(url_parts) = base_url.split("://").nth(1) {
-                    let parts: Vec<&str> = url_parts.split(':').collect();
-                    if parts.len() >= 2 {
-                        ollama_config.host = format!("http://{}", parts[0]);
-                        if let Ok(port) = parts[1].parse::<u16>() {
-                            ollama_config.port = port;
-                        }
-                    }
-                }
-                ollama_config.chat_model = model.clone();
-                ollama_config.enabled = true;
-
-                let language_model = OllamaLanguageModelAdapter::new(ollama_config);
-                builder = builder.with_service(language_model);
+                let llm_config = LlmConfig {
+                    enabled: true,
+                    base_url: base_url.clone(),
+                    chat_model: model.clone(),
+                    ..Default::default()
+                };
+                builder = builder.with_service(LlmLanguageModelAdapter::new(llm_config));
 
                 #[cfg(feature = "tracing")]
-                tracing::info!(
-                    "Registered Ollama language model: {} at {}",
-                    model,
-                    base_url
-                );
+                tracing::info!("Registered LLM language model: {} at {}", model, base_url);
             }
         }
 
@@ -626,7 +641,8 @@ mod tests {
     #[test]
     fn test_service_config_default() {
         let config = ServiceConfig::default();
-        assert!(config.ollama_base_url.is_some());
+        assert!(config.llm_base_url.is_some());
+        assert!(config.embedding_base_url.is_some());
         assert!(config.embedding_model.is_some());
         assert!(config.language_model.is_some());
         assert!(config.vector_dimension.is_some());
@@ -635,13 +651,14 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "ollama")]
-    fn test_service_config_build_with_ollama() {
+    #[cfg(feature = "llm")]
+    fn test_service_config_build_with_llm() {
         let config = ServiceConfig {
-            ollama_base_url: Some("http://localhost:11434".to_string()),
-            embedding_model: Some("nomic-embed-text".to_string()),
-            language_model: Some("llama3.2".to_string()),
-            vector_dimension: Some(768),
+            llm_base_url: Some("http://127.0.0.1:8080/v1".to_string()),
+            embedding_base_url: Some("http://127.0.0.1:8081/v1".to_string()),
+            embedding_model: Some("multilingual-e5-small".to_string()),
+            language_model: Some("qwen3.5-9b".to_string()),
+            vector_dimension: Some(384),
             entity_confidence_threshold: Some(0.7),
             enable_parallel_processing: true,
             enable_function_calling: false,
@@ -657,7 +674,7 @@ mod tests {
             assert!(registry.has::<MemoryStorage>());
         }
 
-        // Note: We can't easily verify OllamaEmbedderAdapter and OllamaLanguageModelAdapter
+        // Note: We can't easily verify LlamaCppEmbedderAdapter and LlmLanguageModelAdapter
         // are registered without making them pub, but the build succeeds which means
         // the registration code runs without errors
         assert!(!registry.is_empty());
@@ -669,7 +686,8 @@ mod tests {
         use crate::vector::memory_store::MemoryVectorStore;
 
         let config = ServiceConfig {
-            ollama_base_url: None,
+            llm_base_url: None,
+            embedding_base_url: None,
             embedding_model: None,
             language_model: None,
             vector_dimension: Some(384), // Set vector dimension to enable MemoryVectorStore
@@ -700,7 +718,8 @@ mod tests {
     #[cfg(not(feature = "vector-memory"))]
     fn test_registry_without_vector_memory() {
         let config = ServiceConfig {
-            ollama_base_url: None,
+            llm_base_url: None,
+            embedding_base_url: None,
             embedding_model: None,
             language_model: None,
             vector_dimension: Some(384), // Even with dimension set...

@@ -95,16 +95,16 @@ are effective for sequential data.
         );
 
         if let Some(chapter) = &chunk.metadata.chapter {
-            println!("  📖 Chapter: {}", chapter);
+            println!("  📖 Chapter: {chapter}");
         }
         if let Some(section) = &chunk.metadata.section {
-            println!("  📑 Section: {}", section);
+            println!("  📑 Section: {section}");
         }
         if !chunk.metadata.keywords.is_empty() {
             println!("  🔑 Keywords: {}", chunk.metadata.keywords.join(", "));
         }
         if let Some(summary) = &chunk.metadata.summary {
-            println!("  📝 Summary: {}", summary);
+            println!("  📝 Summary: {summary}");
         }
         if let Some(pos) = chunk.metadata.position_in_document {
             println!("  📍 Position: {:.1}%", pos * 100.0);
@@ -319,7 +319,7 @@ for frequently accessed data and session management.
         .sum();
     let avg_keywords = keywords_count as f32 / enriched_chunks.len() as f32;
 
-    println!("  Avg keywords per chunk: {:.1}", avg_keywords);
+    println!("  Avg keywords per chunk: {avg_keywords:.1}");
     println!(
         "  Chunks with structure: {}",
         enriched_chunks

@@ -1,6 +1,11 @@
 //! REST API Module for GraphRAG
 //!
 //! Provides a simple way to add REST API capabilities to any GraphRAG instance
+//!
+//! NOTE: gated on a `web-api` feature that is not declared in Cargo.toml, so this
+//! module is never compiled. It predates the current axum/GraphRAG APIs; the
+//! maintained REST server is the `graphrag-server` crate.
+#![allow(unexpected_cfgs)]
 
 #[cfg(feature = "web-api")]
 pub mod server {

@@ -1,3 +1,9 @@
+#![allow(
+    clippy::disallowed_names,
+    clippy::manual_range_contains,
+    clippy::needless_range_loop
+)]
+
 //! Storage API Tests
 //!
 //! Comprehensive tests for IndexedDB and Cache API storage implementations.

@@ -5,7 +5,7 @@ use crate::core::{
     ChunkId, Document, DocumentId, Entity, EntityId, GraphRAGError, KnowledgeGraph, Relationship,
     Result, TextChunk,
 };
-use crate::{critic, ollama, persistence, query, retrieval};
+use crate::{critic, llm, persistence, query, retrieval};
 
 #[cfg(feature = "parallel-processing")]
 #[allow(unused_imports)]

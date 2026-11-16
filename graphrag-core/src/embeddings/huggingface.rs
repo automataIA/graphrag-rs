@@ -1,10 +1,10 @@
-///! Hugging Face Hub integration for downloading and using embedding models
-///!
-///! This module provides functionality to:
-///! - Download embedding models from Hugging Face Hub
-///! - Cache models locally to avoid re-downloading
-///! - Load models with Candle framework
-///! - Generate embeddings using downloaded models
+//! Hugging Face Hub integration for downloading and using embedding models
+//!
+//! This module provides functionality to:
+//! - Download embedding models from Hugging Face Hub
+//! - Cache models locally to avoid re-downloading
+//! - Load models with Candle framework
+//! - Generate embeddings using downloaded models
 use crate::core::error::{GraphRAGError, Result};
 use crate::embeddings::{EmbeddingConfig, EmbeddingProvider};
 
@@ -13,11 +13,11 @@ use hf_hub::api::sync::{Api, ApiBuilder};
 
 /// Hugging Face Hub embedding provider
 #[cfg(feature = "neural-embeddings")]
-use candle_core::{Device, Tensor};
+use candle_core::{DType, Device, Tensor};
 #[cfg(feature = "neural-embeddings")]
 use candle_nn::VarBuilder;
 #[cfg(feature = "neural-embeddings")]
-use candle_transformers::models::bert::{BertModel, Config, Dtype};
+use candle_transformers::models::bert::{BertModel, Config};
 #[cfg(feature = "neural-embeddings")]
 use tokenizers::Tokenizer;
 
@@ -222,7 +222,7 @@ impl EmbeddingProvider for HuggingFaceEmbeddings {
                 })?;
 
                 let vb = unsafe {
-                    VarBuilder::from_mmaped_safetensors(&[model_path], Dtype::F32, &device)
+                    VarBuilder::from_mmaped_safetensors(&[model_path], DType::F32, &device)
                         .map_err(|e| GraphRAGError::Embedding {
                             message: format!("Failed to load model weights: {}", e),
                         })?
@@ -294,11 +294,11 @@ impl EmbeddingProvider for HuggingFaceEmbeddings {
                     message: "Failed to create zero tensor".to_string(),
                 })?;
 
-            let embeddings = model.forward(&token_ids, &token_type_ids).map_err(|e| {
-                GraphRAGError::Embedding {
+            let embeddings = model
+                .forward(&token_ids, &token_type_ids, None)
+                .map_err(|e| GraphRAGError::Embedding {
                     message: format!("Model forward pass failed: {}", e),
-                }
-            })?;
+                })?;
 
             // Mean pooling
             let (_n_sentence, n_tokens, _hidden_size) =
@@ -328,6 +328,7 @@ impl EmbeddingProvider for HuggingFaceEmbeddings {
 
         #[cfg(not(feature = "neural-embeddings"))]
         {
+            let _ = text;
             Err(GraphRAGError::Embedding {
                 message: "neural-embeddings feature required for embedding generation".to_string(),
             })

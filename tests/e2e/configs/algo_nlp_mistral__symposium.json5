@@ -5,12 +5,12 @@
   // Pipeline ibrida:
   //   • Costruzione grafo  → algoritmica (NLP: regex, TF-IDF, BM25, PageRank)
   //                          NESSUN LLM, nessun gleaning
-  //   • Embedding semantici → nomic-embed-text via Ollama (query time)
-  //   • Sintesi risposte    → mistral-nemo:latest via Ollama (query time)
+  //   • Embedding semantici → multilingual-e5-small via llama.cpp (query time)
+  //   • Sintesi risposte    → qwen3.5-9b via llama.cpp (query time)
   //
   // Prerequisiti:
-  //   ollama pull nomic-embed-text
-  //   ollama pull mistral-nemo:latest
+  //   llama-server -m multilingual-e5-small.gguf --embeddings --pooling mean --alias multilingual-e5-small --port 8081
+  //   llama-server -m Qwen3.5-9B-UD-Q5_K_XL.gguf --alias qwen3.5-9b --port 8080
   // ─────────────────────────────────────────────────────────────────────
 
   "mode": {
@@ -109,8 +109,8 @@
   },
   "vector_processing": {
     "enabled": true,
-    "embedding_model": "nomic-embed-text",  // embedding semantici reali via Ollama
-    "embedding_dimensions": 768,
+    "embedding_model": "multilingual-e5-small",  // embedding semantici reali via llama.cpp
+    "embedding_dimensions": 384,
     "use_hnsw_index": true,
     "hnsw_ef_construction": 200,
     "hnsw_m": 16,
@@ -124,24 +124,17 @@
     "use_temporal_parsing": false,
     "confidence_threshold": 0.45
   },
-  "ollama": {
+  "llm": {
     "enabled": true,
-    "host": "http://localhost",
-    "port": 11434,
-    "chat_model": "mistral-nemo:latest",     // LLM per la sintesi delle risposte
-    "embedding_model": "nomic-embed-text",   // modello per gli embedding
+    "base_url": "http://127.0.0.1:8080/v1",
+    "embedding_base_url": "http://127.0.0.1:8081/v1",
+    "chat_model": "qwen3.5-9b",     // LLM per la sintesi delle risposte
+    "embedding_model": "multilingual-e5-small",   // modello per gli embedding
     "timeout_seconds": 300,
     "max_retries": 3,
-    "fallback_to_hash": true,               // fallback hash se Ollama non disponibile
+    "fallback_to_hash": false,  // llama.cpp embeddings never fall back to hash
     "max_tokens": 1500,
     "temperature": 0.0,
-    "keep_alive": "1h",                     // KV cache: mantieni modello in memoria
-    "generation": {
-      "temperature": 0.0,
-      "top_p": 0.9,
-      "max_tokens": 1500,
-      "stream": false
-    }
   },
   "performance": {
     "batch_processing": true,

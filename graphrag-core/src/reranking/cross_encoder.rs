@@ -79,12 +79,14 @@ pub trait CrossEncoder: Send + Sync {
 }
 
 #[cfg(feature = "neural-embeddings")]
-use candle_core::{Device, Tensor};
+use crate::GraphRAGError;
+#[cfg(feature = "neural-embeddings")]
+use candle_core::{DType, Device, Tensor};
 #[cfg(feature = "neural-embeddings")]
 use candle_nn::VarBuilder;
 #[cfg(feature = "neural-embeddings")]
-use candle_transformers::models::bert::{BertModel, Config, Dtype};
-#[cfg(feature = "huggingface-hub")]
+use candle_transformers::models::bert::{BertModel, Config};
+#[cfg(feature = "neural-embeddings")]
 use hf_hub::api::sync::Api;
 #[cfg(feature = "neural-embeddings")]
 use tokenizers::Tokenizer;
@@ -100,6 +102,7 @@ pub struct CandleCrossEncoder {
 
 #[cfg(feature = "neural-embeddings")]
 impl CandleCrossEncoder {
+    /// Download the model from Hugging Face Hub and load it on CPU.
     pub fn new(config: CrossEncoderConfig) -> Result<Self> {
         let api = Api::new().map_err(|e| GraphRAGError::Embedding {
             message: format!("Failed to create HF Hub API: {}", e),
@@ -142,7 +145,7 @@ impl CandleCrossEncoder {
             })?;
 
         let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(&[model_file], Dtype::F32, &device).map_err(
+            VarBuilder::from_mmaped_safetensors(&[model_file], DType::F32, &device).map_err(
                 |e| GraphRAGError::Embedding {
                     message: format!("Failed to load weights: {}", e),
                 },
@@ -174,13 +177,14 @@ impl CrossEncoder for CandleCrossEncoder {
 
         for candidate in candidates {
             let score = self.score_pair(query, &candidate.content).await?;
-            let score_delta = score - candidate.score;
+            let original_score = candidate.score;
+            let score_delta = score - original_score;
 
             if score >= self.config.min_confidence {
                 ranked.push(RankedResult {
                     result: candidate,
                     relevance_score: score,
-                    original_score: candidate.score,
+                    original_score,
                     score_delta,
                 });
             }
@@ -223,7 +227,7 @@ impl CrossEncoder for CandleCrossEncoder {
 
         let logits = self
             .model
-            .forward(&token_ids, &token_type_ids)
+            .forward(&token_ids, &token_type_ids, None)
             .map_err(|e| GraphRAGError::Embedding {
                 message: format!("Forward pass failed: {}", e),
             })?;
@@ -369,6 +373,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "async")]
     #[tokio::test]
     async fn test_score_pair() {
         let config = CrossEncoderConfig::default();

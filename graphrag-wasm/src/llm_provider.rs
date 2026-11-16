@@ -2,9 +2,9 @@
 //!
 //! This module provides a unified interface for different LLM backends in WASM:
 //! - WebLLM (100% in-browser, GPU via WebGPU)
-//! - Ollama HTTP (local server via HTTP)
+//! - llama.cpp HTTP (local llama-server, OpenAI-compatible API)
 //!
-//! This allows users to choose between privacy (WebLLM) and performance (Ollama).
+//! This allows users to choose between privacy (WebLLM) and performance (llama.cpp).
 
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
@@ -15,8 +15,8 @@ use wasm_bindgen::prelude::*;
 pub enum LlmProviderType {
     /// WebLLM - 100% in-browser inference with WebGPU
     WebLLM,
-    /// Ollama HTTP - Local server via HTTP API
-    OllamaHttp,
+    /// llama.cpp HTTP - Local llama-server via OpenAI-compatible API
+    LlamaCppHttp,
 }
 
 /// Configuration for LLM providers
@@ -39,9 +39,9 @@ pub struct LlmProviderConfig {
     /// System prompt (optional)
     pub system_prompt: Option<String>,
 
-    /// Ollama endpoint (for OllamaHttp provider)
-    #[serde(default = "default_ollama_endpoint")]
-    pub ollama_endpoint: String,
+    /// llama-server base URL (for LlamaCppHttp provider)
+    #[serde(default = "default_llm_endpoint")]
+    pub llm_endpoint: String,
 }
 
 fn default_temperature() -> f32 {
@@ -52,8 +52,8 @@ fn default_max_tokens() -> u32 {
     2000
 }
 
-fn default_ollama_endpoint() -> String {
-    "http://localhost:11434".to_string()
+fn default_llm_endpoint() -> String {
+    crate::llama_http::DEFAULT_LLAMA_BASE_URL.to_string()
 }
 
 impl Default for LlmProviderConfig {
@@ -64,7 +64,7 @@ impl Default for LlmProviderConfig {
             temperature: 0.7,
             max_tokens: 2000,
             system_prompt: None,
-            ollama_endpoint: "http://localhost:11434".to_string(),
+            llm_endpoint: default_llm_endpoint(),
         }
     }
 }
@@ -88,12 +88,12 @@ pub trait LlmProvider {
     fn model_name(&self) -> String;
 }
 
-/// Unified LLM client that wraps WebLLM or Ollama HTTP
+/// Unified LLM client that wraps WebLLM or llama.cpp HTTP
 #[wasm_bindgen]
 pub struct UnifiedLlmClient {
     config: LlmProviderConfig,
     webllm_client: Option<crate::webllm::WebLLMClient>,
-    ollama_client: Option<crate::ollama_http::OllamaHttpClient>,
+    llama_client: Option<crate::llama_http::LlamaCppHttpClient>,
 }
 
 #[wasm_bindgen]
@@ -104,7 +104,7 @@ impl UnifiedLlmClient {
         Self {
             config: LlmProviderConfig::default(),
             webllm_client: Some(crate::webllm::WebLLMClient::new()),
-            ollama_client: None,
+            llama_client: None,
         }
     }
 
@@ -123,26 +123,26 @@ impl UnifiedLlmClient {
         Self {
             config,
             webllm_client: Some(webllm_client),
-            ollama_client: None,
+            llama_client: None,
         }
     }
 
-    /// Create client configured for Ollama HTTP
-    #[wasm_bindgen(js_name = withOllama)]
-    pub fn with_ollama(endpoint: String, model: String) -> Self {
+    /// Create client configured for llama.cpp HTTP (llama-server)
+    #[wasm_bindgen(js_name = withLlamaCpp)]
+    pub fn with_llama_cpp(endpoint: String, model: String) -> Self {
         let config = LlmProviderConfig {
-            provider: LlmProviderType::OllamaHttp,
+            provider: LlmProviderType::LlamaCppHttp,
             model: model.clone(),
-            ollama_endpoint: endpoint.clone(),
+            llm_endpoint: endpoint.clone(),
             ..Default::default()
         };
 
-        let ollama_client = crate::ollama_http::OllamaHttpClient::with_config(endpoint, model);
+        let llama_client = crate::llama_http::LlamaCppHttpClient::with_config(endpoint, model);
 
         Self {
             config,
             webllm_client: None,
-            ollama_client: Some(ollama_client),
+            llama_client: Some(llama_client),
         }
     }
 
@@ -154,8 +154,8 @@ impl UnifiedLlmClient {
         if let Some(ref mut webllm) = self.webllm_client {
             webllm.set_temperature(temperature);
         }
-        if let Some(ref mut ollama) = self.ollama_client {
-            ollama.set_temperature(temperature);
+        if let Some(ref mut llama) = self.llama_client {
+            llama.set_temperature(temperature);
         }
     }
 
@@ -167,8 +167,8 @@ impl UnifiedLlmClient {
         if let Some(ref mut webllm) = self.webllm_client {
             webllm.set_system_prompt(prompt.clone());
         }
-        if let Some(ref mut ollama) = self.ollama_client {
-            ollama.set_system_prompt(prompt);
+        if let Some(ref mut llama) = self.llama_client {
+            llama.set_system_prompt(prompt);
         }
     }
 
@@ -177,7 +177,7 @@ impl UnifiedLlmClient {
     pub fn get_provider(&self) -> String {
         match self.config.provider {
             LlmProviderType::WebLLM => "WebLLM".to_string(),
-            LlmProviderType::OllamaHttp => "Ollama HTTP".to_string(),
+            LlmProviderType::LlamaCppHttp => "llama.cpp HTTP".to_string(),
         }
     }
 
@@ -198,11 +198,11 @@ impl UnifiedLlmClient {
                     Err(JsValue::from_str("WebLLM client not initialized"))
                 }
             },
-            LlmProviderType::OllamaHttp => {
-                if let Some(ref ollama) = self.ollama_client {
-                    ollama.generate(prompt).await
+            LlmProviderType::LlamaCppHttp => {
+                if let Some(ref llama) = self.llama_client {
+                    llama.generate(prompt).await
                 } else {
-                    Err(JsValue::from_str("Ollama client not initialized"))
+                    Err(JsValue::from_str("llama.cpp client not initialized"))
                 }
             },
         }
@@ -219,11 +219,11 @@ impl UnifiedLlmClient {
                     Err(JsValue::from_str("WebLLM client not initialized"))
                 }
             },
-            LlmProviderType::OllamaHttp => {
-                if let Some(ref ollama) = self.ollama_client {
-                    ollama.chat(message).await
+            LlmProviderType::LlamaCppHttp => {
+                if let Some(ref llama) = self.llama_client {
+                    llama.chat(message).await
                 } else {
-                    Err(JsValue::from_str("Ollama client not initialized"))
+                    Err(JsValue::from_str("llama.cpp client not initialized"))
                 }
             },
         }
@@ -237,9 +237,9 @@ impl UnifiedLlmClient {
                 // WebLLM is always "available" but may need initialization
                 Ok(true)
             },
-            LlmProviderType::OllamaHttp => {
-                if let Some(ref ollama) = self.ollama_client {
-                    ollama.check_availability().await
+            LlmProviderType::LlamaCppHttp => {
+                if let Some(ref llama) = self.llama_client {
+                    llama.check_availability().await
                 } else {
                     Ok(false)
                 }
@@ -267,15 +267,15 @@ mod tests {
     }
 
     #[test]
-    fn test_ollama_config() {
+    fn test_llama_cpp_config() {
         let config = LlmProviderConfig {
-            provider: LlmProviderType::OllamaHttp,
-            model: "llama3.1:8b".to_string(),
-            ollama_endpoint: "http://localhost:11434".to_string(),
+            provider: LlmProviderType::LlamaCppHttp,
+            model: "qwen3.5-9b".to_string(),
             ..Default::default()
         };
-        assert_eq!(config.provider, LlmProviderType::OllamaHttp);
-        assert_eq!(config.model, "llama3.1:8b");
+        assert_eq!(config.provider, LlmProviderType::LlamaCppHttp);
+        assert_eq!(config.llm_endpoint, "http://127.0.0.1:8080/v1");
+        assert_eq!(config.model, "qwen3.5-9b");
     }
 
     #[test]

@@ -110,11 +110,11 @@
     "use_temporal_parsing": false,
     "confidence_threshold": 0.5
   },
-  "ollama": {
+  "llm": {
     "enabled": false,
-    "host": "http://localhost",
-    "port": 11434,
-    "chat_model": "none",
+    "base_url": "http://127.0.0.1:8080/v1",
+    "embedding_base_url": "http://127.0.0.1:8081/v1",
+    "chat_model": "qwen3.5-9b",
     "embedding_model": "none",
     "timeout_seconds": 120,
     "max_retries": 3,
@@ -123,12 +123,6 @@
     "temperature": 0.0,
 
 
-    "generation": {
-      "temperature": 0.0,
-      "top_p": 0.9,
-      "max_tokens": 1500,
-      "stream": false
-    }
   },
   "performance": {
     "batch_processing": true,

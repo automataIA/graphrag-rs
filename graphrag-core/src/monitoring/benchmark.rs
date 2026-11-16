@@ -299,7 +299,7 @@ impl BenchmarkRunner {
                 "  [{}/{}] Processing: {}...",
                 i + 1,
                 dataset.queries.len(),
-                &query.question.chars().take(50).collect::<String>()
+                query.question.chars().take(50).collect::<String>()
             );
 
             let result = self.benchmark_query(query);
@@ -788,7 +788,7 @@ impl BenchmarkRunner {
 
         println!("\n✨ Features Enabled:");
         for feature in &summary.features {
-            println!("  ✅ {}", feature);
+            println!("  ✅ {feature}");
         }
 
         println!("\n{}", "=".repeat(60));
@@ -809,8 +809,8 @@ impl BenchmarkRunner {
             * 100.0;
         let f1_improvement =
             ((improved.avg_f1_score - baseline.avg_f1_score) / baseline.avg_f1_score) * 100.0;
-        println!("  Exact Match:  {:+.1}%", em_improvement);
-        println!("  F1 Score:     {:+.1}%", f1_improvement);
+        println!("  Exact Match:  {em_improvement:+.1}%");
+        println!("  F1 Score:     {f1_improvement:+.1}%");
 
         println!("\n💰 Cost Savings:");
         let token_reduction = ((baseline.total_input_tokens - improved.total_input_tokens) as f64

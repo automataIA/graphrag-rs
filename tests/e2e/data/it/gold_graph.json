@@ -1,0 +1,758 @@
+{
+ "corpus": "pinocchio.txt",
+ "language": "it",
+ "questions": [
+  {
+   "id": "g01",
+   "kind": "aggregation",
+   "question": "Chi sono tutti i personaggi che ingannano Pinocchio nel corso della storia?",
+   "expected_keywords": [
+    [
+     "volpe"
+    ],
+    [
+     "gatto"
+    ],
+    [
+     "lucignolo",
+     "omino"
+    ]
+   ],
+   "notes": "Volpe e Gatto (cap. XII-XIX: Campo dei miracoli, assassini, Acchiappacitrulli); Lucignolo e l'Omino (cap. XXX-XXXI: Paese dei balocchi, trasformazione in ciuchino).",
+   "evidence_chapters": [
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    30,
+    31
+   ]
+  },
+  {
+   "id": "g02",
+   "kind": "aggregation",
+   "question": "Quali animali aiutano Pinocchio nel corso della storia?",
+   "expected_keywords": [
+    [
+     "colombo"
+    ],
+    [
+     "tonno"
+    ],
+    [
+     "alidoro",
+     "lumaca",
+     "delfino"
+    ]
+   ],
+   "notes": "Colombo che lo porta al mare (cap. XXIII), Delfino che gli da' notizie di Geppetto (cap. XXIV), Alidoro che lo salva dal pescatore (cap. XXVIII-XXIX), Lumaca (cap. XXIX), Tonno nel Pesce-cane (cap. XXXIV, XXXVI).",
+   "evidence_chapters": [
+    23,
+    24,
+    28,
+    29,
+    34,
+    36
+   ]
+  },
+  {
+   "id": "g03",
+   "kind": "aggregation",
+   "question": "In quali luoghi viene imprigionato o rinchiuso Pinocchio nel corso della storia?",
+   "expected_keywords": [
+    [
+     "prigione",
+     "carcere"
+    ],
+    [
+     "casotto",
+     "cuccia",
+     "cane da guardia",
+     "pollaio"
+    ],
+    [
+     "pesce cane",
+     "pesce-cane",
+     "pescecane"
+    ]
+   ],
+   "notes": "Prigione per quattro mesi dal Giudice-gorilla (cap. XIX); casotto del cane da guardia con la catena (cap. XXI-XXII); corpo del Pesce-cane (cap. XXXIV-XXXV); grotta del pescatore verde (cap. XXVIII, 'rinchiuso').",
+   "evidence_chapters": [
+    19,
+    21,
+    22,
+    28,
+    34,
+    35
+   ]
+  },
+  {
+   "id": "g04",
+   "kind": "multi-hop",
+   "question": "Che rapporto c'è tra la Fata dai capelli turchini e la Lumaca?",
+   "expected_keywords": [
+    [
+     "cameriera",
+     "serva",
+     "domestica",
+     "governante"
+    ]
+   ],
+   "notes": "La Lumaca e' la cameriera della Fata (cap. XXIX: porta la colazione e apre la porta; cap. XXXVI: 'quella Lumaca, che stava per cameriera con la Fata').",
+   "evidence_chapters": [
+    29,
+    36
+   ]
+  },
+  {
+   "id": "g05",
+   "kind": "multi-hop",
+   "question": "Chi incontra Pinocchio nel ventre del Pesce-cane?",
+   "expected_keywords": [
+    [
+     "tonno"
+    ],
+    [
+     "geppetto",
+     "babbo"
+    ]
+   ],
+   "notes": "Il Tonno (cap. XXXIV) e il babbo Geppetto, rinchiuso da due anni (cap. XXXV).",
+   "evidence_chapters": [
+    34,
+    35
+   ]
+  },
+  {
+   "id": "g06",
+   "kind": "aggregation",
+   "question": "Quali personaggi cercano di bruciare, friggere, impiccare o mangiare Pinocchio nel corso della storia?",
+   "expected_keywords": [
+    [
+     "mangiafoco"
+    ],
+    [
+     "assassin"
+    ],
+    [
+     "pescatore"
+    ]
+   ],
+   "notes": "Mangiafoco vuole usarlo come legna per arrostire il montone (cap. XI); gli assassini lo impiccano alla Quercia (cap. XIV-XV); il pescatore verde vuole friggerlo (cap. XXVIII); il Pesce-cane lo ingoia (cap. XXXIV).",
+   "evidence_chapters": [
+    11,
+    14,
+    15,
+    28,
+    34
+   ]
+  },
+  {
+   "id": "g07",
+   "kind": "aggregation",
+   "question": "Quali trasformazioni subisce Pinocchio nel corso della storia?",
+   "expected_keywords": [
+    [
+     "ciuco",
+     "ciuchino",
+     "asino"
+    ],
+    [
+     "ragazzo"
+    ],
+    [
+     "naso"
+    ]
+   ],
+   "notes": "Naso che si allunga per le bugie (cap. XVII); orecchie e corpo da ciuchino (cap. XXXII); di nuovo burattino in mare (cap. XXXIV); ragazzo per bene alla fine (cap. XXXVI).",
+   "evidence_chapters": [
+    17,
+    32,
+    34,
+    36
+   ]
+  },
+  {
+   "id": "g08",
+   "kind": "aggregation",
+   "question": "Quali luoghi attraversa Pinocchio nel suo viaggio, dall'osteria alle isole e ai paesi?",
+   "expected_keywords": [
+    [
+     "gambero rosso",
+     "osteria"
+    ],
+    [
+     "acchiappacitrulli",
+     "acchiappa citrulli"
+    ],
+    [
+     "balocchi"
+    ]
+   ],
+   "notes": "Osteria del Gambero Rosso (cap. XIII, XVII), Campo dei miracoli e citta' di Acchiappacitrulli (cap. XVIII-XIX), Isola delle Api industriose (cap. XXIV), Paese dei balocchi (cap. XXX-XXXIII).",
+   "evidence_chapters": [
+    13,
+    17,
+    18,
+    19,
+    24,
+    30,
+    31,
+    32,
+    33
+   ]
+  },
+  {
+   "id": "g09",
+   "kind": "aggregation",
+   "question": "Chi dà consigli o ammonimenti a Pinocchio perché diventi un bravo ragazzo?",
+   "expected_keywords": [
+    [
+     "grillo"
+    ],
+    [
+     "fata"
+    ],
+    [
+     "geppetto",
+     "babbo"
+    ]
+   ],
+   "notes": "Il Grillo-parlante (cap. IV, XIII, XVI, XXXVI), la Fata (cap. XVI-XVII, XXV, XXIX), Geppetto che lo rimprovera (cap. III) e vende la casacca per l'abbecedario (cap. VIII-IX)",
+   "evidence_chapters": [
+    3,
+    4,
+    8,
+    9,
+    13,
+    16,
+    17,
+    25,
+    29,
+    36
+   ]
+  },
+  {
+   "id": "g10",
+   "kind": "multi-hop",
+   "question": "Quali animali sono al servizio della Fata dai capelli turchini?",
+   "expected_keywords": [
+    [
+     "falco"
+    ],
+    [
+     "medoro",
+     "barbone"
+    ],
+    [
+     "lumaca"
+    ]
+   ],
+   "notes": "Il Falco (cap. XVI), il can barbone Medoro (cap. XVI), la Lumaca cameriera (cap. XXIX, XXXVI).",
+   "evidence_chapters": [
+    16,
+    29,
+    36
+   ]
+  },
+  {
+   "id": "g11",
+   "kind": "aggregation",
+   "question": "Chi salva Pinocchio da un pericolo di morte nel corso della storia?",
+   "expected_keywords": [
+    [
+     "fata",
+     "bambina"
+    ],
+    [
+     "alidoro"
+    ],
+    [
+     "tonno"
+    ]
+   ],
+   "notes": "La Bambina/Fata lo fa staccare dalla Quercia grande con il Falco e Medoro (cap. XV-XVI); Alidoro lo salva dal pescatore verde (cap. XXVIII-XXIX); il Tonno porta lui e Geppetto a riva (cap. XXXVI). Anche Mangiafoco che lo grazia (cap. XI) è accettabile.",
+   "evidence_chapters": [
+    11,
+    15,
+    16,
+    28,
+    29,
+    36
+   ]
+  },
+  {
+   "id": "g12",
+   "kind": "aggregation",
+   "question": "Quali bugie dice Pinocchio e a chi le dice?",
+   "expected_keywords": [
+    [
+     "fata"
+    ],
+    [
+     "monete",
+     "zecchini"
+    ],
+    [
+     "naso"
+    ]
+   ],
+   "notes": "Alla Fata dice di aver perso le monete, poi di averle inghiottite: il naso gli cresce (cap. XVII). A Geppetto dice che il gatto gli ha mangiato i piedi, mentre se li è bruciati sul caldano (cap. VII). Le bugie vanno presentate come bugie, non come fatti.",
+   "evidence_chapters": [
+    7,
+    17
+   ]
+  },
+  {
+   "id": "g13",
+   "kind": "aggregation",
+   "question": "Quali medici visitano Pinocchio a casa della Fata e che cosa dicono?",
+   "expected_keywords": [
+    [
+     "corvo"
+    ],
+    [
+     "civetta"
+    ],
+    [
+     "grillo"
+    ]
+   ],
+   "notes": "Il Corvo, la Civetta e il Grillo-parlante (cap. XVI). Corvo: è morto, ma se non è morto è vivo; Civetta: il contrario; il Grillo lo riconosce e lo chiama monello e figlio disubbidiente.",
+   "evidence_chapters": [
+    16
+   ]
+  },
+  {
+   "id": "g14",
+   "kind": "aggregation",
+   "question": "Quali lavori fa Pinocchio per guadagnarsi da mangiare o da vivere?",
+   "expected_keywords": [
+    [
+     "bindolo"
+    ],
+    [
+     "canestr",
+     "panier"
+    ],
+    [
+     "guardia",
+     "brocca"
+    ]
+   ],
+   "notes": "Fa il cane da guardia per il contadino (cap. XXI-XXII); porta la brocca alla donnina in cambio di pane (cap. XXIV); gira il bindolo per Giangio in cambio di latte e fabbrica canestri e panieri di giunco (cap. XXXVI).",
+   "evidence_chapters": [
+    21,
+    22,
+    24,
+    36
+   ]
+  },
+  {
+   "id": "g15",
+   "kind": "aggregation",
+   "question": "Chi vende e chi compra Pinocchio quando è diventato un ciuchino?",
+   "expected_keywords": [
+    [
+     "omino"
+    ],
+    [
+     "direttore"
+    ],
+    [
+     "tamburo"
+    ]
+   ],
+   "notes": "L'Omino lo porta al mercato e lo vende al Direttore di una compagnia di pagliacci (cap. XXXIII); azzoppato, viene rivenduto per venti soldi a un compratore che vuole farne la pelle di un tamburo (cap. XXXIII-XXXIV).",
+   "evidence_chapters": [
+    33,
+    34
+   ]
+  },
+  {
+   "id": "g16",
+   "kind": "aggregation",
+   "question": "Quali personaggi muoiono, o vengono creduti morti, nel corso della storia?",
+   "expected_keywords": [
+    [
+     "grillo"
+    ],
+    [
+     "fata",
+     "bambina"
+    ],
+    [
+     "lucignolo",
+     "eugenio",
+     "merlo"
+    ]
+   ],
+   "notes": "Il Grillo-parlante ucciso col martello (cap. IV); la Bambina che si dice morta (cap. XV) e la pietra di marmo che la dice morta di dolore (cap. XXIII); il Merlo mangiato dal Gatto (cap. XII); Eugenio creduto morto sulla spiaggia (cap. XXVII); Lucignolo ciuchino che muore da Giangio (cap. XXXVI); Pinocchio stesso creduto morto dai medici (cap. XVI).",
+   "evidence_chapters": [
+    4,
+    12,
+    15,
+    23,
+    27,
+    36
+   ]
+  },
+  {
+   "id": "g17",
+   "kind": "multi_hop",
+   "question": "Che cosa succede ai ragazzi che vanno nel Paese dei balocchi e chi ci guadagna?",
+   "expected_keywords": [
+    [
+     "ciuchin",
+     "somar",
+     "asin"
+    ],
+    [
+     "omino"
+    ],
+    [
+     "vend",
+     "mercat"
+    ]
+   ],
+   "notes": "Dopo cinque mesi diventano ciuchini (cap. XXXII); l'Omino che li ha portati col carro li vende sui mercati e alle fiere ed è diventato milionario (cap. XXXIII).",
+   "evidence_chapters": [
+    31,
+    32,
+    33
+   ]
+  },
+  {
+   "id": "g18",
+   "kind": "multi_hop",
+   "question": "Che fine fanno la Volpe e il Gatto alla fine del libro?",
+   "expected_keywords": [
+    [
+     "cieco"
+    ],
+    [
+     "coda"
+    ],
+    [
+     "mendic",
+     "miseria",
+     "elemosina",
+     "pover"
+    ]
+   ],
+   "notes": "Cap. XXXVI: ridotti in miseria, chiedono l'elemosina; il Gatto a furia di fingersi cieco lo è diventato davvero; la Volpe, invecchiata e intignata, ha venduto la coda a un merciaio per farne uno scacciamosche. Pinocchio rifiuta di aiutarli.",
+   "evidence_chapters": [
+    36
+   ]
+  },
+  {
+   "id": "g19",
+   "kind": "multi_hop",
+   "question": "Chi era Melampo e quale patto aveva con le faine?",
+   "expected_keywords": [
+    [
+     "cane"
+    ],
+    [
+     "faine"
+    ],
+    [
+     "pollastr",
+     "gallin"
+    ]
+   ],
+   "notes": "Melampo era il cane da guardia del contadino, morto quella mattina (cap. XXI); lasciava rubare le galline alle faine in cambio di una pollastra pelata (cap. XXII). Pinocchio rifiuta il patto, abbaia e fa prendere le faine.",
+   "evidence_chapters": [
+    21,
+    22
+   ]
+  },
+  {
+   "id": "g20",
+   "kind": "aggregation",
+   "question": "Che cosa mangia Pinocchio, o che cosa gli viene dato da mangiare, quando ha fame?",
+   "expected_keywords": [
+    [
+     "pere"
+    ],
+    [
+     "uovo",
+     "pulcino"
+    ],
+    [
+     "cavol",
+     "confetto",
+     "pane"
+    ]
+   ],
+   "notes": "Trova un uovo da cui esce un pulcino che vola via (cap. V); Geppetto gli dà tre pere, e lui mangia anche bucce e torsoli (cap. VII); la donnina gli dà pane, cavolfiore e un confetto (cap. XXIV); la Fata gli manda pane, pollastra e albicocche finti (cap. XXIX).",
+   "evidence_chapters": [
+    5,
+    7,
+    24,
+    29
+   ]
+  },
+  {
+   "id": "g21",
+   "kind": "aggregation",
+   "question": "Chi viene arrestato o messo in prigione nel corso della storia, e da chi?",
+   "expected_keywords": [
+    [
+     "geppetto"
+    ],
+    [
+     "carabinier"
+    ],
+    [
+     "giudice",
+     "gorilla",
+     "scimmione",
+     "giandarm"
+    ]
+   ],
+   "notes": "Geppetto viene portato in prigione da un carabiniere al posto di Pinocchio (cap. III); Pinocchio è condannato dal giudice (uno scimmione della razza dei Gorilla) e preso dai giandarmi, quattro mesi (cap. XIX); Pinocchio arrestato dai carabinieri per il ferimento di Eugenio, poi scappa (cap. XXVII).",
+   "evidence_chapters": [
+    3,
+    19,
+    27
+   ]
+  },
+  {
+   "id": "g22",
+   "kind": "multi_hop",
+   "question": "Che cosa succede sulla spiaggia tra Pinocchio e i compagni di scuola, e come finisce?",
+   "expected_keywords": [
+    [
+     "eugenio"
+    ],
+    [
+     "libr",
+     "trattato"
+    ],
+    [
+     "carabinier"
+    ]
+   ],
+   "notes": "I compagni lo portano al mare con la bugia del Pesce-cane; nella zuffa si tirano i libri, un Trattato di Aritmetica colpisce Eugenio; i compagni scappano, arrivano i carabinieri e arrestano Pinocchio, che fugge inseguito da Alidoro (cap. XXVI-XXVII).",
+   "evidence_chapters": [
+    26,
+    27
+   ]
+  },
+  {
+   "id": "g23",
+   "kind": "multi_hop",
+   "question": "Che rapporto c'è tra Geppetto e maestro Ciliegia, e da dove viene il legno di Pinocchio?",
+   "expected_keywords": [
+    [
+     "legno"
+    ],
+    [
+     "regal",
+     "dà",
+     "diede",
+     "dona",
+     "dètte"
+    ],
+    [
+     "lit",
+     "baruff",
+     "zuff",
+     "picchi",
+     "graffi",
+     "pace"
+    ]
+   ],
+   "notes": "Sono vecchi amici che litigano e si picchiano due volte per il soprannome Polendina, poi fanno pace (cap. II); maestro Ciliegia regala a Geppetto il pezzo di legno che parla e ride (cap. I-II).",
+   "evidence_chapters": [
+    1,
+    2
+   ]
+  },
+  {
+   "id": "g24",
+   "kind": "aggregation",
+   "question": "Sotto quali forme o aspetti si presenta la Fata dai capelli turchini nel corso della storia?",
+   "expected_keywords": [
+    [
+     "bambina"
+    ],
+    [
+     "capr"
+    ],
+    [
+     "donnina",
+     "donna",
+     "mamma",
+     "signora"
+    ]
+   ],
+   "notes": "Bambina alla finestra (cap. XV); buona donnina che porta le brocche e poi gli fa da mamma (cap. XXIV-XXV); signora nel palco del circo col medaglione (cap. XXXIII); caprettina turchina sullo scoglio (cap. XXXIV); in sogno alla fine (cap. XXXVI).",
+   "evidence_chapters": [
+    15,
+    24,
+    25,
+    33,
+    34,
+    36
+   ]
+  },
+  {
+   "id": "g25",
+   "kind": "aggregation",
+   "question": "Quali animali parlano a Pinocchio per avvertirlo, rimproverarlo o spiegargli che cosa gli sta succedendo?",
+   "expected_keywords": [
+    [
+     "grillo"
+    ],
+    [
+     "merlo"
+    ],
+    [
+     "pappagallo",
+     "marmott",
+     "lucciola",
+     "granchio"
+    ]
+   ],
+   "notes": "Grillo-parlante (cap. IV, XIII); Merlo bianco (cap. XII); Pappagallo che ride di lui al Campo dei miracoli (cap. XIX); lucciola (cap. XXI); Granchio sulla spiaggia (cap. XXVII); Marmottina che gli spiega la febbre del somaro (cap. XXXII).",
+   "evidence_chapters": [
+    4,
+    12,
+    13,
+    19,
+    21,
+    27,
+    32
+   ]
+  },
+  {
+   "id": "g26",
+   "kind": "multi_hop",
+   "question": "Come finisce Geppetto dentro il Pesce-cane e come sopravvive lì dentro?",
+   "expected_keywords": [
+    [
+     "barchetta",
+     "barca"
+    ],
+    [
+     "due anni"
+    ],
+    [
+     "bastimento",
+     "candel"
+    ]
+   ],
+   "notes": "Parte in barchetta per cercare Pinocchio oltre il mare (cap. XXIII), un'ondata rovescia la barca e il Pesce-cane lo inghiotte; vive lì da due anni con le provviste di un bastimento mercantile inghiottito (carne in scatola, biscotto, vino, candele), ormai finite (cap. XXXV).",
+   "evidence_chapters": [
+    23,
+    24,
+    35
+   ]
+  },
+  {
+   "id": "g27",
+   "kind": "multi_hop",
+   "question": "Chi dà denaro a Pinocchio nel corso della storia e che fine fanno quei soldi?",
+   "expected_keywords": [
+    [
+     "mangiafoco"
+    ],
+    [
+     "volpe",
+     "gatto"
+    ],
+    [
+     "lumaca",
+     "quaranta"
+    ]
+   ],
+   "notes": "Mangiafoco gli dà cinque monete d'oro per Geppetto (cap. XII): una va all'oste del Gambero Rosso, quattro le rubano la Volpe e il Gatto al Campo dei miracoli (cap. XIII, XIX). Alla fine guadagna quaranta soldi per un vestito e li dà alla Lumaca per la Fata malata; la Fata gli rende quaranta zecchini d'oro (cap. XXXVI).",
+   "evidence_chapters": [
+    12,
+    13,
+    19,
+    36
+   ]
+  },
+  {
+   "id": "g28",
+   "kind": "aggregation",
+   "question": "Quali personaggi sono legati al teatro dei burattini?",
+   "expected_keywords": [
+    [
+     "mangiafoco"
+    ],
+    [
+     "arlecchino"
+    ],
+    [
+     "pulcinella"
+    ]
+   ],
+   "notes": "Il burattinaio Mangiafoco, Arlecchino e Pulcinella che riconoscono Pinocchio dalla scena, la signora Rosaura (cap. X-XI).",
+   "evidence_chapters": [
+    10,
+    11
+   ]
+  },
+  {
+   "id": "g29",
+   "kind": "aggregation",
+   "question": "Quali creature del mare compaiono nella storia e che ruolo hanno?",
+   "expected_keywords": [
+    [
+     "pesce-cane",
+     "pesce cane",
+     "pescecane"
+    ],
+    [
+     "tonno"
+    ],
+    [
+     "delfino",
+     "granchio"
+    ]
+   ],
+   "notes": "Delfino che dà notizie di Geppetto (cap. XXIV); Granchio che rimprovera i ragazzi (cap. XXVII); pesci che mangiano la buccia asinina (cap. XXXIV); Pesce-cane che inghiotte Geppetto e Pinocchio (cap. XXXIV-XXXV); Tonno compagno di prigionia che li porta a riva (cap. XXXIV, XXXVI).",
+   "evidence_chapters": [
+    24,
+    27,
+    34,
+    35,
+    36
+   ]
+  },
+  {
+   "id": "g30",
+   "kind": "multi_hop",
+   "question": "Che legame c'è tra Lucignolo e l'ortolano Giangio?",
+   "expected_keywords": [
+    [
+     "ciuchin",
+     "somar",
+     "asin"
+    ],
+    [
+     "bindolo",
+     "compra",
+     "fiera"
+    ],
+    [
+     "muor",
+     "mort",
+     "morì"
+    ]
+   ],
+   "notes": "Giangio ha comprato Lucignolo, diventato ciuchino, e gli faceva girare il bindolo; il ciuchino muore sfinito dalla fame e dal lavoro sotto gli occhi di Pinocchio, che lo riconosce (cap. XXXVI).",
+   "evidence_chapters": [
+    36
+   ]
+  }
+ ]
+}

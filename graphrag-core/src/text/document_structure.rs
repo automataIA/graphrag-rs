@@ -287,7 +287,7 @@ impl StructureStatistics {
         let mut levels: Vec<_> = self.level_counts.iter().collect();
         levels.sort_by_key(|(level, _)| *level);
         for (level, count) in levels {
-            println!("    Level {}: {} headings", level, count);
+            println!("    Level {level}: {count} headings");
         }
     }
 }

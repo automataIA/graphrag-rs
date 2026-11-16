@@ -39,7 +39,7 @@ where
 
     // Read file contents
     let contents = std::fs::read_to_string(path).map_err(|e| GraphRAGError::Config {
-        message: format!("Failed to read JSON5 file {:?}: {}", path, e),
+        message: format!("Failed to read JSON5 file {path:?}: {e}"),
     })?;
 
     // Parse JSON5
@@ -61,7 +61,7 @@ where
     T: for<'de> Deserialize<'de>,
 {
     json5::from_str(contents).map_err(|e| GraphRAGError::Config {
-        message: format!("Failed to parse JSON5: {}", e),
+        message: format!("Failed to parse JSON5: {e}"),
     })
 }
 
@@ -90,11 +90,11 @@ where
     // Serialize to JSON5 (note: json5 crate doesn't have a pretty printer,
     // so we use serde_json for now with JSON format)
     let json_str = serde_json::to_string_pretty(config).map_err(|e| GraphRAGError::Config {
-        message: format!("Failed to serialize config: {}", e),
+        message: format!("Failed to serialize config: {e}"),
     })?;
 
     std::fs::write(path, json_str).map_err(|e| GraphRAGError::Config {
-        message: format!("Failed to write JSON5 file {:?}: {}", path, e),
+        message: format!("Failed to write JSON5 file {path:?}: {e}"),
     })?;
 
     Ok(())
@@ -171,7 +171,7 @@ mod tests {
         let config: TestConfig = parse_json5_str(json5_str).unwrap();
         assert_eq!(config.name, "test");
         assert_eq!(config.value, 42);
-        assert_eq!(config.enabled, true);
+        assert!(config.enabled);
     }
 
     #[test]

@@ -12,9 +12,11 @@
 use async_trait::async_trait;
 use graphrag_core::core::{ChunkingStrategy, DocumentId};
 use graphrag_core::embeddings::EmbeddingProvider;
+#[cfg(feature = "async")]
+use graphrag_core::text::SemanticCoherenceScorer;
 use graphrag_core::text::{
     BoundaryAwareChunkingStrategy, BoundaryDetectionConfig, BoundaryDetector, BoundaryType,
-    CoherenceConfig, SemanticCoherenceScorer,
+    CoherenceConfig,
 };
 use std::sync::Arc;
 
@@ -193,6 +195,7 @@ fn test_boundary_detector_abbreviation_handling() {
     assert!(!sentence_boundaries.is_empty());
 }
 
+#[cfg(feature = "async")]
 #[tokio::test]
 async fn test_coherence_scorer_basic() {
     let config = CoherenceConfig::default();
@@ -206,6 +209,7 @@ async fn test_coherence_scorer_basic() {
     assert!((0.0..=1.0).contains(&score));
 }
 
+#[cfg(feature = "async")]
 #[tokio::test]
 async fn test_coherence_scorer_single_sentence() {
     let config = CoherenceConfig::default();
@@ -219,6 +223,7 @@ async fn test_coherence_scorer_single_sentence() {
     assert_eq!(score, 1.0);
 }
 
+#[cfg(feature = "async")]
 #[tokio::test]
 async fn test_coherence_scorer_cosine_similarity() {
     let config = CoherenceConfig::default();
@@ -238,6 +243,7 @@ async fn test_coherence_scorer_cosine_similarity() {
     assert!(sim.abs() < 0.001);
 }
 
+#[cfg(feature = "async")]
 #[tokio::test]
 async fn test_coherence_scorer_optimal_split() {
     let config = CoherenceConfig::default();
@@ -371,6 +377,7 @@ More content follows.
     assert!(types.contains(&BoundaryType::CodeBlock));
 }
 
+#[cfg(feature = "async")]
 #[tokio::test]
 async fn test_coherence_adaptive_threshold() {
     let config = CoherenceConfig {
@@ -386,7 +393,7 @@ async fn test_coherence_adaptive_threshold() {
 
     // Long text
     let long_text = (0..100)
-        .map(|i| format!("Sentence {}.", i))
+        .map(|i| format!("Sentence {i}."))
         .collect::<Vec<_>>()
         .join(" ");
     let threshold_long = scorer.calculate_adaptive_threshold(&long_text);
@@ -475,11 +482,10 @@ This approach significantly improves retrieval quality and answer accuracy.
 
     // Verify chunk properties
     for (i, chunk) in chunks.iter().enumerate() {
-        assert!(!chunk.content.is_empty(), "Chunk {} is empty", i);
+        assert!(!chunk.content.is_empty(), "Chunk {i} is empty");
         assert!(
             chunk.start_offset < chunk.end_offset,
-            "Chunk {} has invalid offsets",
-            i
+            "Chunk {i} has invalid offsets"
         );
 
         println!(
@@ -555,11 +561,10 @@ fn test_real_world_document_plato_symposium() {
     let mut total_chars = 0;
 
     for (i, chunk) in chunks.iter().enumerate() {
-        assert!(!chunk.content.is_empty(), "Chunk {} is empty", i);
+        assert!(!chunk.content.is_empty(), "Chunk {i} is empty");
         assert!(
             chunk.start_offset < chunk.end_offset,
-            "Chunk {} has invalid offsets",
-            i
+            "Chunk {i} has invalid offsets"
         );
 
         // Check coherence score in metadata if available
@@ -593,7 +598,7 @@ fn test_real_world_document_plato_symposium() {
         );
     }
 
-    println!("Total characters processed: {}", total_chars);
+    println!("Total characters processed: {total_chars}");
     println!(
         "Coverage: {:.1}%",
         (total_chars as f64 / text_sample.len() as f64) * 100.0
@@ -603,23 +608,20 @@ fn test_real_world_document_plato_symposium() {
     let coverage = (total_chars as f64 / text_sample.len() as f64) * 100.0;
     assert!(
         coverage >= 80.0,
-        "Coverage too low: {:.1}% (expected >= 80%)",
-        coverage
+        "Coverage too low: {coverage:.1}% (expected >= 80%)"
     );
 
     // Verify reasonable chunk count (not too fragmented, not too coarse)
     let avg_chunk_size = total_chars / chunks.len();
-    println!("Average chunk size: {} chars", avg_chunk_size);
+    println!("Average chunk size: {avg_chunk_size} chars");
 
     assert!(
         avg_chunk_size >= 200,
-        "Chunks too small on average: {} chars",
-        avg_chunk_size
+        "Chunks too small on average: {avg_chunk_size} chars"
     );
     assert!(
         avg_chunk_size <= 2000,
-        "Chunks too large on average: {} chars",
-        avg_chunk_size
+        "Chunks too large on average: {avg_chunk_size} chars"
     );
 
     println!("\n✓ BAR-RAG successfully processed classical literature");

@@ -9,6 +9,21 @@
 
 use std::collections::HashMap;
 
+/// Uniform random number in `[0, 1)`.
+///
+/// `js_sys::Math::random` is a JS import and panics outside a wasm32 runtime,
+/// so native builds (e.g. `cargo test`) use std's randomly seeded hasher instead.
+#[cfg(target_arch = "wasm32")]
+fn random_unit() -> f64 {
+    js_sys::Math::random()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn random_unit() -> f64 {
+    use std::hash::{BuildHasher, RandomState};
+    (RandomState::new().hash_one(0u8) >> 11) as f64 / (1u64 << 53) as f64
+}
+
 /// 2D vector for positions and forces
 #[derive(Debug, Clone, Copy, Default)]
 #[allow(dead_code)]
@@ -155,8 +170,8 @@ impl ForceLayout {
     pub fn add_node(&mut self, id: String) {
         if !self.nodes.contains_key(&id) {
             // Random initial position
-            let x = (js_sys::Math::random() - 0.5) * self.config.width;
-            let y = (js_sys::Math::random() - 0.5) * self.config.height;
+            let x = (random_unit() - 0.5) * self.config.width;
+            let y = (random_unit() - 0.5) * self.config.height;
             self.nodes.insert(id.clone(), LayoutNode::new(id, x, y));
         }
     }

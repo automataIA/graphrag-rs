@@ -26,14 +26,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tom_sawyer_path = "./docs-example/The_Adventures_of_Tom_Sawyer.txt";
 
     if !std::path::Path::new(tom_sawyer_path).exists() {
-        eprintln!("❌ Tom Sawyer text file not found at: {}", tom_sawyer_path);
+        eprintln!("❌ Tom Sawyer text file not found at: {tom_sawyer_path}");
         eprintln!("   Please ensure the file exists.");
         return Ok(());
     }
 
     let content = fs::read_to_string(tom_sawyer_path)?;
     let content_size = content.len();
-    println!("   ✅ Loaded {} bytes", content_size);
+    println!("   ✅ Loaded {content_size} bytes");
 
     let mut graph = KnowledgeGraph::new();
 
@@ -64,7 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let end_offset = start_offset + chunk_text_str.len();
 
         let chunk = TextChunk::new(
-            ChunkId::new(format!("chunk_{}", i)),
+            ChunkId::new(format!("chunk_{i}")),
             DocumentId::new("tom_sawyer".to_string()),
             chunk_text_str,
             start_offset,
@@ -73,7 +73,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         graph.add_chunk(chunk)?;
         chunk_count += 1;
     }
-    println!("   ✅ Created {} chunks", chunk_count);
+    println!("   ✅ Created {chunk_count} chunks");
 
     // === PHASE 3: Extract mock entities ===
     println!("\n👤 Phase 3: Extracting entities (mock)...");
@@ -114,6 +114,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for (source, target, rel_type, confidence) in &relationships_data {
         let relationship = Relationship {
+            description: None,
             source: EntityId::new(source.to_string()),
             target: EntityId::new(target.to_string()),
             relation_type: rel_type.to_string(),
@@ -195,9 +196,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut all_passed = true;
     for (name, original, loaded) in &checks {
         if original == loaded {
-            println!("   ✅ {} match: {}", name, original);
+            println!("   ✅ {name} match: {original}");
         } else {
-            println!("   ❌ {} mismatch: {} != {}", name, original, loaded);
+            println!("   ❌ {name} mismatch: {original} != {loaded}");
             all_passed = false;
         }
     }
@@ -259,12 +260,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("Data integrity check failed".into());
     }
 
-    println!("\n📂 Workspace location: {}", workspace_dir);
-    println!(
-        "   To inspect: cat {}/tom_sawyer/metadata.toml",
-        workspace_dir
-    );
-    println!("   To list: ls -lh {}/", workspace_dir);
+    println!("\n📂 Workspace location: {workspace_dir}");
+    println!("   To inspect: cat {workspace_dir}/tom_sawyer/metadata.toml");
+    println!("   To list: ls -lh {workspace_dir}/");
 
     Ok(())
 }

@@ -1,7 +1,7 @@
 //! ONNX Runtime Web Embeddings
 //!
 //! GPU-accelerated embeddings using ONNX Runtime Web with WebGPU backend.
-//! This provides real BERT/MiniLM inference with 20-40x speedup vs CPU.
+//! This provides real BERT/MiniLM inference in the browser.
 //!
 //! ## Architecture
 //!
@@ -24,7 +24,7 @@
 //! | Model | CPU | WebGPU | Speedup |
 //! |-------|-----|--------|---------|
 //! | MiniLM-L6 | 80ms | 3ms | 27x |
-//! | BERT-base | 200ms | 8ms | 25x |
+//! | BERT-base | device-dependent | device-dependent | varies |
 
 use js_sys::{Array, Object, Promise, Reflect};
 use std::str::FromStr;
@@ -111,7 +111,7 @@ impl From<JsValue> for OnnxEmbedderError {
 // New implementation (bert_tokenizer::BertTokenizer):
 // - 30,522+ word vocabulary (or minimal mode with key technical terms)
 // - Proper WordPiece algorithm → "embeddings" = ["em", "##bed", "##dings"]
-// - <2% unknown tokens → 98%+ embedding quality
+// - Unknown-token rates depend on the selected model and tokenizer.
 // - HuggingFace compatible
 // - Only ~50μs slower (negligible for 3-8ms GPU inference)
 

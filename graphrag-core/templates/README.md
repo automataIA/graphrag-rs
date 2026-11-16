@@ -4,7 +4,7 @@ Pre-configured templates for common use cases. Each template is optimized for sp
 
 ## Available Templates
 
-| Template | Best For | Approach | Ollama Required |
+| Template | Best For | Approach | LLM Server Required |
 |----------|----------|----------|-----------------|
 | `general.toml` | Mixed documents, articles | Hybrid | No |
 | `legal.toml` | Contracts, legal agreements | Semantic | Yes |
@@ -44,7 +44,7 @@ let mut graphrag = GraphRAG::new(config)?;
 
 ```bash
 # Override template values with environment variables
-export GRAPHRAG_OLLAMA_HOST=my-server
+export GRAPHRAG_LLM_BASE_URL=http://my-server:8080/v1
 export GRAPHRAG_CHUNK_SIZE=2000
 
 # Then load template (env vars take priority)
@@ -117,7 +117,7 @@ Configured for clinical and healthcare documentation.
 - Research papers
 - Discharge summaries
 
-**HIPAA Note:** Ensure compliance when processing patient data. Consider using local Ollama deployment for data privacy.
+**HIPAA Note:** Ensure compliance when processing patient data. Consider a local llama.cpp `llama-server` deployment for data privacy.
 
 ---
 
@@ -186,16 +186,24 @@ chunk_size = 1000     # Characters per chunk
 chunk_overlap = 200   # Overlap between chunks
 ```
 
-### Configure Ollama
+### Configure the LLM (llama.cpp)
 
 ```toml
-[ollama]
+[llm]
 enabled = true
-host = "localhost"
-port = 11434
-chat_model = "llama3.2:3b"
-embedding_model = "nomic-embed-text"
+base_url = "http://127.0.0.1:8080/v1"            # llama-server chat
+embedding_base_url = "http://127.0.0.1:8081/v1"  # llama-server --embeddings --pooling mean
+chat_model = "qwen3.5-9b"
+embedding_model = "multilingual-e5-small"
 timeout_seconds = 60
+# api_key_env = "GROQ_API_KEY"  # name of the env var holding the key, for hosted APIs
+```
+
+Start the two servers:
+
+```bash
+llama-server -m Qwen3.5-9B-UD-Q5_K_XL.gguf --alias qwen3.5-9b --port 8080
+llama-server -m multilingual-e5-small.gguf --embeddings --pooling mean --alias multilingual-e5-small --port 8081
 ```
 
 ### Enable Advanced Features
@@ -220,8 +228,8 @@ num_threads = 4
 With the `hierarchical-config` feature, environment variables override template values:
 
 ```bash
-# Override Ollama host
-export GRAPHRAG_OLLAMA_HOST=my-ollama-server
+# Override the LLM server
+export GRAPHRAG_LLM_BASE_URL=http://my-llm-server:8080/v1
 
 # Override chunk size
 export GRAPHRAG_CHUNK_SIZE=2000
@@ -260,9 +268,9 @@ entity_types = [
 use_gleaning = true
 max_gleaning_rounds = 3
 
-[ollama]
+[llm]
 enabled = true
-chat_model = "llama3.2:3b"
+chat_model = "qwen3.5-9b"
 ```
 
 ## Comparison Matrix
@@ -273,5 +281,5 @@ chat_model = "llama3.2:3b"
 | Approach | Hybrid | Semantic | Semantic | Hybrid | Algorithmic |
 | Gleaning | Off | 4 rounds | 3 rounds | 3 rounds | Off |
 | Entity Types | 5 | 10 | 9 | 8 | 7 |
-| Ollama Required | No | Yes | Yes | Yes | No |
+| LLM Server Required | No | Yes | Yes | Yes | No |
 | Processing Speed | Fast | Slow | Medium | Medium | Fast |

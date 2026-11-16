@@ -48,18 +48,80 @@ pub use hipporag_ppr::{Fact, HippoRAGConfig, HippoRAGRetriever};
 
 use crate::vector::store::VectorStore;
 
+fn truncate_utf8(text: &str, max_bytes: usize) -> &str {
+    let mut end = text.len().min(max_bytes);
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
+}
+
+/// Reciprocal Rank Fusion constant (standard value).
+const RRF_K: f32 = 60.0;
+
+/// Reciprocal Rank Fusion over several rankings of ids (best first).
+///
+/// Each id scores `sum(1 / (k + rank))` over the rankings that contain it (rank is
+/// 1-based). Returns ids sorted by descending fused score; ties keep first-seen order.
+fn reciprocal_rank_fusion(rankings: &[Vec<String>], k: f32) -> Vec<(String, f32)> {
+    let mut order: Vec<String> = Vec::new();
+    let mut scores: HashMap<String, f32> = HashMap::new();
+    for ranking in rankings {
+        for (idx, id) in ranking.iter().enumerate() {
+            let entry = scores.entry(id.clone()).or_insert_with(|| {
+                order.push(id.clone());
+                0.0
+            });
+            *entry += 1.0 / (k + idx as f32 + 1.0);
+        }
+    }
+    let mut fused: Vec<(String, f32)> = order
+        .into_iter()
+        .map(|id| {
+            let score = scores[&id];
+            (id, score)
+        })
+        .collect();
+    // Stable sort keeps first-seen order for equal scores.
+    fused.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    fused
+}
+
+/// BM25 index over the graph's chunks, tagged with a fingerprint of the chunks it was
+/// built from so it is rebuilt whenever the graph changes (new build or workspace reload).
+struct ChunkBm25Index {
+    fingerprint: u64,
+    retriever: BM25Retriever,
+}
+
+/// Cheap fingerprint of the graph's chunks (ids + content), independent of map order.
+fn chunk_fingerprint(graph: &KnowledgeGraph) -> u64 {
+    use std::hash::{Hash, Hasher};
+    graph
+        .chunks()
+        .map(|chunk| {
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            chunk.id.to_string().hash(&mut hasher);
+            chunk.content.hash(&mut hasher);
+            hasher.finish()
+        })
+        .fold(0u64, |acc, h| acc.wrapping_add(h))
+}
+
 /// Retrieval system for querying the knowledge graph
 pub struct RetrievalSystem {
     vector_store: std::sync::Arc<dyn VectorStore>,
     embedding_generator: EmbeddingGenerator,
+    #[cfg(feature = "llm")]
+    llama_cpp_provider: Option<std::sync::Arc<crate::llama_cpp::LlamaCppEmbeddingProvider>>,
     config: RetrievalConfig,
     #[cfg(feature = "parallel-processing")]
     parallel_processor: Option<ParallelProcessor>,
     #[cfg(feature = "pagerank")]
     pagerank_retriever: Option<PageRankRetrievalSystem>,
     enriched_retriever: Option<EnrichedRetriever>,
-    #[cfg(feature = "lazygraphrag")]
-    concept_filtering_enabled: bool,
+    /// Lazily built keyword index over chunk text (see `keyword_chunk_ranking`)
+    chunk_bm25: Option<ChunkBm25Index>,
 }
 
 impl RetrievalSystem {
@@ -83,17 +145,55 @@ impl RetrievalSystem {
         let vector_store =
             std::sync::Arc::new(crate::vector::memory_store::MemoryVectorStore::new());
 
+        #[cfg(feature = "llm")]
+        let llama_cpp_provider = if config.embeddings.backend.eq_ignore_ascii_case("llama_cpp")
+            || config.embeddings.backend.eq_ignore_ascii_case("llama.cpp")
+        {
+            Some(std::sync::Arc::new(
+                crate::llama_cpp::LlamaCppEmbeddingProvider::from_config(
+                    &config.embeddings,
+                    config.llm.timeout_seconds,
+                )?,
+            ))
+        } else {
+            None
+        };
+
+        #[cfg(not(feature = "llm"))]
+        if config.embeddings.backend.eq_ignore_ascii_case("llama_cpp")
+            || config.embeddings.backend.eq_ignore_ascii_case("llama.cpp")
+        {
+            return Err(crate::core::GraphRAGError::Unsupported {
+                operation: "llama.cpp embeddings".to_string(),
+                reason: "enable the graphrag-core `llm` feature".to_string(),
+            });
+        }
+
+        if !config.embeddings.backend.eq_ignore_ascii_case("hash")
+            && !config.embeddings.backend.eq_ignore_ascii_case("llama_cpp")
+            && !config.embeddings.backend.eq_ignore_ascii_case("llama.cpp")
+        {
+            return Err(crate::core::GraphRAGError::Unsupported {
+                operation: "embedding provider".to_string(),
+                reason: format!(
+                    "embedding backend '{}' is not wired into the retrieval pipeline",
+                    config.embeddings.backend
+                ),
+            });
+        }
+
         Ok(Self {
             vector_store,
-            embedding_generator: EmbeddingGenerator::new(128), // 128-dimensional embeddings
+            embedding_generator: EmbeddingGenerator::new(config.embeddings.dimension),
+            #[cfg(feature = "llm")]
+            llama_cpp_provider,
             config: retrieval_config,
             #[cfg(feature = "parallel-processing")]
             parallel_processor: None,
             #[cfg(feature = "pagerank")]
             pagerank_retriever: None,
             enriched_retriever: None,
-            #[cfg(feature = "lazygraphrag")]
-            concept_filtering_enabled: false,
+            chunk_bm25: None,
         })
     }
 }
@@ -115,14 +215,68 @@ impl RetrievalSystem {
         Ok(Self {
             vector_store,
             embedding_generator,
+            #[cfg(feature = "llm")]
+            llama_cpp_provider: None,
             config: retrieval_config,
             parallel_processor: Some(parallel_processor),
             #[cfg(feature = "pagerank")]
             pagerank_retriever: None,
             enriched_retriever: None,
-            #[cfg(feature = "lazygraphrag")]
-            concept_filtering_enabled: false,
+            chunk_bm25: None,
         })
+    }
+
+    fn embed_query_text(&mut self, text: &str) -> Result<Vec<f32>> {
+        #[cfg(feature = "llm")]
+        if let Some(provider) = &self.llama_cpp_provider {
+            return provider.embed_query(text);
+        }
+        Ok(self.embedding_generator.generate_embedding(text))
+    }
+
+    fn embed_document_text(&mut self, text: &str) -> Result<Vec<f32>> {
+        #[cfg(feature = "llm")]
+        if let Some(provider) = &self.llama_cpp_provider {
+            return provider.embed_document(text);
+        }
+        Ok(self.embedding_generator.generate_embedding(text))
+    }
+
+    async fn embed_query_text_async(&mut self, text: &str) -> Result<Vec<f32>> {
+        #[cfg(feature = "llm")]
+        if let Some(provider) = self.llama_cpp_provider.clone() {
+            let text = text.to_string();
+            #[cfg(feature = "async")]
+            return tokio::task::spawn_blocking(move || provider.embed_query(&text))
+                .await
+                .map_err(|e| crate::core::GraphRAGError::Embedding {
+                    message: format!("llama.cpp embedding worker failed: {e}"),
+                })?;
+            #[cfg(not(feature = "async"))]
+            return provider.embed_query(&text);
+        }
+        self.embed_query_text(text)
+    }
+
+    async fn embed_document_text_async(&mut self, text: &str) -> Result<Vec<f32>> {
+        #[cfg(feature = "llm")]
+        if let Some(provider) = self.llama_cpp_provider.clone() {
+            let text = text.to_string();
+            #[cfg(feature = "async")]
+            return tokio::task::spawn_blocking(move || provider.embed_document(&text))
+                .await
+                .map_err(|e| crate::core::GraphRAGError::Embedding {
+                    message: format!("llama.cpp embedding worker failed: {e}"),
+                })?;
+            #[cfg(not(feature = "async"))]
+            return provider.embed_document(&text);
+        }
+        self.embed_document_text(text)
+    }
+
+    /// Embed a query with the configured embedding backend (used to rank context chunks).
+    pub async fn embed_query(&mut self, text: &str) -> Result<Vec<f32>> {
+        self.embed_query_text_async(text).await
     }
 
     /// Index a knowledge graph for retrieval
@@ -254,16 +408,136 @@ impl RetrievalSystem {
         }
     }
 
-    /// Query the system for relevant information
-    pub fn query(&self, query: &str) -> Result<Vec<String>> {
-        // For now, return a placeholder implementation
-        // In a real system, this would:
-        // 1. Convert query to embedding
-        // 2. Search vector index
-        // 3. Expand through graph relationships
-        // 4. Rank and return results
+    /// Query an explicit graph using deterministic local retrieval.
+    ///
+    /// This path intentionally does not consult a hidden graph or an LLM.  It scores chunks
+    /// by query-term overlap, boosts chunks mentioning matching entities, and includes the
+    /// matching graph facts as source context.
+    pub fn query(&self, query: &str, graph: &KnowledgeGraph) -> Result<Vec<String>> {
+        let query_terms = Self::local_query_terms(query);
+        if query_terms.is_empty() {
+            return Ok(Vec::new());
+        }
 
-        Ok(vec![format!("Results for query: {}", query)])
+        let mut matching_entities: Vec<_> = graph
+            .entities()
+            .filter(|entity| {
+                let entity_terms = Self::local_query_terms(&entity.name);
+                entity_terms.iter().any(|term| query_terms.contains(term))
+            })
+            .collect();
+        // KnowledgeGraph stores entities in petgraph, whose iteration order is an
+        // implementation detail and may differ after persistence.  Sort every graph
+        // derived collection before using it to construct the answer.
+        matching_entities.sort_by(|left, right| {
+            left.name
+                .cmp(&right.name)
+                .then_with(|| left.id.to_string().cmp(&right.id.to_string()))
+        });
+        let mut ranked: Vec<(f32, String, String)> = graph
+            .chunks()
+            .filter_map(|chunk| {
+                let chunk_terms = Self::local_query_terms(&chunk.content);
+                let overlap = query_terms
+                    .iter()
+                    .filter(|term| chunk_terms.contains(term))
+                    .count();
+                let mentioned_entity_boost = matching_entities
+                    .iter()
+                    .filter(|entity| {
+                        entity
+                            .mentions
+                            .iter()
+                            .any(|mention| mention.chunk_id == chunk.id)
+                    })
+                    .count() as f32
+                    * 0.25;
+                let score = overlap as f32 / query_terms.len() as f32 + mentioned_entity_boost;
+                (score > 0.0).then(|| (score, chunk.id.to_string(), chunk.content.clone()))
+            })
+            .collect();
+
+        ranked.sort_by(|a, b| {
+            b.0.partial_cmp(&a.0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.1.cmp(&b.1))
+        });
+        ranked.truncate(self.config.top_k);
+
+        let mut results = ranked
+            .into_iter()
+            .map(|(score, id, content)| {
+                format!("[Source chunk {id} | score: {score:.3}] {content}")
+            })
+            .collect::<Vec<_>>();
+
+        // A query can match an entity name while its source chunk has no exact query term
+        // (for example an inflected or abbreviated question). Include its graph facts so the
+        // answer remains grounded in the explicit graph supplied by the caller.
+        for entity in matching_entities {
+            let mut neighbors = graph
+                .get_neighbors(&entity.id)
+                .into_iter()
+                .map(|(target, relationship)| {
+                    format!(
+                        "{} {} {}",
+                        entity.name, relationship.relation_type, target.name
+                    )
+                })
+                .collect::<Vec<_>>();
+            neighbors.sort();
+            neighbors.dedup();
+
+            let mut source_chunks = entity
+                .mentions
+                .iter()
+                .map(|mention| mention.chunk_id.to_string())
+                .collect::<Vec<_>>();
+            source_chunks.sort();
+            source_chunks.dedup();
+            let fact = if neighbors.is_empty() {
+                entity.name.clone()
+            } else {
+                neighbors.join("; ")
+            };
+            let suffix = if source_chunks.is_empty() {
+                String::new()
+            } else {
+                format!(" | sources: {}", source_chunks.join(", "))
+            };
+            let marker = format!("[Graph entity {}", entity.id);
+            if !results.iter().any(|result| result.contains(&marker)) {
+                results.push(format!("[Graph entity {}{suffix}] {fact}", entity.id));
+            }
+        }
+
+        // Keep the local result deterministic and bounded even when many entities match.
+        results.truncate(self.config.top_k.max(1));
+        Ok(results)
+    }
+
+    fn local_query_terms(text: &str) -> Vec<String> {
+        text.split(|c: char| !c.is_alphanumeric())
+            .filter(|term| term.len() >= 2)
+            .map(str::to_lowercase)
+            .filter(|term| {
+                !matches!(
+                    term.as_str(),
+                    "the"
+                        | "and"
+                        | "are"
+                        | "who"
+                        | "what"
+                        | "how"
+                        | "does"
+                        | "is"
+                        | "il"
+                        | "la"
+                        | "chi"
+                        | "che"
+                )
+            })
+            .collect()
     }
 
     /// Advanced hybrid query with strategy selection and hierarchical integration
@@ -287,7 +561,7 @@ impl RetrievalSystem {
         let analysis = self.analyze_query(query, graph)?;
 
         // 2. Generate query embedding
-        let query_embedding = self.embedding_generator.generate_embedding(query);
+        let query_embedding = self.embed_query_text_async(query).await?;
 
         // 3. Execute multi-strategy retrieval based on analysis
         let mut results = self
@@ -313,7 +587,7 @@ impl RetrievalSystem {
         graph: &KnowledgeGraph,
     ) -> Result<Vec<SearchResult>> {
         // 1. Generate query embedding
-        let query_embedding = self.embedding_generator.generate_embedding(query);
+        let query_embedding = self.embed_query_text_async(query).await?;
 
         // 2. Perform comprehensive search
         let results = self.comprehensive_search(&query_embedding, graph).await?;
@@ -371,7 +645,7 @@ impl RetrievalSystem {
 
         // Process chunks
         for (chunk_id, text) in chunk_texts {
-            let embedding = self.embedding_generator.generate_embedding(&text);
+            let embedding = self.embed_document_text_async(&text).await?;
             if let Some(chunk) = graph.get_chunk_mut(&chunk_id) {
                 chunk.embedding = Some(embedding);
             }
@@ -379,7 +653,7 @@ impl RetrievalSystem {
 
         // Process entities
         for (entity_id, text) in entity_texts {
-            let embedding = self.embedding_generator.generate_embedding(&text);
+            let embedding = self.embed_document_text_async(&text).await?;
             if let Some(entity) = graph.get_entity_mut(&entity_id) {
                 entity.embedding = Some(embedding);
             }
@@ -403,7 +677,7 @@ impl RetrievalSystem {
         let mut chunk_count = 0;
         for chunk in graph.chunks_mut() {
             if chunk.embedding.is_none() {
-                let embedding = self.embedding_generator.generate_embedding(&chunk.content);
+                let embedding = self.embed_document_text_async(&chunk.content).await?;
                 chunk.embedding = Some(embedding);
                 chunk_count += 1;
             }
@@ -415,7 +689,7 @@ impl RetrievalSystem {
             if entity.embedding.is_none() {
                 // Create entity text from name and entity type
                 let entity_text = format!("{} {}", entity.name, entity.entity_type);
-                let embedding = self.embedding_generator.generate_embedding(&entity_text);
+                let embedding = self.embed_document_text_async(&entity_text).await?;
                 entity.embedding = Some(embedding);
                 entity_count += 1;
             }
@@ -498,17 +772,8 @@ impl RetrievalSystem {
         let query_lower = query.to_lowercase();
         let words: Vec<&str> = query_lower.split_whitespace().collect();
 
-        // Detect key entities mentioned in the query
-        let mut key_entities = Vec::new();
-        for entity in graph.entities() {
-            let entity_name_lower = entity.name.to_lowercase();
-            if words
-                .iter()
-                .any(|&word| entity_name_lower.contains(word) || word.contains(&entity_name_lower))
-            {
-                key_entities.push(entity.name.clone());
-            }
-        }
+        // Detect key entities mentioned in the query (word-level match, deduplicated)
+        let key_entities = self.detect_key_entities(&query_lower, graph);
 
         // Extract concepts (non-entity meaningful words)
         let concepts: Vec<String> = words
@@ -597,11 +862,19 @@ impl RetrievalSystem {
 
         // 1. Vector similarity search (always included)
         if vector_weight > 0.0 {
-            let mut vector_results = self
+            let vector_results = self
                 .vector_similarity_search(query_embedding, graph)
                 .await?;
+            // Fuse the dense chunk ranking with a BM25 keyword ranking (RRF); the
+            // fused chunk scores are already on the weighted scale.
+            let keyword_ids =
+                self.keyword_chunk_ranking(query, graph, self.config.top_k.max(1) * 2);
+            let mut vector_results =
+                self.fuse_chunk_results(vector_results, keyword_ids, graph, vector_weight);
             for result in &mut vector_results {
-                result.score *= vector_weight;
+                if result.result_type != ResultType::Chunk {
+                    result.score *= vector_weight;
+                }
             }
             all_results.extend(vector_results);
         }
@@ -638,8 +911,7 @@ impl RetrievalSystem {
         }
 
         // 5. Cross-strategy fusion for hybrid results
-        let fusion_results = self.cross_strategy_fusion(&all_results, analysis)?;
-        all_results.extend(fusion_results);
+        Self::cross_strategy_fusion(&mut all_results);
 
         // Final ranking and deduplication
         let final_results = self.adaptive_rank_and_deduplicate(all_results, analysis)?;
@@ -751,6 +1023,140 @@ impl RetrievalSystem {
         Ok(results)
     }
 
+    /// RRF-fused dense + BM25 chunk ranking for a query, best first, at most `limit` ids.
+    ///
+    /// Unlike `hybrid_query` this is not cut to `top_k` and ignores entity results: it is
+    /// meant to widen the candidate pool of a reranker. `query_embedding` must come from
+    /// the same query (see `embed_query`).
+    pub async fn fused_chunk_candidates(
+        &mut self,
+        query: &str,
+        query_embedding: &[f32],
+        graph: &KnowledgeGraph,
+        limit: usize,
+    ) -> Result<Vec<String>> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        // Over-fetch: the store also holds entity vectors, which are dropped here.
+        let dense_ids: Vec<String> = self
+            .vector_store
+            .search(query_embedding, limit * 3)
+            .await?
+            .into_iter()
+            .filter_map(|r| r.id.strip_prefix("chunk:").map(str::to_string))
+            .collect();
+        let keyword_ids = self.keyword_chunk_ranking(query, graph, limit);
+        Ok(reciprocal_rank_fusion(&[dense_ids, keyword_ids], RRF_K)
+            .into_iter()
+            .take(limit)
+            .map(|(id, _)| id)
+            .collect())
+    }
+
+    /// Rank chunks by BM25 over their text; returns chunk ids, best first.
+    ///
+    /// The index is built lazily from the graph's chunks and rebuilt whenever their
+    /// fingerprint changes, so it works after `build_graph` and after a workspace reload.
+    fn keyword_chunk_ranking(
+        &mut self,
+        query: &str,
+        graph: &KnowledgeGraph,
+        limit: usize,
+    ) -> Vec<String> {
+        let fingerprint = chunk_fingerprint(graph);
+        if self
+            .chunk_bm25
+            .as_ref()
+            .is_none_or(|index| index.fingerprint != fingerprint)
+        {
+            let mut retriever = BM25Retriever::new();
+            for chunk in graph.chunks() {
+                // Ids are unique per chunk, so indexing cannot fail in practice.
+                let _ = retriever.index_document(BM25Document {
+                    id: chunk.id.to_string(),
+                    content: chunk.content.clone(),
+                    metadata: HashMap::new(),
+                });
+            }
+            self.chunk_bm25 = Some(ChunkBm25Index {
+                fingerprint,
+                retriever,
+            });
+        }
+        self.chunk_bm25
+            .as_ref()
+            .map(|index| {
+                index
+                    .retriever
+                    .search(query, limit)
+                    .into_iter()
+                    .map(|r| r.doc_id)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Replace the dense chunk results with an RRF fusion of the dense and keyword
+    /// chunk rankings. Non-chunk results pass through unchanged.
+    ///
+    /// Fused scores are `rrf / (2 / (k + 1))` (1.0 = rank 1 in both rankings) times the
+    /// chunk and strategy weights, i.e. the same scale as dense-only chunk scores.
+    fn fuse_chunk_results(
+        &self,
+        vector_results: Vec<SearchResult>,
+        keyword_ids: Vec<String>,
+        graph: &KnowledgeGraph,
+        vector_weight: f32,
+    ) -> Vec<SearchResult> {
+        if keyword_ids.is_empty() {
+            return vector_results;
+        }
+        let (mut dense_chunks, others): (Vec<_>, Vec<_>) = vector_results
+            .into_iter()
+            .partition(|r| r.result_type == ResultType::Chunk);
+        dense_chunks.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let dense_ids: Vec<String> = dense_chunks.iter().map(|r| r.id.clone()).collect();
+
+        let max_rrf = 2.0 / (RRF_K + 1.0);
+        let scale = self.config.chunk_weight * vector_weight / max_rrf;
+        let mut by_id: HashMap<String, SearchResult> = dense_chunks
+            .into_iter()
+            .map(|r| (r.id.clone(), r))
+            .collect();
+
+        let mut fused_results = others;
+        for (id, rrf) in reciprocal_rank_fusion(&[dense_ids, keyword_ids], RRF_K) {
+            let existing = by_id.remove(&id);
+            let result = existing.or_else(|| {
+                graph
+                    .get_chunk(&ChunkId::new(id.clone()))
+                    .map(|chunk| SearchResult {
+                        id: chunk.id.to_string(),
+                        content: chunk.content.clone(),
+                        score: 0.0,
+                        result_type: ResultType::Chunk,
+                        entities: chunk
+                            .entities
+                            .iter()
+                            .filter_map(|eid| graph.get_entity(eid))
+                            .map(|e| e.name.clone())
+                            .collect(),
+                        source_chunks: vec![chunk.id.to_string()],
+                    })
+            });
+            if let Some(mut result) = result {
+                result.score = rrf * scale;
+                fused_results.push(result);
+            }
+        }
+        fused_results
+    }
+
     /// Entity-based search with graph expansion
     fn entity_based_search(
         &self,
@@ -855,9 +1261,8 @@ impl RetrievalSystem {
                         visited.insert(neighbor.id.clone());
 
                         // Calculate relationship relevance
-                        let rel_embedding = self
-                            .embedding_generator
-                            .generate_embedding(&relationship.relation_type);
+                        let rel_embedding =
+                            self.embed_document_text(&relationship.relation_type)?;
                         let rel_similarity =
                             VectorUtils::cosine_similarity(query_embedding, &rel_embedding);
 
@@ -907,7 +1312,7 @@ impl RetrievalSystem {
                 };
 
                 results.push(SearchResult {
-                    id: format!("{}:summary:{}", doc_id, idx),
+                    id: format!("{doc_id}:summary:{idx}"),
                     content: summary.summary.clone(),
                     score: summary.score + level_bonus,
                     result_type: ResultType::HierarchicalSummary,
@@ -942,54 +1347,65 @@ impl RetrievalSystem {
         Ok(results)
     }
 
-    /// Cross-strategy fusion to create hybrid results
-    fn cross_strategy_fusion(
-        &self,
-        all_results: &[SearchResult],
-        _analysis: &QueryAnalysis,
-    ) -> Result<Vec<SearchResult>> {
-        let mut fusion_results = Vec::new();
-
-        // Group results by content similarity
-        let mut content_groups: HashMap<String, Vec<&SearchResult>> = HashMap::new();
-
-        for result in all_results {
-            let content_key = Self::safe_truncate(&result.content, 50);
-
-            content_groups.entry(content_key).or_default().push(result);
+    /// Cross-strategy agreement boost.
+    ///
+    /// Results with identical (trimmed) content found by more than one strategy are the
+    /// same evidence seen twice: boost the best-scoring one in place and merge the
+    /// entities / source chunks of the others into it. No copy is appended, so the same
+    /// text never reaches the answer context more than once.
+    fn cross_strategy_fusion(all_results: &mut [SearchResult]) {
+        let mut groups: HashMap<String, Vec<usize>> = HashMap::new();
+        for (i, result) in all_results.iter().enumerate() {
+            groups
+                .entry(result.content.trim().to_string())
+                .or_default()
+                .push(i);
         }
 
-        // Create fusion results for groups with multiple strategies
-        for (content_key, group) in content_groups {
-            if group.len() > 1 {
-                let types: HashSet<_> = group.iter().map(|r| &r.result_type).collect();
-                if types.len() > 1 {
-                    // This content was found by multiple strategies - boost confidence
-                    let avg_score = group.iter().map(|r| r.score).sum::<f32>() / group.len() as f32;
-                    let boost = 0.2 * (types.len() - 1) as f32;
+        for group in groups.into_values() {
+            if group.len() < 2 {
+                continue;
+            }
+            let types: HashSet<_> = group
+                .iter()
+                .map(|&i| all_results[i].result_type.clone())
+                .collect();
+            if types.len() < 2 {
+                continue;
+            }
+            let avg_score =
+                group.iter().map(|&i| all_results[i].score).sum::<f32>() / group.len() as f32;
+            let boost = 0.2 * (types.len() - 1) as f32;
+            let best = group
+                .iter()
+                .copied()
+                .max_by(|&a, &b| {
+                    all_results[a]
+                        .score
+                        .partial_cmp(&all_results[b].score)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .expect("group is non-empty");
 
-                    let all_entities: HashSet<_> =
-                        group.iter().flat_map(|r| r.entities.iter()).collect();
-
-                    let all_chunks: HashSet<_> =
-                        group.iter().flat_map(|r| r.source_chunks.iter()).collect();
-
-                    fusion_results.push(SearchResult {
-                        id: format!(
-                            "fusion_{}",
-                            content_key.chars().take(10).collect::<String>()
-                        ),
-                        content: group[0].content.clone(),
-                        score: (avg_score + boost).min(1.0),
-                        result_type: ResultType::Hybrid,
-                        entities: all_entities.into_iter().cloned().collect(),
-                        source_chunks: all_chunks.into_iter().cloned().collect(),
-                    });
+            let mut entities: Vec<String> = Vec::new();
+            let mut chunks: Vec<String> = Vec::new();
+            for &i in &group {
+                for e in &all_results[i].entities {
+                    if !entities.contains(e) {
+                        entities.push(e.clone());
+                    }
+                }
+                for c in &all_results[i].source_chunks {
+                    if !chunks.contains(c) {
+                        chunks.push(c.clone());
+                    }
                 }
             }
+            let winner = &mut all_results[best];
+            winner.score = winner.score.max((avg_score + boost).min(1.0));
+            winner.entities = entities;
+            winner.source_chunks = chunks;
         }
-
-        Ok(fusion_results)
     }
 
     /// Adaptive ranking and deduplication based on query analysis
@@ -1013,15 +1429,13 @@ impl RetrievalSystem {
                 _ => {},
             }
 
-            // Boost results that contain key entities
-            for entity in &analysis.key_entities {
-                if result
-                    .entities
-                    .iter()
-                    .any(|e| e.eq_ignore_ascii_case(entity))
-                {
-                    result.score *= 1.1;
-                }
+            // Boost results that contain a key entity (once, so the score stays bounded)
+            if analysis
+                .key_entities
+                .iter()
+                .any(|key| result.entities.iter().any(|e| e.eq_ignore_ascii_case(key)))
+            {
+                result.score *= 1.1;
             }
         }
 
@@ -1140,15 +1554,24 @@ impl RetrievalSystem {
         let mut results = Vec::new();
         let mut entity_scores: HashMap<String, f32> = HashMap::new();
 
-        // Calculate centrality-like scores for entities
-        for entity in graph.entities() {
-            let neighbors = graph.get_neighbors(&entity.id);
-            let centrality_score = neighbors.len() as f32 * 0.1;
+        // Degree centrality normalized by the max degree (0..1): a small secondary term,
+        // so query similarity decides the ranking and scores stay bounded by 1.0.
+        let degrees: Vec<(&crate::core::Entity, usize)> = graph
+            .entities()
+            .map(|e| (e, graph.get_neighbors(&e.id).len()))
+            .collect();
+        let max_degree = degrees.iter().map(|(_, d)| *d).max().unwrap_or(0).max(1) as f32;
+
+        for (entity, degree) in degrees {
+            let centrality_score = degree as f32 / max_degree;
 
             // Combine with embedding similarity
             if let Some(embedding) = &entity.embedding {
                 let similarity = VectorUtils::cosine_similarity(query_embedding, embedding);
-                entity_scores.insert(entity.id.to_string(), centrality_score + similarity);
+                entity_scores.insert(
+                    entity.id.to_string(),
+                    similarity * 0.8 + centrality_score * 0.2,
+                );
             }
         }
 
@@ -1163,7 +1586,7 @@ impl RetrievalSystem {
                 for mention in entity.mentions.iter().take(2) {
                     if let Some(chunk) = graph.chunks().find(|c| c.id == mention.chunk_id) {
                         let chunk_excerpt = if chunk.content.len() > 200 {
-                            format!("{}...", &chunk.content[..200])
+                            format!("{}...", truncate_utf8(&chunk.content, 200))
                         } else {
                             chunk.content.clone()
                         };
@@ -1229,7 +1652,9 @@ impl RetrievalSystem {
 
     /// Create content signature for deduplication
     fn create_content_signature(&self, content: &str) -> String {
-        // Simple signature based on first 50 characters and length
+        // Simple signature based on first 50 characters and length. Trimmed so the same
+        // chunk surfaced by two strategies with different trailing whitespace dedups.
+        let content = content.trim();
         let prefix = Self::safe_truncate(content, 50);
         format!(
             "{}_{}",
@@ -1319,13 +1744,58 @@ impl RetrievalSystem {
     }
 
     /// Simple stop word detection (English)
+    /// Split lowercase text into unicode alphanumeric words.
+    fn alnum_words(text: &str) -> Vec<String> {
+        text.split(|c: char| !c.is_alphanumeric())
+            .filter(|w| !w.is_empty())
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// Entities named in the query. A query word (>= 3 chars, not a stop word) must equal
+    /// one of the entity name's words, or the full entity name must appear in the query.
+    /// Names are deduplicated case-insensitively (the graph holds many same-named entities).
+    fn detect_key_entities(&self, query_lower: &str, graph: &KnowledgeGraph) -> Vec<String> {
+        let all_words = Self::alnum_words(query_lower);
+        let content_words: HashSet<&str> = all_words
+            .iter()
+            .filter(|w| w.chars().count() >= 3 && !self.is_stop_word(w))
+            .map(String::as_str)
+            .collect();
+        let padded_query = format!(" {} ", all_words.join(" "));
+
+        let mut seen = HashSet::new();
+        let mut key_entities = Vec::new();
+        for entity in graph.entities() {
+            let name_lower = entity.name.to_lowercase();
+            if seen.contains(&name_lower) {
+                continue;
+            }
+            let name_words = Self::alnum_words(&name_lower);
+            let matches = name_words
+                .iter()
+                .any(|w| content_words.contains(w.as_str()))
+                || (name_lower.chars().count() >= 3
+                    && padded_query.contains(&format!(" {} ", name_words.join(" "))));
+            if matches {
+                seen.insert(name_lower);
+                key_entities.push(entity.name.clone());
+            }
+        }
+        key_entities
+    }
+
     fn is_stop_word(&self, word: &str) -> bool {
         const STOP_WORDS: &[&str] = &[
             "the", "be", "to", "of", "and", "a", "in", "that", "have", "i", "it", "for", "not",
             "on", "with", "he", "as", "you", "do", "at", "this", "but", "his", "by", "from",
             "they", "we", "say", "her", "she", "or", "an", "will", "my", "one", "all", "would",
             "there", "their", "what", "so", "up", "out", "if", "about", "who", "get", "which",
-            "go", "me",
+            "go", "me", // Italian
+            "chi", "che", "cosa", "come", "dove", "quando", "perché", "perche", "quale", "quali",
+            "il", "lo", "la", "gli", "le", "un", "una", "uno", "del", "della", "dei", "delle",
+            "di", "da", "in", "con", "su", "per", "tra", "fra", "non", "sono", "era", "è", "ha",
+            "hanno", "suo", "sua", "loro", "questo", "quello", "anche", "ma", "se", "poi", "mai",
         ];
         STOP_WORDS.contains(&word)
     }
@@ -1359,7 +1829,7 @@ impl RetrievalSystem {
         query: &str,
         max_results: usize,
     ) -> Result<Vec<SearchResult>> {
-        let query_embedding = self.embedding_generator.generate_embedding(query);
+        let query_embedding = self.embed_query_text_async(query).await?;
         let similar_vectors = self
             .vector_store
             .search(&query_embedding, max_results)
@@ -1522,18 +1992,349 @@ mod tests {
     use crate::{config::Config, core::KnowledgeGraph};
 
     #[test]
-    fn test_query_placeholder() {
-        let config = Config::default();
-        let retrieval = RetrievalSystem::new(&config).unwrap();
-
-        let results = retrieval.query("test query");
-        assert!(results.is_ok());
-
-        let results = results.unwrap();
-        assert!(!results.is_empty());
-        assert!(results[0].contains("test query"));
+    fn fusion_boosts_best_result_without_appending_a_copy() {
+        let text = "Geppetto intaglia un pezzo di legno che parla.";
+        let mk = |id: &str, ty: ResultType, score: f32, ents: &[&str]| SearchResult {
+            id: id.to_string(),
+            content: text.to_string(),
+            score,
+            result_type: ty,
+            entities: ents.iter().map(|s| s.to_string()).collect(),
+            source_chunks: vec![format!("c-{id}")],
+        };
+        let mut results = vec![
+            mk("chunk_1", ResultType::Chunk, 0.6, &[]),
+            mk("person_pinocchio", ResultType::Entity, 0.4, &["Pinocchio"]),
+            SearchResult {
+                content: "altro testo".to_string(),
+                ..mk("chunk_2", ResultType::Chunk, 0.5, &[])
+            },
+        ];
+        RetrievalSystem::cross_strategy_fusion(&mut results);
+        assert_eq!(results.len(), 3, "no copy appended");
+        assert!(results.iter().all(|r| !r.id.starts_with("fusion_")));
+        let copies = results.iter().filter(|r| r.content == text).count();
+        assert_eq!(copies, 2, "originals untouched");
+        let best = results.iter().find(|r| r.id == "chunk_1").unwrap();
+        assert!(best.score > 0.6, "agreement boost applied: {}", best.score);
+        assert!(best.entities.contains(&"Pinocchio".to_string()));
+        assert_eq!(best.source_chunks.len(), 2);
+        let other = results.iter().find(|r| r.id == "chunk_2").unwrap();
+        assert!((other.score - 0.5).abs() < 1e-6);
     }
 
+    #[test]
+    fn dedup_ignores_trailing_whitespace_differences() {
+        let retrieval = RetrievalSystem::new(&Config::default()).unwrap();
+        let graph = KnowledgeGraph::new();
+        let analysis = retrieval
+            .analyze_query("Chi minaccia Don Abbondio?", &graph)
+            .unwrap();
+        let result = |id: &str, content: &str, score: f32| SearchResult {
+            id: id.to_string(),
+            content: content.to_string(),
+            score,
+            result_type: ResultType::Chunk,
+            entities: Vec::new(),
+            source_chunks: vec!["chunk-1".to_string()],
+        };
+        let results = retrieval
+            .adaptive_rank_and_deduplicate(
+                vec![
+                    result("a", "Don Rodrigo minaccia Don Abbondio.\n", 0.9),
+                    result("b", "Don Rodrigo minaccia Don Abbondio.\n ", 0.5),
+                ],
+                &analysis,
+            )
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, "a");
+    }
+
+    fn graph_with_entities(names: &[&str]) -> KnowledgeGraph {
+        let mut graph = KnowledgeGraph::new();
+        for (i, name) in names.iter().enumerate() {
+            graph
+                .add_entity(crate::core::Entity::new(
+                    crate::core::EntityId::new(format!("e{i}")),
+                    name.to_string(),
+                    "PERSON".to_string(),
+                    0.9,
+                ))
+                .unwrap();
+        }
+        graph
+    }
+
+    #[test]
+    fn italian_query_detects_only_the_named_entity() {
+        let retrieval = RetrievalSystem::new(&Config::default()).unwrap();
+        let graph = graph_with_entities(&["Pinocchio", "Geppetto", "Medoro"]);
+        let analysis = retrieval.analyze_query("Chi è Medoro?", &graph).unwrap();
+        assert_eq!(analysis.key_entities, vec!["Medoro".to_string()]);
+    }
+
+    #[test]
+    fn short_and_stop_words_do_not_match_entities() {
+        let retrieval = RetrievalSystem::new(&Config::default()).unwrap();
+        let graph = graph_with_entities(&["Pinocchio", "Geppetto", "Di"]);
+        let analysis = retrieval
+            .analyze_query("Che cosa è successo a Geppetto e di chi?", &graph)
+            .unwrap();
+        assert_eq!(analysis.key_entities, vec!["Geppetto".to_string()]);
+    }
+
+    #[test]
+    fn multiword_entity_name_matches_by_word_or_full_name() {
+        let retrieval = RetrievalSystem::new(&Config::default()).unwrap();
+        let graph = graph_with_entities(&["Fata Turchina", "Mastro Ciliegia"]);
+        let analysis = retrieval
+            .analyze_query("Chi è la Fata Turchina?", &graph)
+            .unwrap();
+        assert_eq!(analysis.key_entities, vec!["Fata Turchina".to_string()]);
+    }
+
+    #[test]
+    fn same_named_entities_yield_one_key_entity() {
+        let retrieval = RetrievalSystem::new(&Config::default()).unwrap();
+        let graph = graph_with_entities(&["Medoro", "Medoro", "medoro", "Geppetto"]);
+        let analysis = retrieval.analyze_query("Chi è Medoro?", &graph).unwrap();
+        assert_eq!(analysis.key_entities, vec!["Medoro".to_string()]);
+    }
+
+    #[test]
+    fn key_entity_boost_is_applied_once_regardless_of_duplicates() {
+        let retrieval = RetrievalSystem::new(&Config::default()).unwrap();
+        let analysis = QueryAnalysis {
+            query_type: QueryType::Factual,
+            key_entities: vec!["Medoro".to_string(); 10],
+            concepts: Vec::new(),
+            intent: QueryIntent::Detailed,
+            complexity_score: 0.1,
+        };
+        let results = retrieval
+            .adaptive_rank_and_deduplicate(
+                vec![SearchResult {
+                    id: "r".to_string(),
+                    content: "Medoro compare nel capitolo".to_string(),
+                    score: 1.0,
+                    result_type: ResultType::Chunk,
+                    entities: vec!["Medoro".to_string()],
+                    source_chunks: vec!["c".to_string()],
+                }],
+                &analysis,
+            )
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        assert!(results[0].score <= 1.1 + 1e-6, "score {}", results[0].score);
+        assert!(results[0].score > 1.0);
+    }
+
+    #[test]
+    fn community_search_ranks_by_similarity_with_bounded_centrality() {
+        let retrieval = RetrievalSystem::new(&Config::default()).unwrap();
+        let mut graph = KnowledgeGraph::new();
+        let mut add = |id: &str, name: &str, emb: Vec<f32>| {
+            let mut e = crate::core::Entity::new(
+                crate::core::EntityId::new(id.to_string()),
+                name.to_string(),
+                "PERSON".to_string(),
+                0.9,
+            );
+            e.embedding = Some(emb);
+            graph.add_entity(e).unwrap();
+        };
+        // Hub: low similarity to the query [1, 0]; target: high similarity.
+        add("hub", "Pinocchio", vec![0.1, 1.0]);
+        add("target", "Medoro", vec![1.0, 0.1]);
+        for i in 0..250 {
+            add(&format!("n{i}"), &format!("N{i}"), vec![0.0, 1.0]);
+        }
+        let mut link = |a: &str, b: &str| {
+            graph
+                .add_relationship(crate::core::Relationship::new(
+                    crate::core::EntityId::new(a.to_string()),
+                    crate::core::EntityId::new(b.to_string()),
+                    "KNOWS".to_string(),
+                    0.9,
+                ))
+                .unwrap();
+        };
+        for i in 0..250 {
+            link("hub", &format!("n{i}"));
+        }
+        link("hub", "target");
+
+        let results = retrieval
+            .community_based_search(&[1.0, 0.0], &graph)
+            .unwrap();
+        assert_eq!(results[0].id, "target");
+        assert!(results.iter().all(|r| r.score <= 1.0), "{results:?}");
+    }
+    #[test]
+    fn test_sync_query_uses_explicit_graph() {
+        let config = Config::default();
+        let retrieval = RetrievalSystem::new(&config).unwrap();
+        let mut graph = KnowledgeGraph::new();
+        graph
+            .add_chunk(crate::core::TextChunk::new(
+                crate::core::ChunkId::new("chunk-1".to_string()),
+                crate::core::DocumentId::new("doc-1".to_string()),
+                "Maria directs the Prisma project".to_string(),
+                0,
+                34,
+            ))
+            .unwrap();
+
+        let results = retrieval.query("Who directs Prisma?", &graph).unwrap();
+        assert_eq!(results.len(), 1);
+        assert!(results[0].contains("Maria directs the Prisma project"));
+    }
+
+    #[test]
+    fn excerpt_truncation_preserves_utf8_boundaries() {
+        let text = format!("{} end", "文".repeat(100));
+        let excerpt = truncate_utf8(&text, 200);
+        assert!(excerpt.is_char_boundary(excerpt.len()));
+        assert_eq!(excerpt.len(), 198);
+    }
+
+    #[test]
+    fn rrf_fuses_two_rankings_and_rewards_agreement() {
+        let dense = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        let keyword = vec!["c".to_string(), "d".to_string()];
+        let fused = reciprocal_rank_fusion(&[dense, keyword], 60.0);
+
+        let score = |id: &str| {
+            fused
+                .iter()
+                .find(|(i, _)| i == id)
+                .map(|(_, s)| *s)
+                .unwrap()
+        };
+        assert!((score("a") - 1.0 / 61.0).abs() < 1e-6);
+        assert!((score("c") - (1.0 / 63.0 + 1.0 / 61.0)).abs() < 1e-6);
+        assert!((score("d") - 1.0 / 62.0).abs() < 1e-6);
+        // "c" is found by both rankings, so it outranks everything else
+        assert_eq!(fused[0].0, "c");
+        assert_eq!(fused.len(), 4);
+        // sorted by descending score
+        assert!(fused.windows(2).all(|w| w[0].1 >= w[1].1));
+    }
+
+    #[test]
+    fn rrf_of_empty_rankings_is_empty() {
+        assert!(reciprocal_rank_fusion(&[], 60.0).is_empty());
+        assert!(reciprocal_rank_fusion(&[Vec::new()], 60.0).is_empty());
+    }
+
+    #[cfg(feature = "async")]
+    fn chunk_with_embedding(id: &str, text: &str, embedding: Vec<f32>) -> crate::core::TextChunk {
+        let mut chunk = crate::core::TextChunk::new(
+            ChunkId::new(id.to_string()),
+            crate::core::DocumentId::new("doc".to_string()),
+            text.to_string(),
+            0,
+            text.len(),
+        );
+        chunk.embedding = Some(embedding);
+        chunk
+    }
+
+    /// 30 decoy chunks that dense search prefers, plus one chunk with a rare exact
+    /// keyword whose embedding is orthogonal to the query.
+    #[cfg(feature = "async")]
+    async fn keyword_only_fixture() -> (RetrievalSystem, KnowledgeGraph) {
+        let retrieval = RetrievalSystem::new(&Config::default()).unwrap();
+        let mut graph = KnowledgeGraph::new();
+        for i in 0..30 {
+            graph
+                .add_chunk(chunk_with_embedding(
+                    &format!("decoy-{i}"),
+                    &format!("Pinocchio cammina per la strada con Geppetto, episodio {i}"),
+                    vec![1.0, 0.01 * i as f32],
+                ))
+                .unwrap();
+        }
+        graph
+            .add_chunk(chunk_with_embedding(
+                "target",
+                "Seppellirono le monete nel Campo dei miracoli, vicino alla città",
+                vec![0.0, 1.0],
+            ))
+            .unwrap();
+        retrieval.index_graph(&graph).await.unwrap();
+        (retrieval, graph)
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn keyword_match_missed_by_dense_ranking_reaches_results() {
+        let (mut retrieval, graph) = keyword_only_fixture().await;
+        let query = "Come si chiama il Campo dei miracoli?";
+        let analysis = retrieval.analyze_query(query, &graph).unwrap();
+        let results = retrieval
+            .execute_adaptive_retrieval(query, &[1.0, 0.0], &graph, &HashMap::new(), &analysis)
+            .await
+            .unwrap();
+        assert!(
+            results
+                .iter()
+                .any(|r| r.result_type == ResultType::Chunk && r.id == "target"),
+            "keyword-only chunk missing from {:?}",
+            results.iter().map(|r| &r.id).collect::<Vec<_>>()
+        );
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn fused_chunk_candidates_merge_dense_and_keyword_beyond_top_k() {
+        let (mut retrieval, graph) = keyword_only_fixture().await;
+        let ids = retrieval
+            .fused_chunk_candidates(
+                "Come si chiama il Campo dei miracoli?",
+                &[1.0, 0.0],
+                &graph,
+                20,
+            )
+            .await
+            .unwrap();
+        assert_eq!(ids.len(), 20);
+        assert!(ids.iter().any(|i| i == "target"), "{ids:?}");
+        assert!(ids.iter().all(|i| !i.starts_with("chunk:")));
+        let mut unique = ids.clone();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(unique.len(), ids.len());
+        assert!(retrieval
+            .fused_chunk_candidates("x", &[1.0, 0.0], &graph, 0)
+            .await
+            .unwrap()
+            .is_empty());
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn bm25_index_rebuilds_when_graph_chunks_change() {
+        let (mut retrieval, mut graph) = keyword_only_fixture().await;
+        assert_eq!(
+            retrieval.keyword_chunk_ranking("pescatore verde", &graph, 5),
+            Vec::<String>::new()
+        );
+        graph
+            .add_chunk(chunk_with_embedding(
+                "late",
+                "Il pescatore verde sta per friggere Pinocchio",
+                vec![0.0, 1.0],
+            ))
+            .unwrap();
+        assert_eq!(
+            retrieval.keyword_chunk_ranking("pescatore verde", &graph, 5),
+            vec!["late".to_string()]
+        );
+    }
+
+    #[cfg(feature = "async")]
     #[tokio::test]
     async fn test_graph_indexing() {
         let config = Config::default();

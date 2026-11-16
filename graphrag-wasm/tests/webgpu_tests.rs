@@ -151,12 +151,10 @@ async fn test_concurrent_webgpu_detection() {
     }
 
     // All should return the same value
-    if let Some((_, first_result)) = results.first() {
-        if let Ok(first_value) = first_result {
-            for (_, result) in results.iter().skip(1) {
-                if let Ok(value) = result {
-                    assert_eq!(first_value, value);
-                }
+    if let Some((_, Ok(first_value))) = results.first() {
+        for (_, result) in results.iter().skip(1) {
+            if let Ok(value) = result {
+                assert_eq!(first_value, value);
             }
         }
     }

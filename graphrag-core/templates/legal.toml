@@ -22,10 +22,11 @@ top_k_results = 15
 similarity_threshold = 0.8  # Higher threshold for legal precision
 
 [embeddings]
-backend = "ollama"  # Use LLM embeddings for better semantic understanding
+backend = "llama_cpp"  # Use LLM embeddings for better semantic understanding
 dimension = 384
-model = "nomic-embed-text"
-fallback_to_hash = true
+model = "multilingual-e5-small"
+api_endpoint = "http://127.0.0.1:8081/v1/embeddings"
+fallback_to_hash = false
 batch_size = 16
 
 [entities]
@@ -67,12 +68,12 @@ enabled = true
 num_threads = 0
 min_batch_size = 8
 
-[ollama]
+[llm]
 enabled = true
-host = "localhost"
-port = 11434
-chat_model = "llama3.2:3b"  # Or "mistral" for better legal reasoning
-embedding_model = "nomic-embed-text"
+base_url = "http://127.0.0.1:8080/v1"
+embedding_base_url = "http://127.0.0.1:8081/v1"
+chat_model = "qwen3.5-9b"
+embedding_model = "multilingual-e5-small"
 timeout_seconds = 60  # Longer timeout for complex extractions
 enable_caching = true
 

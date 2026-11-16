@@ -8,63 +8,163 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # Override .cargo/config.toml's `-C target-cpu=native`. GitHub runners are
-  # heterogeneous and `native` can emit instructions (e.g. AVX-512) the actual
-  # silicon traps, crashing rustc/proc-macros with SIGILL (seen building ollama-rs).
-  # Must be RUSTFLAGS (highest precedence) and NON-EMPTY: an empty value is ignored
-  # and CARGO_BUILD_RUSTFLAGS doesn't fully replace the config flag. x86-64-v2 is a
-  # portable baseline supported by every GitHub runner.
-  RUSTFLAGS: "-C target-cpu=x86-64-v2"
 
 jobs:
-  clippy:
-    name: clippy (workspace)
+  fmt:
+    name: rustfmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+
+  test:
+    name: tests and doctests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.88.0
+      - uses: Swatinem/rust-cache@v2
+      # These tests use in-memory fixtures and do not contact external services.
+      - run: cargo test -p graphrag-core --lib --locked
+      - run: cargo test -p graphrag-core --tests --locked
+      - run: cargo test -p graphrag-core --doc --locked
+      - run: cargo test -p graphrag --lib --no-default-features --features memory-storage,basic-retrieval --locked
+      - run: cargo test -p graphrag --lib --locked
+      - run: cargo test -p graphrag-cli --lib --locked
+      - run: cargo test -p graphrag-server --no-default-features --locked
+      - run: cargo test -p graphrag-server --locked
+      - run: cargo test -p graphrag --features cli --test quickstart_cli --locked
+      - run: cargo check --manifest-path examples/quickstart-sync/Cargo.toml --locked
+      - run: cargo check --manifest-path examples/quickstart-async/Cargo.toml --locked
+      - run: cargo test -p graphrag --doc --locked
+      - run: cargo test -p graphrag-cli --doc --locked
+      - run: cargo test -p graphrag-server --doc --no-default-features --locked
+      - run: cargo test -p graphrag-server --doc --locked
+
+  clippy:
+    name: clippy (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: core-minimal
+            command: cargo clippy -p graphrag-core --no-default-features --features memory-storage,basic-retrieval --all-targets --locked -- -D warnings
+          - name: core-default
+            command: cargo clippy -p graphrag-core --all-targets --locked -- -D warnings
+          - name: facade-minimal
+            command: cargo clippy -p graphrag --no-default-features --features memory-storage,basic-retrieval --all-targets --locked -- -D warnings
+          - name: facade-default
+            command: cargo clippy -p graphrag --all-targets --locked -- -D warnings
+          - name: facade-sync-with-async
+            command: cargo clippy -p graphrag --no-default-features --features async,memory-storage,basic-retrieval --all-targets --locked -- -D warnings
+          - name: cli
+            command: cargo clippy -p graphrag-cli --all-targets --locked -- -D warnings
+          - name: server
+            command: cargo clippy -p graphrag-server --no-default-features --all-targets --locked -- -D warnings
+          - name: server-default
+            command: cargo clippy -p graphrag-server --all-targets --locked -- -D warnings
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.88.0
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      # Default features only: --all-features pulls qdrant/onnx/candle which need
-      # system libs not present on a bare runner.
-      - run: cargo clippy --workspace --lib -- -D warnings
+      - run: ${{ matrix.command }}
 
-  test:
-    name: test (graphrag-core)
+  feature-matrix:
+    name: feature and dependency matrix
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.88.0
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test -p graphrag-core --lib
+      - run: cargo check -p graphrag-core --no-default-features --features memory-storage,basic-retrieval --locked
+      - run: cargo check -p graphrag-core --locked
+      - run: cargo check -p graphrag --no-default-features --features memory-storage,basic-retrieval --locked
+      - run: cargo check -p graphrag --locked
+      - run: cargo check -p graphrag --no-default-features --features async,memory-storage,basic-retrieval --locked
+      - run: cargo check -p graphrag-cli --locked
+      - run: cargo check -p graphrag-server --no-default-features --locked
+      - run: cargo check -p graphrag-server --locked
+      - name: verify minimal facade dependency graph
+        shell: bash
+        run: |
+          tree="$(cargo tree -p graphrag --no-default-features --features memory-storage,basic-retrieval --edges normal --locked)"
+          if grep -E '(^| )tokio v|(^| )graphrag-cli v|(^| )color-eyre v' <<<"$tree"; then
+            echo "minimal facade unexpectedly includes CLI/runtime dependencies" >&2
+            exit 1
+          fi
+
+  wasm:
+    name: wasm32 package check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check -p graphrag-wasm --target wasm32-unknown-unknown --locked
 
   msrv:
-    name: MSRV 1.85
+    name: MSRV 1.88.0
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      # Verified floor: `jsonfixer` uses edition 2024 → rustc >= 1.85.
-      - uses: dtolnay/rust-toolchain@1.85.0
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo build -p graphrag-core -p graphrag-cli
-
-  deny:
-    name: cargo-deny
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: EmbarkStudios/cargo-deny-action@v2
-
-  # Non-blocking: the repo is not yet `cargo fmt` clean. Flip continue-on-error
-  # to false once a one-time `cargo fmt --all` has been applied.
-  fmt:
-    name: rustfmt (informational)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.88.0
         with:
-          components: rustfmt
-      - run: cargo fmt --all --check
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check -p graphrag-core --no-default-features --features memory-storage,basic-retrieval --locked
+      - run: cargo check -p graphrag --no-default-features --features memory-storage,basic-retrieval --locked
+      - run: cargo check -p graphrag-cli --locked
+      - run: cargo check -p graphrag-server --no-default-features --locked
+      - run: cargo check -p graphrag-wasm --target wasm32-unknown-unknown --locked
+
+  audit:
+    name: cargo-deny advisories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.88.0
+      - uses: Swatinem/rust-cache@v2
+      # Pin the audit tool itself; deny.toml contains narrowly scoped advisory
+      # exceptions with rationale rather than a wildcard suppression.
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --version 0.20.2 --locked
+      - run: cargo deny check advisories
+
+  packaging:
+    name: package metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.88.0
+      - uses: Swatinem/rust-cache@v2
+      - name: Verify package metadata
+        run: |
+          cargo metadata --format-version 1 --no-deps --locked > /tmp/graphrag-metadata.json
+          python3 - <<'PY'
+          import json
+          metadata = json.load(open('/tmp/graphrag-metadata.json', encoding='utf-8'))
+          packages = {p['name']: p for p in metadata['packages']}
+          expected = {'graphrag-core', 'graphrag', 'graphrag-cli', 'graphrag-server', 'graphrag-wasm'}
+          if set(packages) != expected:
+              raise SystemExit(f'package set mismatch: {sorted(packages)}')
+          for name, package in packages.items():
+              # Cargo normalizes rust-version = "1.88.0" to "1.88" in metadata.
+              if package['version'] != '0.3.0' or package.get('rust_version') != '1.88':
+                  raise SystemExit(f'{name}: expected version 0.3.0/rust 1.88, got {package["version"]}/{package.get("rust_version")}')
+          if packages['graphrag-server'].get('publish') != [] or packages['graphrag-wasm'].get('publish') != []:
+              raise SystemExit('server and wasm packages must remain publish=false')
+          PY
+      # Path dependencies are patched to the same checkout because 0.3.0 is
+      # not published yet; the packaged manifests still retain registry deps.
+      - run: cargo package -p graphrag-core --locked --allow-dirty --no-verify
+      - run: cargo package -p graphrag-cli --locked --allow-dirty --no-verify --config 'patch.crates-io.graphrag-core.path="graphrag-core"'
+      - run: cargo package -p graphrag --locked --allow-dirty --no-verify --config 'patch.crates-io.graphrag-core.path="graphrag-core"' --config 'patch.crates-io.graphrag-cli.path="graphrag-cli"'

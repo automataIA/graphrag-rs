@@ -1,7 +1,7 @@
 //! LazyGraphRAG Pipeline
 //!
 //! Complete end-to-end pipeline for LazyGraphRAG (Microsoft Research, 2025)
-//! that achieves 0.1% of full GraphRAG indexing cost and 700x cheaper query costs.
+//! that uses lightweight concept extraction without prior summarization.
 //!
 //! ## Key Features
 //!
@@ -44,7 +44,7 @@ use crate::lightrag::concept_graph::{
     ConceptExtractor, ConceptExtractorConfig, ConceptGraph, ConceptGraphBuilder,
 };
 use crate::lightrag::iterative_deepening::{IterativeDeepeningSearch, SearchConfig, SearchResults};
-use crate::lightrag::query_refinement::{QueryRefinementConfig, QueryRefiner};
+use crate::lightrag::query_refinement::QueryRefinementConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -90,7 +90,6 @@ pub struct LazyGraphRAGPipeline {
     graph_builder: ConceptGraphBuilder,
     concept_graph: Option<ConceptGraph>,
     bidirectional_index: Option<BidirectionalIndex>,
-    query_refiner: QueryRefiner,
     search_engine: IterativeDeepeningSearch,
     chunks: HashMap<ChunkId, TextChunk>,
     document_count: usize,
@@ -101,7 +100,6 @@ impl LazyGraphRAGPipeline {
     pub fn new(config: LazyPipelineConfig) -> Self {
         let concept_extractor = ConceptExtractor::with_config(config.concept_extraction.clone());
         let graph_builder = ConceptGraphBuilder::new();
-        let query_refiner = QueryRefiner::new(config.query_refinement.clone());
         let search_engine = IterativeDeepeningSearch::new(config.search.clone());
 
         Self {
@@ -110,16 +108,10 @@ impl LazyGraphRAGPipeline {
             graph_builder,
             concept_graph: None,
             bidirectional_index: None,
-            query_refiner,
             search_engine,
             chunks: HashMap::new(),
             document_count: 0,
         }
-    }
-
-    /// Create with default configuration
-    pub fn default() -> Self {
-        Self::new(LazyPipelineConfig::default())
     }
 
     /// Index a document by extracting concepts and building the graph
@@ -137,8 +129,7 @@ impl LazyGraphRAGPipeline {
             // Add to graph builder
             self.graph_builder
                 .add_document_concepts(document_id, concepts.clone());
-            self.graph_builder
-                .add_chunk_concepts(&chunk.id.as_str(), concepts);
+            self.graph_builder.add_chunk_concepts(&chunk.id.0, concepts);
 
             // Store chunk
             self.chunks.insert(chunk.id.clone(), chunk);
@@ -153,7 +144,7 @@ impl LazyGraphRAGPipeline {
     /// Must be called after indexing all documents and before querying.
     pub fn build_graph(&mut self) {
         // Build concept graph
-        let graph_builder = std::mem::replace(&mut self.graph_builder, ConceptGraphBuilder::new());
+        let graph_builder = std::mem::take(&mut self.graph_builder);
         self.concept_graph = Some(graph_builder.build());
 
         // Build bidirectional index if enabled
@@ -167,7 +158,7 @@ impl LazyGraphRAGPipeline {
                         crate::core::EntityId::new(self.normalize_concept(concept_text));
 
                     for chunk_id in &concept.chunk_ids {
-                        index.add_mapping(&entity_id, chunk_id);
+                        index.add_mapping(&entity_id, &crate::core::ChunkId::new(chunk_id.clone()));
                     }
                 }
             }
@@ -313,17 +304,9 @@ pub struct GraphStatistics {
     pub relation_count: usize,
 }
 
-impl SearchResults {
-    pub(crate) fn new(query: String) -> Self {
-        Self {
-            query,
-            depth_reached: 0,
-            total_chunks: 0,
-            total_concepts_explored: 0,
-            depth_results: Vec::new(),
-            chunk_ids: Vec::new(),
-            stop_reason: crate::lightrag::iterative_deepening::StopReason::MaxDepthReached,
-        }
+impl Default for LazyGraphRAGPipeline {
+    fn default() -> Self {
+        Self::new(LazyPipelineConfig::default())
     }
 }
 

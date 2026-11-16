@@ -1,0 +1,225 @@
+{
+  "schema_version": "graphrag-0.3",
+  "corpus_id": "graphrag-03-local-v1",
+  "chunking": {
+    "strategy": "versioned one-source-per-chunk",
+    "chunk_size": 512,
+    "chunk_overlap": 0
+  },
+  "documents": [
+    {
+      "id": "doc-ada",
+      "title": "Ada Lovelace and the Analytical Engine",
+      "language": "en",
+      "content": "Ada Lovelace wrote the first published algorithm for Charles Babbage's Analytical Engine. Her notes were published in London in 1843.",
+      "chunk_id": "chunk-ada"
+    },
+    {
+      "id": "doc-babbage",
+      "title": "Charles Babbage",
+      "language": "en",
+      "content": "Charles Babbage designed the Analytical Engine and collaborated with Ada Lovelace on its mathematical program.",
+      "chunk_id": "chunk-babbage"
+    },
+    {
+      "id": "doc-graphrag",
+      "title": "GraphRAG retrieval",
+      "language": "en",
+      "content": "GraphRAG combines lexical retrieval, vector retrieval, and graph relationships to ground answers in source chunks.",
+      "chunk_id": "chunk-graphrag"
+    },
+    {
+      "id": "doc-bm25",
+      "title": "Ricerca lessicale",
+      "language": "it",
+      "content": "BM25 assegna punteggi alle parole condivise tra domanda e documento; la ricerca lessicale non usa embedding.",
+      "chunk_id": "chunk-bm25"
+    },
+    {
+      "id": "doc-e5",
+      "title": "Multilingual E5",
+      "language": "en",
+      "content": "The multilingual-e5-small embedding model returns vectors with dimension 384 and accepts at most 512 tokens. Query text uses the query prefix.",
+      "chunk_id": "chunk-e5"
+    },
+    {
+      "id": "doc-ornith",
+      "title": "Ornith generation",
+      "language": "it",
+      "content": "Il generatore Ornith produce una risposta locale usando il contesto recuperato e può restituire token di prompt e completamento.",
+      "chunk_id": "chunk-ornith"
+    },
+    {
+      "id": "doc-roma",
+      "title": "Rete di Roma",
+      "language": "it",
+      "content": "Roma ospita il laboratorio GraphRAG; il laboratorio collabora con il gruppo di Londra per studiare grafi documentali.",
+      "chunk_id": "chunk-roma"
+    },
+    {
+      "id": "doc-climate",
+      "title": "Climate archive",
+      "language": "en",
+      "content": "The climate archive records rainfall and temperature observations from several coastal stations.",
+      "chunk_id": "chunk-climate"
+    }
+  ],
+  "entities": [
+    {
+      "id": "entity-ada",
+      "name": "Ada Lovelace",
+      "type": "person",
+      "mentions": [
+        "chunk-ada",
+        "chunk-babbage"
+      ]
+    },
+    {
+      "id": "entity-babbage",
+      "name": "Charles Babbage",
+      "type": "person",
+      "mentions": [
+        "chunk-babbage",
+        "chunk-ada"
+      ]
+    },
+    {
+      "id": "entity-engine",
+      "name": "Analytical Engine",
+      "type": "project",
+      "mentions": [
+        "chunk-ada",
+        "chunk-babbage"
+      ]
+    },
+    {
+      "id": "entity-graphrag",
+      "name": "GraphRAG",
+      "type": "project",
+      "mentions": [
+        "chunk-graphrag",
+        "chunk-bm25",
+        "chunk-roma"
+      ]
+    },
+    {
+      "id": "entity-bm25",
+      "name": "BM25",
+      "type": "method",
+      "mentions": [
+        "chunk-bm25",
+        "chunk-graphrag"
+      ]
+    },
+    {
+      "id": "entity-e5",
+      "name": "multilingual-e5-small",
+      "type": "model",
+      "mentions": [
+        "chunk-e5"
+      ]
+    },
+    {
+      "id": "entity-ornith",
+      "name": "Ornith",
+      "type": "model",
+      "mentions": [
+        "chunk-ornith"
+      ]
+    },
+    {
+      "id": "entity-roma",
+      "name": "Roma",
+      "type": "place",
+      "mentions": [
+        "chunk-roma"
+      ]
+    },
+    {
+      "id": "entity-london",
+      "name": "London",
+      "type": "place",
+      "mentions": [
+        "chunk-ada",
+        "chunk-roma"
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "source": "entity-ada",
+      "target": "entity-engine",
+      "type": "wrote_algorithm_for",
+      "context": [
+        "chunk-ada"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "source": "entity-babbage",
+      "target": "entity-engine",
+      "type": "designed",
+      "context": [
+        "chunk-babbage"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "source": "entity-ada",
+      "target": "entity-babbage",
+      "type": "collaborated_with",
+      "context": [
+        "chunk-babbage"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "source": "entity-graphrag",
+      "target": "entity-bm25",
+      "type": "uses",
+      "context": [
+        "chunk-graphrag",
+        "chunk-bm25"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "source": "entity-graphrag",
+      "target": "entity-e5",
+      "type": "uses",
+      "context": [
+        "chunk-graphrag",
+        "chunk-e5"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "source": "entity-graphrag",
+      "target": "entity-ornith",
+      "type": "generates_with",
+      "context": [
+        "chunk-graphrag",
+        "chunk-ornith"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "source": "entity-roma",
+      "target": "entity-graphrag",
+      "type": "hosts",
+      "context": [
+        "chunk-roma"
+      ],
+      "confidence": 1.0
+    },
+    {
+      "source": "entity-roma",
+      "target": "entity-london",
+      "type": "collaborates_with",
+      "context": [
+        "chunk-roma"
+      ],
+      "confidence": 1.0
+    }
+  ]
+}

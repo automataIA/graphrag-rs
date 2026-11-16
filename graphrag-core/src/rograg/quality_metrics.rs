@@ -110,8 +110,8 @@ impl Default for QualityMetricsConfig {
 ///
 /// # Example
 /// ```
-/// use graphrag_core::rograg::QualityMetrics;
-/// use graphrag_core::rograg::QualityMetricsConfig;
+/// use graphrag_core::rograg::quality_metrics::QualityMetrics;
+/// use graphrag_core::rograg::quality_metrics::QualityMetricsConfig;
 ///
 /// // Create with default configuration
 /// let metrics = QualityMetrics::new();
@@ -185,7 +185,7 @@ pub struct QueryMetrics {
 ///
 /// # Example
 /// ```
-/// # use graphrag_core::rograg::ResponseQuality;
+/// # use graphrag_core::rograg::quality_metrics::ResponseQuality;
 /// let quality = ResponseQuality {
 ///     accuracy_score: 0.85,
 ///     completeness_score: 0.78,
@@ -276,7 +276,7 @@ pub enum RetrievalStrategy {
 ///
 /// # Example
 /// ```
-/// # use graphrag_core::rograg::PerformanceStatistics;
+/// # use graphrag_core::rograg::quality_metrics::PerformanceStatistics;
 /// let stats = PerformanceStatistics {
 ///     total_queries: 1000,
 ///     successful_decompositions: 950,
@@ -393,7 +393,7 @@ pub struct QualityBenchmarks {
 ///
 /// # Example
 /// ```
-/// # use graphrag_core::rograg::ConfidenceIntervals;
+/// # use graphrag_core::rograg::quality_metrics::ConfidenceIntervals;
 /// let intervals = ConfidenceIntervals {
 ///     accuracy_ci_95: (2.5, 8.3),  // Improvement between 2.5% and 8.3%
 ///     completeness_ci_95: (1.2, 6.7),
@@ -510,7 +510,7 @@ pub struct AlertThresholds {
 ///
 /// # Example
 /// ```
-/// # use graphrag_core::rograg::{QualityAlert, AlertType, AlertSeverity};
+/// # use graphrag_core::rograg::quality_metrics::{QualityAlert, AlertType, AlertSeverity};
 /// let alert = QualityAlert {
 ///     alert_type: AlertType::QualityDegradation,
 ///     severity: AlertSeverity::High,
@@ -636,8 +636,8 @@ pub enum AlertSeverity {
 ///
 /// # Example
 /// ```
-/// # use graphrag_core::rograg::ComparativeAnalysis;
-/// # use graphrag_core::rograg::{AggregatedMetrics, ImprovementPercentages, StatisticalSignificance};
+/// # use graphrag_core::rograg::quality_metrics::ComparativeAnalysis;
+/// # use graphrag_core::rograg::quality_metrics::{AggregatedMetrics, ImprovementPercentages, StatisticalSignificance};
 /// let analysis = ComparativeAnalysis {
 ///     rograg_metrics: AggregatedMetrics::default(),
 ///     baseline_metrics: AggregatedMetrics::default(),
@@ -760,7 +760,7 @@ pub struct AggregatedMetrics {
 ///
 /// # Example
 /// ```
-/// # use graphrag_core::rograg::ImprovementPercentages;
+/// # use graphrag_core::rograg::quality_metrics::ImprovementPercentages;
 /// let improvements = ImprovementPercentages {
 ///     accuracy_improvement: 15.2,      // 15.2% better accuracy
 ///     completeness_improvement: 12.8,  // 12.8% more complete
@@ -817,7 +817,7 @@ pub struct ImprovementPercentages {
 ///
 /// # Example
 /// ```
-/// # use graphrag_core::rograg::StatisticalSignificance;
+/// # use graphrag_core::rograg::quality_metrics::StatisticalSignificance;
 /// let significance = StatisticalSignificance {
 ///     p_value_accuracy: 0.02,      // Significant at 95% level
 ///     p_value_completeness: 0.03,

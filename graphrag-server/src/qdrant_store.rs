@@ -12,11 +12,13 @@
 //!
 //! ## Usage
 //!
-//! ```rust
-//! let store = QdrantStore::new("http://localhost:6334", "graphrag").await?;
-//! store.create_collection(384).await?;
-//! store.add_document("doc1", embedding, metadata).await?;
-//! let results = store.search(query_embedding, 10, None).await?;
+//! ```rust,no_run
+//! use graphrag_server::qdrant_store::QdrantStore;
+//!
+//! # async fn example() {
+//! let store = QdrantStore::new("http://localhost:6334", "graphrag").await.unwrap();
+//! store.create_collection(384).await.unwrap();
+//! # }
 //! ```
 
 use qdrant_client::{
@@ -127,10 +129,11 @@ impl QdrantStore {
 
     /// Check if collection exists
     pub async fn collection_exists(&self) -> Result<bool, QdrantError> {
-        match self.client.collection_info(&self.collection_name).await {
-            Ok(_) => Ok(true),
-            Err(_) => Ok(false),
-        }
+        // Connection errors propagate so callers can detect an unreachable Qdrant.
+        self.client
+            .collection_exists(self.collection_name.as_str())
+            .await
+            .map_err(|e| QdrantError::ConnectionError(e.to_string()))
     }
 
     /// Delete the collection
@@ -336,11 +339,9 @@ impl QdrantStore {
             .and_then(|c| c.points_count)
             .unwrap_or(0) as usize;
 
-        let vectors = info
-            .result
-            .as_ref()
-            .and_then(|c| c.vectors_count)
-            .unwrap_or(0) as usize;
+        // Recent Qdrant APIs expose the point count but no separate vector
+        // count. Each indexed point has one vector in this store.
+        let vectors = count;
 
         Ok((count, vectors))
     }

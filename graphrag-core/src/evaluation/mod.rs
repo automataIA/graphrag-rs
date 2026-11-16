@@ -17,7 +17,14 @@
 //! - Relationship Extraction: Relationship validity and connectivity
 //! - Graph Construction: Overall graph structure validation
 
+pub mod golden;
 pub mod pipeline_validation;
+
+pub use golden::{
+    evaluate_benchmark, AnswerMetrics, AnswerRecord, BenchmarkAggregate, BenchmarkEvaluationInput,
+    BenchmarkEvaluationReport, BenchmarkQuestion, BenchmarkQuestionScore, EvaluationError,
+    ProviderTokenUsage, RetrievalMetrics, RetrievalRecord,
+};
 
 pub use pipeline_validation::{
     DocumentProcessingValidator, EntityExtractionValidator, GraphConstructionValidator,
@@ -263,7 +270,7 @@ impl LLMEvaluation {
     /// Parse LLM response JSON into structured evaluation
     pub fn from_json(json_str: &str) -> Result<Self> {
         serde_json::from_str(json_str).map_err(|e| GraphRAGError::Serialization {
-            message: format!("Failed to parse LLM evaluation JSON: {}", e),
+            message: format!("Failed to parse LLM evaluation JSON: {e}"),
         })
     }
 
@@ -543,8 +550,7 @@ mod tests {
         // Check for numeric score (format may vary: 4.40 or 4.4)
         assert!(
             report.contains("4.4") || report.contains("4.40"),
-            "Expected score 4.4 not found in report: {}",
-            report
+            "Expected score 4.4 not found in report: {report}"
         );
         assert!(
             report.contains("5/5") && report.contains("Relevance"),

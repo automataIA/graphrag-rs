@@ -6,10 +6,8 @@ use crate::core::{GraphRAGError, Result};
 use std::fs;
 use std::path::Path;
 
-#[cfg(feature = "toml-support")]
 use toml;
 
-#[cfg(feature = "serde_json")]
 use serde_json;
 
 /// Configuration file format
@@ -19,6 +17,8 @@ pub enum ConfigFormat {
     Toml,
     /// JSON configuration format
     Json,
+    /// JSON5 configuration format
+    Json5,
     /// YAML configuration format
     Yaml,
 }
@@ -30,6 +30,7 @@ impl ConfigFormat {
         match path.extension().and_then(|s| s.to_str()) {
             Some("toml") => ConfigFormat::Toml,
             Some("json") => ConfigFormat::Json,
+            Some("json5") => ConfigFormat::Json5,
             Some("yaml" | "yml") => ConfigFormat::Yaml,
             _ => ConfigFormat::Toml, // Default
         }
@@ -48,43 +49,226 @@ pub fn load_config(path: &str) -> Result<Config> {
 
     let content = fs::read_to_string(path)?;
 
+    load_config_from_str(&content, format)
+}
+
+/// Parse and validate configuration content through the same dispatcher used
+/// for files. This is used by in-memory ingress points such as the server API.
+pub fn load_config_from_str(content: &str, format: ConfigFormat) -> Result<Config> {
     match format {
-        ConfigFormat::Toml => load_toml_config(&content),
-        ConfigFormat::Json => load_json_config(&content),
-        ConfigFormat::Yaml => load_yaml_config(&content),
+        ConfigFormat::Toml => load_toml_config(content),
+        ConfigFormat::Json => load_json_config(content),
+        ConfigFormat::Json5 => load_json5_config(content),
+        ConfigFormat::Yaml => load_yaml_config(content),
     }
 }
 
-#[cfg(feature = "toml-support")]
 fn load_toml_config(content: &str) -> Result<Config> {
-    let raw_config: RawConfig = toml::from_str(content).map_err(|e| GraphRAGError::Config {
+    let value: toml::Value = toml::from_str(content).map_err(|e| GraphRAGError::Config {
         message: format!("Failed to parse TOML config: {e}"),
     })?;
 
-    Ok(convert_raw_config(raw_config))
+    let json_value = serde_json::to_value(&value).map_err(|e| GraphRAGError::Config {
+        message: format!("Failed to convert TOML config: {e}"),
+    })?;
+    match classify_config(&json_value)? {
+        ConfigKind::Runtime => return checked_runtime_config(Config::from_toml_str(content)?),
+        ConfigKind::Set => {
+            let set_config: crate::config::SetConfig =
+                value.try_into().map_err(|e| GraphRAGError::Config {
+                    message: format!("Failed to parse SetConfig: {e}"),
+                })?;
+            return checked_set_config(set_config);
+        },
+        ConfigKind::Legacy => {},
+    }
+
+    let raw_config: RawConfig = value.try_into().map_err(|e| GraphRAGError::Config {
+        message: format!("Failed to parse legacy TOML config: {e}"),
+    })?;
+
+    convert_raw_config(raw_config)
 }
 
-#[cfg(not(feature = "toml-support"))]
-fn load_toml_config(_content: &str) -> Result<Config> {
-    Err(GraphRAGError::Config {
-        message: "TOML support not enabled. Enable 'toml-support' feature.".to_string(),
-    })
-}
-
-#[cfg(feature = "serde_json")]
 fn load_json_config(content: &str) -> Result<Config> {
-    let raw_config: RawConfig =
+    let value: serde_json::Value =
         serde_json::from_str(content).map_err(|e| GraphRAGError::Config {
             message: format!("Failed to parse JSON config: {e}"),
         })?;
 
-    Ok(convert_raw_config(raw_config))
+    match classify_config(&value)? {
+        ConfigKind::Runtime => checked_runtime_config(Config::from_json_str(content)?),
+        ConfigKind::Set => {
+            let set_config: crate::config::SetConfig =
+                serde_json::from_value(value).map_err(|e| GraphRAGError::Config {
+                    message: format!("Failed to parse SetConfig: {e}"),
+                })?;
+            checked_set_config(set_config)
+        },
+        ConfigKind::Legacy => {
+            let raw_config: RawConfig =
+                serde_json::from_value(value).map_err(|e| GraphRAGError::Config {
+                    message: format!("Failed to parse legacy JSON config: {e}"),
+                })?;
+            convert_raw_config(raw_config)
+        },
+    }
 }
 
-#[cfg(not(feature = "serde_json"))]
-fn load_json_config(_content: &str) -> Result<Config> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ConfigKind {
+    Runtime,
+    Set,
+    Legacy,
+}
+
+fn classify_config(value: &serde_json::Value) -> Result<ConfigKind> {
+    let object = value.as_object().ok_or_else(|| GraphRAGError::Config {
+        message: "Configuration root must be an object".to_string(),
+    })?;
+    // Runtime and legacy schemas ignore unknown sections; fail loudly instead
+    // of silently dropping a pre-llama.cpp `ollama` block.
+    if object.contains_key("ollama") {
+        return Err(GraphRAGError::Config {
+            message: "the `ollama` section was removed: rename it to `llm` and use `base_url` \
+                      (e.g. \"http://127.0.0.1:8080/v1\") instead of `host`/`port`"
+                .to_string(),
+        });
+    }
+    // These keys exist only on the runtime Config surface.  Several other
+    // fields (output_dir, llm, storage, experimental, and entity_extraction)
+    // are intentionally shared with SetConfig and must not make a valid
+    // template look like an ambiguous mixture.
+    let runtime_keys = [
+        "max_entities_per_chunk",
+        "similarity_threshold",
+        "approach",
+        "embeddings",
+        "graph",
+        "text",
+        "entities",
+        "retrieval",
+        "parallel",
+        "enhancements",
+        "summarization",
+        "zero_cost_approach",
+        "advanced_features",
+        "suppress_progress_bars",
+        "chunk_size",
+        "chunk_overlap",
+        "top_k_results",
+    ];
+    let set_keys = [
+        "mode",
+        "semantic",
+        "algorithmic",
+        "hybrid",
+        "general",
+        "pipeline",
+        "models",
+        "performance",
+    ];
+    let legacy_keys = [
+        "system",
+        "features",
+        "text_processing",
+        "graph_construction",
+        "vector_processing",
+        "query_processing",
+        "adaptive_retrieval",
+        "ranking_policies",
+        "reranking",
+        "generation",
+        "async_processing",
+        "function_calling",
+        "monitoring",
+        "parallel_processing",
+        "logging",
+    ];
+    let has_runtime = runtime_keys.iter().any(|key| object.contains_key(*key));
+    let has_set = set_keys.iter().any(|key| object.contains_key(*key));
+    let has_legacy = legacy_keys.iter().any(|key| object.contains_key(*key));
+    // A number of older SetConfig templates put extension sections such as
+    // `embeddings`, `retrieval`, or `summarization` at the root. Those names
+    // overlap with Config, but their shape is different. Only reject a mixed
+    // document when the overlapping section actually has canonical runtime
+    // fields; otherwise the explicit SetConfig discriminator wins.
+    let canonical_runtime_conflict = ["text", "graph", "entities", "parallel"]
+        .iter()
+        .any(|key| object.contains_key(*key))
+        || object
+            .get("retrieval")
+            .and_then(serde_json::Value::as_object)
+            .is_some_and(|section| {
+                section.contains_key("top_k") || section.contains_key("search_algorithm")
+            })
+        || object.contains_key("chunk_size")
+        || object.contains_key("chunk_overlap")
+        || object.contains_key("top_k_results");
+    match (has_runtime, has_set, has_legacy) {
+        (true, true, _) if canonical_runtime_conflict => Err(GraphRAGError::Config {
+            message: "Configuration mixes runtime and SetConfig sections".to_string(),
+        }),
+        (true, true, _) => Ok(ConfigKind::Set),
+        (true, false, true) => Err(GraphRAGError::Config {
+            message: "Configuration mixes runtime and legacy sections".to_string(),
+        }),
+        (true, false, false) => Ok(ConfigKind::Runtime),
+        (false, true, _) => Ok(ConfigKind::Set),
+        (false, false, true) => Ok(ConfigKind::Legacy),
+        // Shared fields (for example output_dir or llm) have a natural
+        // runtime meaning and are therefore canonical runtime documents when
+        // no SetConfig discriminator is present. SetConfig documents must
+        // carry an explicit discriminator such as `mode` or `general`.
+        (false, false, false) => Ok(ConfigKind::Runtime),
+    }
+}
+
+fn checked_set_config(set_config: crate::config::SetConfig) -> Result<Config> {
+    let validation = crate::config::Validatable::validate(&set_config);
+    if !validation.is_valid {
+        return Err(GraphRAGError::Config {
+            message: validation.errors.join("; "),
+        });
+    }
+    set_config.to_graphrag_config()
+}
+
+fn checked_runtime_config(config: Config) -> Result<Config> {
+    let validation = crate::config::Validatable::validate(&config);
+    if validation.is_valid {
+        Ok(config)
+    } else {
+        Err(GraphRAGError::Config {
+            message: validation.errors.join("; "),
+        })
+    }
+}
+
+#[cfg(feature = "json5-support")]
+fn load_json5_config(content: &str) -> Result<Config> {
+    let value: serde_json::Value = json5::from_str(content).map_err(|e| GraphRAGError::Config {
+        message: format!("Failed to parse JSON5 config: {e}"),
+    })?;
+    match classify_config(&value)? {
+        ConfigKind::Runtime => checked_runtime_config(Config::from_json5_str(content)?),
+        ConfigKind::Set => {
+            let set_config: crate::config::SetConfig =
+                json5::from_str(content).map_err(|e| GraphRAGError::Config {
+                    message: format!("Failed to parse SetConfig: {e}"),
+                })?;
+            checked_set_config(set_config)
+        },
+        ConfigKind::Legacy => Err(GraphRAGError::Config {
+            message: "Legacy JSON5 configuration is not supported".to_string(),
+        }),
+    }
+}
+
+#[cfg(not(feature = "json5-support"))]
+fn load_json5_config(_content: &str) -> Result<Config> {
     Err(GraphRAGError::Config {
-        message: "JSON support not enabled. Enable 'serde_json' feature.".to_string(),
+        message: "JSON5 support not enabled".to_string(),
     })
 }
 
@@ -95,7 +279,7 @@ fn load_yaml_config(content: &str) -> Result<Config> {
             message: format!("Failed to parse YAML config: {e}"),
         })?;
 
-    Ok(convert_raw_config(raw_config))
+    convert_raw_config(raw_config)
 }
 
 #[cfg(not(feature = "yaml-support"))]
@@ -132,7 +316,7 @@ struct RawConfig {
     #[serde(default)]
     generation: RawGenerationConfig,
     #[serde(default)]
-    ollama: RawOllamaConfig,
+    llm: RawLlmConfig,
     #[serde(default)]
     async_processing: RawAsyncProcessingConfig,
     #[serde(default)]
@@ -345,18 +529,18 @@ struct RawTemplatesConfig {
 }
 
 #[derive(Debug, serde::Deserialize, Default)]
-struct RawOllamaConfig {
+struct RawLlmConfig {
     enabled: Option<bool>,
     base_url: Option<String>,
     model_name: Option<String>,
     embedding_model: Option<String>,
     timeout_seconds: Option<u64>,
     max_retries: Option<u32>,
-    generation: Option<RawOllamaGenerationConfig>,
+    generation: Option<RawLlmGenerationConfig>,
 }
 
 #[derive(Debug, serde::Deserialize, Default)]
-struct RawOllamaGenerationConfig {
+struct RawLlmGenerationConfig {
     temperature: Option<f64>,
     top_p: Option<f64>,
     max_tokens: Option<u32>,
@@ -455,7 +639,7 @@ struct RawExperimentalConfig {
 }
 
 /// Convert raw configuration to the main Config struct
-fn convert_raw_config(raw: RawConfig) -> Config {
+fn convert_raw_config(raw: RawConfig) -> Result<Config> {
     let mut config = Config::default();
 
     // Apply feature toggles
@@ -463,9 +647,16 @@ fn convert_raw_config(raw: RawConfig) -> Config {
         // Apply to appropriate config sections
     }
 
+    if let Some(output_dir) = raw.system.output_dir {
+        config.output_dir = output_dir;
+    }
+
     // Apply text processing configuration
-    if let Some(_chunk_size) = raw.text_processing.chunk_size {
-        // config.text.chunk_size = chunk_size;
+    if let Some(chunk_size) = raw.text_processing.chunk_size {
+        config.text.chunk_size = chunk_size;
+    }
+    if let Some(chunk_overlap) = raw.text_processing.chunk_overlap {
+        config.text.chunk_overlap = chunk_overlap;
     }
 
     // Apply entity extraction configuration
@@ -500,7 +691,7 @@ fn convert_raw_config(raw: RawConfig) -> Config {
         };
     }
 
-    config
+    checked_runtime_config(config)
 }
 
 /// Save configuration to file
@@ -510,88 +701,32 @@ pub fn save_config(config: &Config, path: &str) -> Result<()> {
     match format {
         ConfigFormat::Toml => save_toml_config(config, path),
         ConfigFormat::Json => save_json_config(config, path),
+        ConfigFormat::Json5 => save_json_config(config, path),
         ConfigFormat::Yaml => save_yaml_config(config, path),
     }
 }
 
-#[cfg(feature = "toml-support")]
-fn save_toml_config(_config: &Config, path: &str) -> Result<()> {
-    let content = r#"[text]
-chunk_size = 1000
-chunk_overlap = 200
-
-[entities]
-min_confidence = 0.7
-entity_types = ["PERSON", "ORG", "LOCATION"]
-
-[graph]
-max_connections = 10
-similarity_threshold = 0.8
-
-[parallel]
-enabled = true
-num_threads = 0
-"#;
+fn save_toml_config(config: &Config, path: &str) -> Result<()> {
+    let content = toml::to_string_pretty(config).map_err(|e| GraphRAGError::Config {
+        message: format!("Failed to serialize TOML config: {e}"),
+    })?;
     fs::write(path, content)?;
     Ok(())
 }
 
-#[cfg(not(feature = "toml-support"))]
-fn save_toml_config(_config: &Config, _path: &str) -> Result<()> {
-    Err(GraphRAGError::Config {
-        message: "TOML support not enabled. Enable 'toml-support' feature.".to_string(),
-    })
-}
-
-#[cfg(feature = "serde_json")]
-fn save_json_config(_config: &Config, path: &str) -> Result<()> {
-    let content = r#"{
-  "text": {
-    "chunk_size": 1000,
-    "chunk_overlap": 200
-  },
-  "entities": {
-    "min_confidence": 0.7,
-    "entity_types": ["PERSON", "ORG", "LOCATION"]
-  },
-  "graph": {
-    "max_connections": 10,
-    "similarity_threshold": 0.8
-  },
-  "parallel": {
-    "enabled": true,
-    "num_threads": 0
-  }
-}"#;
+fn save_json_config(config: &Config, path: &str) -> Result<()> {
+    let content = serde_json::to_string_pretty(config).map_err(|e| GraphRAGError::Config {
+        message: format!("Failed to serialize JSON config: {e}"),
+    })?;
     fs::write(path, content)?;
     Ok(())
-}
-
-#[cfg(not(feature = "serde_json"))]
-fn save_json_config(_config: &Config, _path: &str) -> Result<()> {
-    Err(GraphRAGError::Config {
-        message: "JSON support not enabled.".to_string(),
-    })
 }
 
 #[cfg(feature = "yaml-support")]
-fn save_yaml_config(_config: &Config, path: &str) -> Result<()> {
-    let content = r#"text:
-  chunk_size: 1000
-  chunk_overlap: 200
-
-entities:
-  min_confidence: 0.7
-  entity_types: ["PERSON", "ORG", "LOCATION"]
-
-graph:
-  max_connections: 10
-  similarity_threshold: 0.8
-
-parallel:
-  enabled: true
-  num_threads: 0
-"#;
+fn save_yaml_config(config: &Config, path: &str) -> Result<()> {
+    let content = serde_yaml::to_string(config).map_err(|e| GraphRAGError::Config {
+        message: format!("Failed to serialize YAML config: {e}"),
+    })?;
     fs::write(path, content)?;
     Ok(())
 }
@@ -631,5 +766,24 @@ mod tests {
             ConfigFormat::from_extension("config"),
             ConfigFormat::Toml
         ));
+    }
+
+    #[test]
+    fn legacy_ollama_section_is_rejected_for_every_schema() {
+        let runtime = "chunk_size = 500\n[embeddings]\ndimension = 384\n[ollama]\nenabled = true\n";
+        let legacy = "[system]\n[ollama]\nenabled = true\n";
+        for content in [runtime, legacy] {
+            let err = load_config_from_str(content, ConfigFormat::Toml).unwrap_err();
+            assert!(
+                err.to_string().contains("`ollama` section was removed"),
+                "{err}"
+            );
+        }
+        let err = load_config_from_str(r#"{"system": {}, "ollama": {}}"#, ConfigFormat::Json)
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("`ollama` section was removed"),
+            "{err}"
+        );
     }
 }

@@ -1,10 +1,10 @@
 //! LLM-based critique of generated answers.
 //!
-//! Scores an answer for quality/faithfulness via an `OllamaClient`, returning an
+//! Scores an answer for quality/faithfulness via an `LlmClient`, returning an
 //! `EvaluationResult` that callers can use to accept, retry, or refine a response.
 
 use crate::core::{GraphRAGError, Result};
-use crate::ollama::OllamaClient;
+use crate::llm::LlmClient;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -21,12 +21,12 @@ pub struct EvaluationResult {
 
 /// Critic for evaluating RAG answers
 pub struct Critic {
-    client: Arc<OllamaClient>,
+    client: Arc<LlmClient>,
 }
 
 impl Critic {
-    /// Create a new critic with an Ollama client
-    pub fn new(client: Arc<OllamaClient>) -> Self {
+    /// Create a new critic with an LLM client
+    pub fn new(client: Arc<LlmClient>) -> Self {
         Self { client }
     }
 
@@ -44,13 +44,13 @@ impl Critic {
         let prompt = format!(
             "You are a strict critic for a RAG system. Your job is to evaluate the quality of a generated answer based on the provided query and retrieved context.\n\
             \n\
-            Query: '{}'\n\
+            Query: '{query}'\n\
             \n\
             Retrieved Context:\n\
-            {}\n\
+            {context_text}\n\
             \n\
             Generated Answer:\n\
-            {}\n\
+            {answer}\n\
             \n\
             Evaluate the answer on: \n\
             1. Grounding: Is every claim in the answer supported by the context? \n\
@@ -62,8 +62,7 @@ impl Critic {
             - 'grounded': boolean \n\
             - 'feedback': string explanation \n\
             \n\
-            JSON Response:",
-            query, context_text, answer
+            JSON Response:"
         );
 
         let response_text = self.client.generate(&prompt).await?;
@@ -78,10 +77,7 @@ impl Critic {
 
         let evaluation: EvaluationResult =
             serde_json::from_str(cleaned_json).map_err(|e| GraphRAGError::Generation {
-                message: format!(
-                    "Failed to parse critic response: {}. Text: {}",
-                    e, cleaned_json
-                ),
+                message: format!("Failed to parse critic response: {e}. Text: {cleaned_json}"),
             })?;
 
         Ok(evaluation)
@@ -97,17 +93,16 @@ impl Critic {
         let prompt = format!(
             "You are an expert editor refining an answer for a RAG system.\n\
             \n\
-            Original Query: '{}'\n\
+            Original Query: '{query}'\n\
             \n\
             Current Answer:\n\
-            {}\n\
+            {current_answer}\n\
             \n\
             Critique/Feedback:\n\
-            {}\n\
+            {feedback}\n\
             \n\
             Please rewrite the answer to address the critique while maintaining accuracy and relevance. \n\
-            Return ONLY the refined answer text.",
-            query, current_answer, feedback
+            Return ONLY the refined answer text."
         );
 
         self.client.generate(&prompt).await

@@ -16,7 +16,7 @@
 
 use crate::{
     core::{Entity, EntityId, GraphRAGError, Relationship, Result, TextChunk},
-    ollama::OllamaClient,
+    llm::LlmClient,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -86,9 +86,9 @@ impl AtomicFact {
 ///
 /// Uses LLM to decompose text into self-contained factual statements.
 pub struct AtomicFactExtractor {
-    /// Ollama client for LLM-based extraction
+    /// LLM client for LLM-based extraction
     #[cfg_attr(not(feature = "async"), allow(dead_code))]
-    ollama_client: OllamaClient,
+    llm_client: LlmClient,
     /// Maximum tokens per fact (default: 400)
     max_fact_tokens: usize,
 }
@@ -98,10 +98,10 @@ impl AtomicFactExtractor {
     ///
     /// # Arguments
     ///
-    /// * `ollama_client` - Ollama client for LLM calls
-    pub fn new(ollama_client: OllamaClient) -> Self {
+    /// * `llm_client` - LLM client for LLM calls
+    pub fn new(llm_client: LlmClient) -> Self {
         Self {
-            ollama_client,
+            llm_client,
             max_fact_tokens: 400,
         }
     }
@@ -129,6 +129,7 @@ impl AtomicFactExtractor {
 - In the format: (Subject, Predicate, Object, TemporalMarker, Confidence)
 - TemporalMarker should capture time expressions like "in 1876", "during summer", "380 BC" (or null if none)
 - Confidence should be 0.0-1.0
+- Copy subject and object names exactly as written in the text, in the same language (never translate them)
 
 Respond ONLY with valid JSON array:
 [
@@ -153,7 +154,7 @@ JSON:"#,
             "Extracting atomic facts from chunk"
         );
 
-        match self.ollama_client.generate(&prompt).await {
+        match self.llm_client.generate(&prompt).await {
             Ok(response) => {
                 // Extract JSON from response
                 let json_str = response.trim();
@@ -223,7 +224,7 @@ JSON:"#,
                 );
 
                 Err(GraphRAGError::EntityExtraction {
-                    message: format!("Atomic fact extraction failed: {}", e),
+                    message: format!("Atomic fact extraction failed: {e}"),
                 })
             },
         }

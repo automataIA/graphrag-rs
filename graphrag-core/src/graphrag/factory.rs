@@ -5,7 +5,7 @@ use crate::core::{
     ChunkId, Document, DocumentId, Entity, EntityId, GraphRAGError, KnowledgeGraph, Relationship,
     Result, TextChunk,
 };
-use crate::{critic, ollama, persistence, query, retrieval};
+use crate::{critic, llm, persistence, query, retrieval};
 
 #[cfg(feature = "parallel-processing")]
 #[allow(unused_imports)]
@@ -35,11 +35,11 @@ impl GraphRAG {
     /// ```
     #[cfg(feature = "json5-support")]
     pub fn from_json5_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
-        use crate::config::json5_loader::load_json5_config;
-        use crate::config::setconfig::SetConfig;
-
-        let set_config = load_json5_config::<SetConfig, _>(path)?;
-        let config = set_config.to_graphrag_config();
+        let path = path.as_ref();
+        let path_str = path.to_str().ok_or_else(|| GraphRAGError::Config {
+            message: format!("Configuration path is not valid UTF-8: {}", path.display()),
+        })?;
+        let config = crate::config::loader::load_config(path_str)?;
         Self::new(config)
     }
 
@@ -66,10 +66,11 @@ impl GraphRAG {
     /// # }
     /// ```
     pub fn from_config_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
-        use crate::config::setconfig::SetConfig;
-
-        let set_config = SetConfig::from_file(path)?;
-        let config = set_config.to_graphrag_config();
+        let path = path.as_ref();
+        let path_str = path.to_str().ok_or_else(|| GraphRAGError::Config {
+            message: format!("Configuration path is not valid UTF-8: {}", path.display()),
+        })?;
+        let config = crate::config::loader::load_config(path_str)?;
         Self::new(config)
     }
 
@@ -128,6 +129,20 @@ impl GraphRAG {
         Ok(graphrag)
     }
 
+    /// Synchronous counterpart of [`GraphRAG::from_config_and_document`].
+    pub fn from_config_and_document_sync<P1, P2>(config_path: P1, document_path: P2) -> Result<Self>
+    where
+        P1: AsRef<std::path::Path>,
+        P2: AsRef<std::path::Path>,
+    {
+        let mut graphrag = Self::from_config_file(config_path)?;
+        graphrag.initialize()?;
+        let content = std::fs::read_to_string(document_path).map_err(GraphRAGError::Io)?;
+        graphrag.add_document_from_text(&content)?;
+        graphrag.build_graph_sync()?;
+        Ok(graphrag)
+    }
+
     /// Quick start: Create a ready-to-query GraphRAG instance from text in one call
     ///
     /// This is the simplest way to get started with GraphRAG. It:
@@ -152,7 +167,7 @@ impl GraphRAG {
     ///
     /// # Configuration
     /// - With `hierarchical-config` feature: Uses layered config (defaults → user → project → env)
-    /// - Without: Uses sensible defaults optimized for local Ollama setup
+    /// - Without: Uses sensible defaults optimized for a local llama.cpp setup
     #[cfg(feature = "async")]
     pub async fn quick_start(text: &str) -> Result<Self> {
         // Load config (hierarchical if available, otherwise defaults)
@@ -163,6 +178,16 @@ impl GraphRAG {
         graphrag.add_document_from_text(text)?;
         graphrag.build_graph().await?;
 
+        Ok(graphrag)
+    }
+
+    /// Create and build a local GraphRAG instance synchronously.
+    pub fn quick_start_sync(text: &str) -> Result<Self> {
+        let config = Config::load()?;
+        let mut graphrag = Self::new(config)?;
+        graphrag.initialize()?;
+        graphrag.add_document_from_text(text)?;
+        graphrag.build_graph_sync()?;
         Ok(graphrag)
     }
 
@@ -180,7 +205,7 @@ impl GraphRAG {
     ///     "Your document text",
     ///     |builder| builder
     ///         .with_chunk_size(256)
-    ///         .with_ollama_enabled(true)
+    ///         .with_llm_enabled(true)
     /// ).await?;
     /// # Ok(())
     /// # }
@@ -196,6 +221,19 @@ impl GraphRAG {
         graphrag.add_document_from_text(text)?;
         graphrag.build_graph().await?;
 
+        Ok(graphrag)
+    }
+
+    /// Synchronous counterpart of [`GraphRAG::quick_start_with_config`].
+    pub fn quick_start_with_config_sync<F>(text: &str, configure: F) -> Result<Self>
+    where
+        F: FnOnce(crate::builder::GraphRAGBuilder) -> crate::builder::GraphRAGBuilder,
+    {
+        let builder = configure(Self::builder());
+        let mut graphrag = builder.build()?;
+        graphrag.initialize()?;
+        graphrag.add_document_from_text(text)?;
+        graphrag.build_graph_sync()?;
         Ok(graphrag)
     }
 }

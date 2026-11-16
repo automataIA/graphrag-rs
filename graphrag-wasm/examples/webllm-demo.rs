@@ -1,3 +1,5 @@
+#![allow(clippy::main_recursion)]
+
 //! WebLLM Integration Example
 //!
 //! Demonstrates GPU-accelerated LLM inference in the browser using WebLLM.
@@ -152,7 +154,7 @@ pub async fn example_rag_workflow() -> Result<String, JsValue> {
 
     let messages = vec![
         ChatMessage::system("You are a helpful assistant. Answer based on the provided context."),
-        ChatMessage::user(&format!(
+        ChatMessage::user(format!(
             "Context:\n{}\n\nQuestion: What technologies are being used?\n\nAnswer:",
             search_results
         )),

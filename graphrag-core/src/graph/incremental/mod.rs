@@ -116,7 +116,6 @@ mod tests {
     }
 
     #[cfg(feature = "incremental")]
-    #[cfg(feature = "incremental")]
     #[test]
     fn test_batch_processor_creation() {
         let processor = BatchProcessor::new(100, Duration::from_millis(500), 10);

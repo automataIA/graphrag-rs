@@ -8,10 +8,11 @@
 //! cargo run --example embeddings_from_config --features "ureq,huggingface-hub"
 //! ```
 use graphrag_core::embeddings::config::EmbeddingProviderConfig;
-use graphrag_core::embeddings::EmbeddingProvider;
 
 #[cfg(feature = "ureq")]
 use graphrag_core::embeddings::api_providers::HttpEmbeddingProvider;
+#[cfg(any(feature = "huggingface-hub", feature = "ureq"))]
+use graphrag_core::embeddings::EmbeddingProvider;
 
 #[cfg(feature = "huggingface-hub")]
 use graphrag_core::embeddings::huggingface::HuggingFaceEmbeddings;
@@ -33,7 +34,7 @@ async fn main() -> graphrag_core::core::error::Result<()> {
             cfg
         },
         Err(e) => {
-            println!("   ⚠️  Failed to load config: {}", e);
+            println!("   ⚠️  Failed to load config: {e}");
             println!("   Using default configuration instead\n");
             EmbeddingProviderConfig::default()
         },
@@ -125,12 +126,12 @@ async fn main() -> graphrag_core::core::error::Result<()> {
 
     println!("\n3️⃣  Example configurations:");
     for (name, example_config) in EmbeddingProviderConfig::examples() {
-        println!("\n   📌 {}", name);
+        println!("\n   📌 {name}");
         println!("      Provider: {}", example_config.provider);
         println!("      Model: {}", example_config.model);
         println!("      Batch size: {}", example_config.batch_size);
         if let Some(dims) = example_config.dimensions {
-            println!("      Dimensions: {}", dims);
+            println!("      Dimensions: {dims}");
         }
     }
 
@@ -175,8 +176,8 @@ async fn main() -> graphrag_core::core::error::Result<()> {
 
     for (filename, config) in examples_to_generate {
         match config.to_toml_file(filename) {
-            Ok(_) => println!("   ✅ Generated {}", filename),
-            Err(e) => println!("   ⚠️  Failed to generate {}: {}", filename, e),
+            Ok(_) => println!("   ✅ Generated {filename}"),
+            Err(e) => println!("   ⚠️  Failed to generate {filename}: {e}"),
         }
     }
 

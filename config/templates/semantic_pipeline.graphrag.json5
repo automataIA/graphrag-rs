@@ -27,7 +27,7 @@
     "entity_extraction": {
       "use_gleaning": true,
       "max_gleaning_rounds": 3,
-      "llm_model": "llama3.1:8b",
+      "llm_model": "qwen3.5-9b",
       "llm_temperature": 0.1,
       "llm_max_tokens": 1500,
       "confidence_threshold": 0.65,
@@ -92,21 +92,15 @@
       "calculate_confidence": true
     }
   },
-  "ollama": {
+  "llm": {
     "enabled": true,
-    "host": "http://localhost",
-    "port": 11434,
-    "chat_model": "llama3.1:8b",
-    "embedding_model": "nomic-embed-text",
+    "base_url": "http://127.0.0.1:8080/v1",
+    "embedding_base_url": "http://127.0.0.1:8081/v1",
+    "chat_model": "qwen3.5-9b",
+    "embedding_model": "multilingual-e5-small",
     "timeout_seconds": 60,
     "max_retries": 3,
     "fallback_to_hash": false,
-    "generation": {
-      "temperature": 0.2,
-      "top_p": 0.9,
-      "max_tokens": 1000,
-      "stream": false
-    }
   },
   "query_processing": {
     "enabled": true,

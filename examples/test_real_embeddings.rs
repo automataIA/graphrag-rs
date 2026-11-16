@@ -117,7 +117,7 @@ fn main() {
     println!("  ✓ Zero vector handling correct");
     println!("  ✓ Vector search ranks relevant results higher");
     println!("  ✓ All embeddings are L2 normalized");
-    println!("\n🚀 Real embeddings and vector search are production-ready!\n");
+    println!("\n🚀 Real embedding and vector-search example completed.\n");
 }
 
 /// Hash-based TF embedding implementation

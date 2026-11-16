@@ -21,8 +21,8 @@ mod vector_search;
 mod webllm;
 
 use components::chat_shell::{
-    build_ref_cards, build_subgraph, parse_answer_with_cites, AnswerSegment, ChatTurn, NodeKind,
-    RefCard, SubgraphData, SubgraphNode,
+    build_ref_cards, build_subgraph, keyword_rank, parse_answer_with_cites, AnswerSegment,
+    ChatTurn, NodeKind, RefCard, SubgraphData, SubgraphNode,
 };
 use entity_extractor::{extract_entities, extract_entities_simple, Entity, Relationship};
 use onnx_embedder::OnnxEmbedder;
@@ -444,6 +444,24 @@ fn App() -> impl IntoView {
                 },
                 Err(_) => Vec::new(),
             };
+            let (top, retrieval_kind) = if top.is_empty() {
+                let keyword_top = graphrag_instance.with_value(|gr_opt| {
+                    gr_opt
+                        .as_ref()
+                        .and_then(|gr| gr.knowledge_graph())
+                        .map(|g| {
+                            keyword_rank(
+                                g.chunks().map(|c| (c.id.0.as_str(), c.content.as_str())),
+                                &query_text,
+                                5,
+                            )
+                        })
+                        .unwrap_or_default()
+                });
+                (keyword_top, "keyword")
+            } else {
+                (top, "vector")
+            };
 
             // Build refs + subgraph
             let (refs, subg) = graphrag_instance.with_value(|gr_opt| {
@@ -508,7 +526,7 @@ fn App() -> impl IntoView {
 
             let segments: Vec<AnswerSegment> = parse_answer_with_cites(&answer_text, refs.len());
             let dt_ms = (js_sys::Date::now() - t_start) as u32;
-            let eyebrow = format!("hybrid retrieval · k={} · {}ms", top.len().max(1), dt_ms);
+            let eyebrow = format!("{retrieval_kind} retrieval · k={} · {}ms", top.len(), dt_ms);
             let turn = ChatTurn {
                 user_q: query_text,
                 eyebrow,
@@ -944,7 +962,7 @@ where
                 </button>
             </form>
             <div class="composer-hint">
-                <span>"retrieval: vector · k=5"</span>
+                <span>"retrieval: vector, keyword fallback · k=5"</span>
                 <span>"⌘K for commands"</span>
             </div>
         </div>

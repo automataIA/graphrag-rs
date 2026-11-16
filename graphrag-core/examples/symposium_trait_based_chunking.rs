@@ -15,7 +15,7 @@ use std::path::Path;
 use std::time::Instant;
 
 #[cfg(feature = "code-chunking")]
-use graphrag_core::text::RustCodeChunkingStrategy;
+use graphrag_core::{core::ChunkingStrategy, text::RustCodeChunkingStrategy};
 
 /// Metrics for comparing chunking strategies
 #[derive(Debug)]
@@ -73,7 +73,7 @@ impl ChunkingMetrics {
 }
 
 fn load_symposium_text() -> Result<String, Box<dyn std::error::Error>> {
-    let path = Path::new("docs-example/Symposium.txt");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../docs-example/Symposium.txt");
     let content = std::fs::read_to_string(path)?;
 
     // Remove BOM if present and normalize line endings
@@ -426,6 +426,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use graphrag_core::core::ChunkingStrategy;
 
     #[test]
     fn test_symposium_loading() {
@@ -442,7 +443,8 @@ mod tests {
         let document = create_document(content.to_string());
 
         // Test hierarchical chunking
-        let strategy = HierarchicalChunkingStrategy::new(50, 10, document.id.clone());
+        let strategy =
+            HierarchicalChunkingStrategy::new(50, 10, document.id.clone()).with_min_size(10);
         let chunks = strategy.chunk(&document.content);
         assert!(!chunks.is_empty());
 
@@ -470,7 +472,7 @@ mod tests {
 
         let metrics = ChunkingMetrics::from_chunks("Test", &chunks, 100);
         assert_eq!(metrics.num_chunks, 5);
-        assert_eq!(metrics.avg_chunk_size, 13.0); // "Test chunk X" = 12 chars + newline
+        assert_eq!(metrics.avg_chunk_size, 12.0); // "Test chunk X" = 12 bytes
         assert_eq!(metrics.processing_time_ms, 100);
     }
 }

@@ -3,7 +3,7 @@
 //! Allows users to:
 //! - Choose embedding provider (ONNX, OpenAI, Voyage, Cohere, etc.)
 //! - Select embedding model for that provider
-//! - Choose LLM provider (WebLLM, Ollama)
+//! - Choose LLM provider (WebLLM, llama.cpp)
 //! - Select LLM model for that provider
 //! - Cache settings in IndexedDB
 
@@ -48,7 +48,7 @@ pub struct UserSettings {
     // LLM settings
     pub llm_provider: LlmProviderType,
     pub llm_model: String,
-    pub llm_endpoint: Option<String>, // For Ollama
+    pub llm_endpoint: Option<String>, // For llama.cpp (llama-server base URL)
     pub llm_temperature: f32,
 
     // UI preferences
@@ -69,7 +69,7 @@ pub enum EmbeddingProviderType {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum LlmProviderType {
     WebLLM,     // In-browser WebLLM
-    OllamaHTTP, // Local Ollama server
+    LlamaCppHTTP, // Local llama-server (OpenAI-compatible)
 }
 
 impl Default for UserSettings {
@@ -82,7 +82,7 @@ impl Default for UserSettings {
             embedding_api_key: None,
             llm_provider: LlmProviderType::WebLLM,
             llm_model: "Phi-3-mini-4k-instruct-q4f16_1-MLC".to_string(),
-            llm_endpoint: Some("http://localhost:11434".to_string()),
+            llm_endpoint: Some(crate::llama_http::DEFAULT_LLAMA_BASE_URL.to_string()),
             // ✅ Reduced from 0.7 to 0.2 for factual accuracy
             // Lower temperature = more precise, less creative
             llm_temperature: 0.2,
@@ -171,20 +171,17 @@ impl LlmProviderType {
                 ),
                 ("gemma-2b-it-q4f16_1-MLC", "Gemma 2B (2.0GB, 45 tok/s)"),
             ],
-            LlmProviderType::OllamaHTTP => vec![
-                ("llama3.1:8b", "Llama 3.1 8B (Best balance)"),
-                ("qwen2.5:7b", "Qwen 2.5 7B (Reasoning)"),
-                ("mistral:7b", "Mistral 7B (Fast)"),
-                ("llama3.1:70b", "Llama 3.1 70B (Highest quality)"),
-                ("qwen2.5:32b", "Qwen 2.5 32B (Advanced)"),
-            ],
+            LlmProviderType::LlamaCppHTTP => vec![(
+                "qwen3.5-9b",
+                "Qwen3.5 9B (llama-server --alias qwen3.5-9b)",
+            )],
         }
     }
 
     pub fn display_name(&self) -> &'static str {
         match self {
             LlmProviderType::WebLLM => "WebLLM (In-Browser)",
-            LlmProviderType::OllamaHTTP => "Ollama (Local Server)",
+            LlmProviderType::LlamaCppHTTP => "llama.cpp (Local Server)",
         }
     }
 }
@@ -376,7 +373,7 @@ pub fn SettingsPanel() -> impl IntoView {
                                 let value = event_target_value(&ev);
                                 let provider = match value.as_str() {
                                     "WebLLM" => LlmProviderType::WebLLM,
-                                    "OllamaHTTP" => LlmProviderType::OllamaHTTP,
+                                    "LlamaCppHTTP" => LlmProviderType::LlamaCppHTTP,
                                     _ => LlmProviderType::WebLLM,
                                 };
                                 set_settings.update(|s| {
@@ -388,7 +385,7 @@ pub fn SettingsPanel() -> impl IntoView {
                         >
                             {move || {
                                 let current = settings.get().llm_provider;
-                                [LlmProviderType::WebLLM, LlmProviderType::OllamaHTTP]
+                                [LlmProviderType::WebLLM, LlmProviderType::LlamaCppHTTP]
                                     .into_iter()
                                     .map(|provider| {
                                         view! {
@@ -437,18 +434,18 @@ pub fn SettingsPanel() -> impl IntoView {
                         </select>
                     </div>
 
-                    // Ollama endpoint (if Ollama selected)
+                    // llama-server endpoint (if llama.cpp selected)
                     {move || {
-                        if settings.get().llm_provider == LlmProviderType::OllamaHTTP {
+                        if settings.get().llm_provider == LlmProviderType::LlamaCppHTTP {
                             view! {
                                 <div class="mb-4">
                                     <label class="block text-sm font-medium text-gray-700 mb-2">
-                                        "Ollama Endpoint"
+                                        "llama-server Base URL"
                                     </label>
                                     <input
                                         type="text"
                                         class="input input-bordered w-full"
-                                        placeholder="http://localhost:11434"
+                                        placeholder="http://127.0.0.1:8080/v1"
                                         value=move || settings.get().llm_endpoint.unwrap_or_default()
                                         on:input=move |ev| {
                                             let endpoint = event_target_value(&ev);
@@ -456,7 +453,7 @@ pub fn SettingsPanel() -> impl IntoView {
                                         }
                                     />
                                     <p class="text-sm text-gray-500 mt-1">
-                                        "Make sure Ollama is running with CORS enabled"
+                                        "Make sure llama-server is running (CORS is enabled by default)"
                                     </p>
                                 </div>
                             }.into_any()

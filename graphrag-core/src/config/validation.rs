@@ -2,8 +2,45 @@ use crate::config::{Config, SetConfig};
 use crate::{GraphRAGError, Result};
 use std::path::Path;
 
+/// Validate the endpoint shape shared by the optional HTTP providers.
+///
+/// This intentionally validates only the URL parts that are meaningful to a
+/// local provider (scheme, authority and an optional path). DNS resolution is
+/// left to the provider at initialization/request time.
+fn valid_http_endpoint(endpoint: &str) -> bool {
+    let Some(rest) = endpoint
+        .strip_prefix("http://")
+        .or_else(|| endpoint.strip_prefix("https://"))
+    else {
+        return false;
+    };
+    if rest.is_empty() || rest.chars().any(char::is_whitespace) {
+        return false;
+    }
+    let authority = rest
+        .split_once('/')
+        .map_or(rest, |(authority, _)| authority);
+    if authority.is_empty() || authority.chars().any(|ch| matches!(ch, '@' | '?' | '#')) {
+        return false;
+    }
+    if authority.starts_with('[') {
+        let Some(end) = authority.find(']') else {
+            return false;
+        };
+        if end <= 1 {
+            return false;
+        }
+        let port = &authority[end + 1..];
+        return port.is_empty() || (port.starts_with(':') && port[1..].parse::<u16>().is_ok());
+    }
+    match authority.split_once(':') {
+        Some((host, port)) => !host.is_empty() && port.parse::<u16>().is_ok(),
+        None => true,
+    }
+}
+
 /// Result of configuration validation
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ValidationResult {
     /// Whether the configuration is valid
     pub is_valid: bool,
@@ -13,6 +50,17 @@ pub struct ValidationResult {
     pub warnings: Vec<String>,
     /// List of optimization suggestions
     pub suggestions: Vec<String>,
+}
+
+impl Default for ValidationResult {
+    fn default() -> Self {
+        Self {
+            is_valid: true,
+            errors: Vec::new(),
+            warnings: Vec::new(),
+            suggestions: Vec::new(),
+        }
+    }
 }
 
 impl ValidationResult {
@@ -55,14 +103,103 @@ impl Validatable for Config {
             result.add_error("Output directory cannot be empty".to_string());
         }
 
+        if self.embeddings.dimension == 0 {
+            result.add_error("Embedding dimension must be greater than 0".to_string());
+        }
+        let embedding_backend = self.embeddings.backend.to_ascii_lowercase();
+        if embedding_backend == "llama_cpp" || embedding_backend == "llama.cpp" {
+            if self.embeddings.dimension != 384 {
+                result.add_error(format!(
+                    "llama.cpp multilingual-e5-small embeddings require dimension 384, got {}",
+                    self.embeddings.dimension
+                ));
+            }
+            if self
+                .embeddings
+                .api_endpoint
+                .as_deref()
+                .unwrap_or_default()
+                .trim()
+                .is_empty()
+            {
+                result
+                    .add_error("llama.cpp embeddings require embeddings.api_endpoint".to_string());
+            } else if !valid_http_endpoint(self.embeddings.api_endpoint.as_deref().unwrap()) {
+                result.add_error(
+                    "llama.cpp embeddings api_endpoint must be a valid http or https URL"
+                        .to_string(),
+                );
+            }
+            if self
+                .embeddings
+                .model
+                .as_deref()
+                .unwrap_or_default()
+                .trim()
+                .is_empty()
+            {
+                result.add_error("llama.cpp embedding model must not be empty".to_string());
+            }
+            if self.embeddings.fallback_to_hash {
+                result.add_error(
+                    "llama.cpp embeddings cannot fall back to hash embeddings".to_string(),
+                );
+            }
+        }
+        if self.llm.enabled {
+            if !valid_http_endpoint(&self.llm.base_url) {
+                result.add_error("llm.base_url must be a valid http or https URL".to_string());
+            }
+            if self.llm.chat_model.trim().is_empty() {
+                result.add_error("llm.chat_model must not be empty".to_string());
+            }
+            if self.llm.timeout_seconds == 0 {
+                result.add_error("llm.timeout_seconds must be greater than 0".to_string());
+            }
+            if self
+                .llm
+                .api_key_env
+                .as_deref()
+                .is_some_and(|name| name.trim().is_empty())
+            {
+                result.add_error("llm.api_key_env must name an environment variable".to_string());
+            }
+        }
+        if self.graph.max_connections == 0 {
+            result.add_error("Graph max_connections must be greater than 0".to_string());
+        }
+        for (name, threshold) in [
+            (
+                "Graph similarity threshold",
+                self.graph.similarity_threshold,
+            ),
+            (
+                "Graph relationship confidence threshold",
+                self.graph.relationship_confidence_threshold,
+            ),
+            (
+                "Graph traversal minimum relationship strength",
+                self.graph.traversal.min_relationship_strength,
+            ),
+            ("Entity minimum confidence", self.entities.min_confidence),
+            (
+                "Entity validation minimum confidence",
+                self.entities.validation_min_confidence,
+            ),
+        ] {
+            if !threshold.is_finite() || !(0.0..=1.0).contains(&threshold) {
+                result.add_error(format!("{name} must be finite and between 0.0 and 1.0"));
+            }
+        }
+
         // Validate chunk size
-        if self.chunk_size == 0 {
+        if self.text.chunk_size == 0 {
             result.add_error("Chunk size must be greater than 0".to_string());
-        } else if self.chunk_size < 100 {
+        } else if self.text.chunk_size < 100 {
             result.add_warning(
                 "Chunk size is very small (<100), this may affect performance".to_string(),
             );
-        } else if self.chunk_size > 10000 {
+        } else if self.text.chunk_size > 10000 {
             result.add_warning(
                 "Chunk size is very large (>10000), this may affect quality".to_string(),
             );
@@ -71,9 +208,9 @@ impl Validatable for Config {
         }
 
         // Validate chunk overlap
-        if self.chunk_overlap >= self.chunk_size {
+        if self.text.chunk_overlap >= self.text.chunk_size {
             result.add_error("Chunk overlap must be less than chunk size".to_string());
-        } else if self.chunk_overlap > self.chunk_size / 2 {
+        } else if self.text.chunk_overlap > self.text.chunk_size / 2 {
             result.add_warning(
                 "Chunk overlap is more than 50% of chunk size, this may be inefficient".to_string(),
             );
@@ -93,21 +230,17 @@ impl Validatable for Config {
         }
 
         // Validate retrieval settings
-        if let Some(top_k) = self.top_k_results {
-            if top_k == 0 {
-                result.add_error("Top-k results must be greater than 0".to_string());
-            } else if top_k > 100 {
-                result.add_warning(
-                    "Top-k results is very high (>100), this may affect performance".to_string(),
-                );
-            } else {
-                // Top-k is in acceptable range
-            }
+        if self.retrieval.top_k == 0 {
+            result.add_error("Top-k results must be greater than 0".to_string());
+        } else if self.retrieval.top_k > 100 {
+            result.add_warning(
+                "Top-k results is very high (>100), this may affect performance".to_string(),
+            );
         }
 
         // Validate similarity threshold
         if let Some(threshold) = self.similarity_threshold {
-            if !(0.0..=1.0).contains(&threshold) {
+            if !threshold.is_finite() || !(0.0..=1.0).contains(&threshold) {
                 result.add_error("Similarity threshold must be between 0.0 and 1.0".to_string());
             } else if threshold < 0.1 {
                 result.add_warning(
@@ -124,8 +257,15 @@ impl Validatable for Config {
             }
         }
 
+        if self.graph.traversal.max_depth == 0 {
+            result.add_error("Graph traversal max_depth must be greater than 0".to_string());
+        }
+        if self.graph.traversal.max_paths == 0 {
+            result.add_error("Graph traversal max_paths must be greater than 0".to_string());
+        }
+
         // Add suggestions based on configuration
-        if self.chunk_size > 1000 && self.chunk_overlap < 100 {
+        if self.text.chunk_size > 1000 && self.text.chunk_overlap < 100 {
             result.add_suggestion("Consider increasing chunk overlap for better context preservation with large chunks".to_string());
         }
 
@@ -148,11 +288,9 @@ impl Validatable for Config {
         }
 
         // Validate feature compatibility
-        #[cfg(not(feature = "ollama"))]
+        #[cfg(not(feature = "llm"))]
         {
-            result.add_warning(
-                "Ollama feature is not enabled, local LLM support unavailable".to_string(),
-            );
+            result.add_warning("`llm` feature is not enabled, LLM support unavailable".to_string());
         }
 
         #[cfg(not(feature = "parallel-processing"))]
@@ -166,17 +304,15 @@ impl Validatable for Config {
         let optimal_chunk_size = 800;
         let optimal_overlap = 200;
 
-        if (self.chunk_size as i32 - optimal_chunk_size).abs() > 300 {
+        if self.text.chunk_size.abs_diff(optimal_chunk_size as usize) > 300 {
             result.add_suggestion(format!(
-                "Consider using chunk size around {} for optimal performance",
-                optimal_chunk_size
+                "Consider using chunk size around {optimal_chunk_size} for optimal performance"
             ));
         }
 
-        if (self.chunk_overlap as i32 - optimal_overlap).abs() > 100 {
+        if self.text.chunk_overlap.abs_diff(optimal_overlap as usize) > 100 {
             result.add_suggestion(format!(
-                "Consider using chunk overlap around {} for optimal context preservation",
-                optimal_overlap
+                "Consider using chunk overlap around {optimal_overlap} for optimal context preservation"
             ));
         }
 
@@ -193,8 +329,7 @@ fn validate_pipeline_approach(config: &SetConfig, result: &mut ValidationResult)
         "semantic" | "algorithmic" | "hybrid" => {},
         invalid => {
             result.add_error(format!(
-                "Invalid pipeline approach: '{}'. Must be 'semantic', 'algorithmic', or 'hybrid'",
-                invalid
+                "Invalid pipeline approach: '{invalid}'. Must be 'semantic', 'algorithmic', or 'hybrid'"
             ));
             return;
         },
@@ -204,10 +339,7 @@ fn validate_pipeline_approach(config: &SetConfig, result: &mut ValidationResult)
     if approach == "semantic" {
         match &config.semantic {
             None => {
-                result.add_error(
-                    "Semantic pipeline approach selected but [semantic] configuration is missing"
-                        .to_string(),
-                );
+                // The converter supplies the documented semantic defaults.
             },
             Some(semantic) => {
                 if !semantic.enabled {
@@ -226,7 +358,7 @@ fn validate_pipeline_approach(config: &SetConfig, result: &mut ValidationResult)
                     "jina",
                     "mistral",
                     "together",
-                    "ollama",
+                    "llama_cpp",
                 ];
                 if !valid_backends.contains(&semantic.embeddings.backend.as_str()) {
                     result.add_error(format!(
@@ -279,7 +411,7 @@ fn validate_pipeline_approach(config: &SetConfig, result: &mut ValidationResult)
     if approach == "algorithmic" {
         match &config.algorithmic {
             None => {
-                result.add_error("Algorithmic pipeline approach selected but [algorithmic] configuration is missing".to_string());
+                // The converter supplies the documented algorithmic defaults.
             },
             Some(algorithmic) => {
                 if !algorithmic.enabled {
@@ -341,10 +473,7 @@ fn validate_pipeline_approach(config: &SetConfig, result: &mut ValidationResult)
     if approach == "hybrid" {
         match &config.hybrid {
             None => {
-                result.add_error(
-                    "Hybrid pipeline approach selected but [hybrid] configuration is missing"
-                        .to_string(),
-                );
+                // The converter supplies the documented hybrid defaults.
             },
             Some(hybrid) => {
                 if !hybrid.enabled {
@@ -357,8 +486,7 @@ fn validate_pipeline_approach(config: &SetConfig, result: &mut ValidationResult)
                 let weight_sum = hybrid.weights.semantic_weight + hybrid.weights.algorithmic_weight;
                 if (weight_sum - 1.0).abs() > 0.01 {
                     result.add_warning(format!(
-                        "Hybrid weights should sum to 1.0 (currently: {:.2})",
-                        weight_sum
+                        "Hybrid weights should sum to 1.0 (currently: {weight_sum:.2})"
                     ));
                 }
 
@@ -381,8 +509,7 @@ fn validate_pipeline_approach(config: &SetConfig, result: &mut ValidationResult)
                     hybrid.entity_extraction.llm_weight + hybrid.entity_extraction.pattern_weight;
                 if (entity_weight_sum - 1.0).abs() > 0.01 {
                     result.add_warning(format!(
-                        "Hybrid entity extraction weights should sum to 1.0 (currently: {:.2})",
-                        entity_weight_sum
+                        "Hybrid entity extraction weights should sum to 1.0 (currently: {entity_weight_sum:.2})"
                     ));
                 }
 
@@ -391,8 +518,7 @@ fn validate_pipeline_approach(config: &SetConfig, result: &mut ValidationResult)
                     hybrid.retrieval.vector_weight + hybrid.retrieval.bm25_weight;
                 if (retrieval_weight_sum - 1.0).abs() > 0.01 {
                     result.add_warning(format!(
-                        "Hybrid retrieval weights should sum to 1.0 (currently: {:.2})",
-                        retrieval_weight_sum
+                        "Hybrid retrieval weights should sum to 1.0 (currently: {retrieval_weight_sum:.2})"
                     ));
                 }
 
@@ -419,7 +545,7 @@ fn validate_pipeline_approach(config: &SetConfig, result: &mut ValidationResult)
     match approach.as_str() {
         "semantic" => {
             result.add_suggestion("Semantic pipeline uses neural embeddings and LLM-based extraction for high-quality results".to_string());
-            if config.ollama.enabled {
+            if config.llm.enabled {
                 result.add_suggestion(
                     "Consider using 'llama3.1:8b' for entity extraction with gleaning enabled"
                         .to_string(),
@@ -448,63 +574,22 @@ impl Validatable for SetConfig {
         // Validate pipeline approach configuration
         validate_pipeline_approach(self, &mut result);
 
-        // Validate general settings
-        if let Some(input_path) = &self.general.input_document_path {
-            if input_path.is_empty() {
-                result.add_error("Input document path cannot be empty".to_string());
-            } else {
-                let path = Path::new(input_path);
-                if !path.exists() {
-                    result.add_error(format!("Input document not found: {}", input_path));
-                } else if !path.is_file() {
-                    result.add_error(format!("Input path is not a file: {}", input_path));
-                } else {
-                    // Input path exists and is a valid file
-                }
-            }
-        } else {
-            result.add_error("Input document path is required".to_string());
-        }
-
         if self.general.output_dir.is_empty() {
             result.add_error("Output directory cannot be empty".to_string());
         }
 
-        // Validate pipeline settings
-        let pipeline = &self.pipeline;
-        if pipeline.text_extraction.chunk_size == 0 {
-            result.add_error("Chunk size must be greater than 0".to_string());
+        // Validate the canonical runtime settings as well as source-specific sections.
+        let canonical = self.to_graphrag_config_unchecked();
+        for error in canonical.validate().errors {
+            if !result.errors.contains(&error) {
+                result.add_error(error);
+            }
         }
 
-        if pipeline.text_extraction.chunk_overlap >= pipeline.text_extraction.chunk_size {
-            result.add_error("Chunk overlap must be less than chunk size".to_string());
-        }
-
-        // Validate Ollama settings if enabled
-        let ollama = &self.ollama;
-        if ollama.enabled {
-            if ollama.host.is_empty() {
-                result.add_error("Ollama host cannot be empty when enabled".to_string());
-            }
-
-            if ollama.port == 0 {
-                result.add_error("Ollama port must be valid".to_string());
-            }
-
-            if ollama.chat_model.is_empty() {
-                result.add_error("Ollama chat model must be specified".to_string());
-            }
-
-            if ollama.embedding_model.is_empty() {
-                result.add_error("Ollama embedding model must be specified".to_string());
-            }
-
-            // Suggest common models if using defaults
-            if ollama.chat_model == "llama2" {
-                result.add_suggestion(
-                    "Consider using 'llama3.1:8b' for better performance".to_string(),
-                );
-            }
+        // Base URL / timeout are validated on the canonical config above.
+        let llm = &self.llm;
+        if llm.enabled && llm.embedding_model.trim().is_empty() {
+            result.add_error("llm.embedding_model must be specified".to_string());
         }
 
         // Validate storage settings
@@ -512,7 +597,7 @@ impl Validatable for SetConfig {
         match storage.database_type.as_str() {
             "memory" | "file" | "sqlite" | "postgresql" | "neo4j" => {},
             db_type => {
-                result.add_error(format!("Unknown database type: {}", db_type));
+                result.add_error(format!("Unknown database type: {db_type}"));
                 result.add_suggestion(
                     "Supported types: memory, file, sqlite, postgresql, neo4j".to_string(),
                 );
@@ -526,38 +611,82 @@ impl Validatable for SetConfig {
         let mut result = self.validate();
 
         // Additional strict checks
-        if !self.ollama.enabled {
-            result.add_warning("Ollama is not enabled, will use mock LLM".to_string());
+        if !self.llm.enabled {
+            result.add_warning("LLM is not enabled, will use mock LLM".to_string());
         }
 
         result
     }
 }
 
-/// Validate a TOML configuration file
-pub fn validate_config_file(path: &Path, strict: bool) -> Result<ValidationResult> {
-    let config_str = std::fs::read_to_string(path)?;
-    let config: SetConfig = toml::from_str(&config_str).map_err(|e| GraphRAGError::Config {
-        message: format!("Failed to parse TOML config: {}", e),
-    })?;
+/// Check a document path when a command actually needs to read a document.
+/// Configuration validation intentionally does not require an input document.
+pub fn validate_document_file(path: impl AsRef<Path>) -> Result<()> {
+    let path = path.as_ref();
+    if path.as_os_str().is_empty() {
+        return Err(GraphRAGError::Config {
+            message: "Input document path cannot be empty".to_string(),
+        });
+    }
+    if !path.exists() {
+        return Err(GraphRAGError::Config {
+            message: format!("Input document not found: {}", path.display()),
+        });
+    }
+    if !path.is_file() {
+        return Err(GraphRAGError::Config {
+            message: format!("Input path is not a file: {}", path.display()),
+        });
+    }
+    Ok(())
+}
 
-    let result = if strict {
+/// Load and validate a configuration file using the same format dispatcher as
+/// the CLI and server. File readability/parsing errors are returned separately
+/// from the semantic [`ValidationResult`].
+pub fn validate_config_file(path: &Path, strict: bool) -> Result<ValidationResult> {
+    if !path.exists() {
+        return Err(GraphRAGError::Config {
+            message: format!("Configuration file not found: {}", path.display()),
+        });
+    }
+    if !path.is_file() {
+        return Err(GraphRAGError::Config {
+            message: format!("Configuration path is not a file: {}", path.display()),
+        });
+    }
+    let config = crate::config::loader::load_config(path.to_str().ok_or_else(|| {
+        GraphRAGError::Config {
+            message: "Configuration path is not valid UTF-8".to_string(),
+        }
+    })?)?;
+
+    Ok(if strict {
         config.validate_strict()
     } else {
         config.validate()
-    };
-
-    Ok(result)
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::TextConfig;
+
+    #[test]
+    fn default_validation_result_is_valid_and_empty() {
+        let result = ValidationResult::default();
+        assert!(result.is_valid);
+        assert!(result.errors.is_empty());
+    }
 
     #[test]
     fn test_config_validation() {
         let config = Config {
-            chunk_size: 0,
+            text: TextConfig {
+                chunk_size: 0,
+                ..Default::default()
+            },
             ..Default::default()
         };
 
@@ -569,8 +698,11 @@ mod tests {
     #[test]
     fn test_chunk_overlap_validation() {
         let config = Config {
-            chunk_size: 100,
-            chunk_overlap: 150,
+            text: TextConfig {
+                chunk_size: 100,
+                chunk_overlap: 150,
+                ..Default::default()
+            },
             ..Default::default()
         };
 
@@ -582,8 +714,11 @@ mod tests {
     #[test]
     fn test_suggestions() {
         let config = Config {
-            chunk_size: 2000,
-            chunk_overlap: 50,
+            text: TextConfig {
+                chunk_size: 2000,
+                chunk_overlap: 50,
+                ..Default::default()
+            },
             ..Default::default()
         };
 

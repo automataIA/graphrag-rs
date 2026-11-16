@@ -89,11 +89,11 @@ impl DocumentIndex {
 
         // Index by date
         self.by_date.push((doc.created_at, doc.id.clone()));
-        self.by_date.sort_by(|a, b| b.0.cmp(&a.0)); // Most recent first
+        self.by_date.sort_by_key(|e| std::cmp::Reverse(e.0)); // Most recent first
 
         // Index by size
         self.by_size.push((doc.size_bytes, doc.id.clone()));
-        self.by_size.sort_by(|a, b| b.0.cmp(&a.0)); // Largest first
+        self.by_size.sort_by_key(|e| std::cmp::Reverse(e.0)); // Largest first
 
         // Index by content hash for deduplication
         self.content_hashes

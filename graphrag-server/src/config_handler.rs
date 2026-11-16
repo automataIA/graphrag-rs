@@ -4,9 +4,8 @@
 //! via REST API endpoints, allowing dynamic initialization without requiring
 //! TOML files or environment variables.
 
-use graphrag_core::Config;
+use graphrag_core::{config::loader::ConfigFormat, config::Validatable, Config};
 use serde::{Deserialize, Serialize};
-use serde_json;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -14,6 +13,7 @@ use tokio::sync::RwLock;
 #[derive(Clone)]
 pub struct ConfigManager {
     /// Current active configuration (if initialized)
+    #[cfg_attr(not(test), allow(dead_code))]
     config: Arc<RwLock<Option<Config>>>,
     /// Configuration validation errors
     validation_errors: Arc<RwLock<Vec<String>>>,
@@ -29,16 +29,22 @@ impl ConfigManager {
     }
 
     /// Set configuration from JSON
+    #[cfg_attr(not(test), allow(dead_code))]
     pub async fn set_from_json(&self, json_str: &str) -> Result<(), String> {
-        // Parse JSON into Config
-        let config: Config =
-            serde_json::from_str(json_str).map_err(|e| format!("Failed to parse JSON: {}", e))?;
+        // Use the shared dispatcher so the server accepts canonical, SetConfig,
+        // and legacy JSON adapters with the same validation rules as the CLI.
+        let config =
+            graphrag_core::config::loader::load_config_from_str(json_str, ConfigFormat::Json)
+                .map_err(|e| format!("Failed to parse JSON: {e}"))?;
 
         // Validate configuration
-        let errors = self.validate_config(&config).await;
-        if !errors.is_empty() {
-            *self.validation_errors.write().await = errors.clone();
-            return Err(format!("Configuration validation failed: {:?}", errors));
+        let validation = config.validate();
+        if !validation.is_valid {
+            *self.validation_errors.write().await = validation.errors.clone();
+            return Err(format!(
+                "Configuration validation failed: {:?}",
+                validation.errors
+            ));
         }
 
         // Store configuration
@@ -48,12 +54,8 @@ impl ConfigManager {
         Ok(())
     }
 
-    /// Get current configuration (clone)
-    pub async fn get_config(&self) -> Option<Config> {
-        self.config.read().await.clone()
-    }
-
     /// Check if configuration is set
+    #[cfg_attr(not(test), allow(dead_code))]
     pub async fn is_configured(&self) -> bool {
         self.config.read().await.is_some()
     }
@@ -62,46 +64,6 @@ impl ConfigManager {
     #[allow(dead_code)]
     pub async fn get_validation_errors(&self) -> Vec<String> {
         self.validation_errors.read().await.clone()
-    }
-
-    /// Validate configuration
-    async fn validate_config(&self, config: &Config) -> Vec<String> {
-        let mut errors = Vec::new();
-
-        // Validate chunk size
-        if config.chunk_size == 0 {
-            errors.push("chunk_size must be greater than 0".to_string());
-        }
-        if config.chunk_size < config.chunk_overlap {
-            errors.push("chunk_size must be greater than chunk_overlap".to_string());
-        }
-
-        // Validate embeddings
-        if config.embeddings.dimension == 0 {
-            errors.push("embeddings.dimension must be greater than 0".to_string());
-        }
-
-        // Validate graph config
-        if config.graph.max_connections == 0 {
-            errors.push("graph.max_connections must be greater than 0".to_string());
-        }
-
-        // Validate retrieval config
-        if config.retrieval.top_k == 0 {
-            errors.push("retrieval.top_k must be greater than 0".to_string());
-        }
-
-        errors
-    }
-
-    /// Convert Config to JSON string
-    pub async fn to_json(&self) -> Result<String, String> {
-        let config = self.config.read().await;
-        match config.as_ref() {
-            Some(cfg) => serde_json::to_string_pretty(cfg)
-                .map_err(|e| format!("Failed to serialize config: {}", e)),
-            None => Err("No configuration set".to_string()),
-        }
     }
 
     /// Get default configuration as JSON
@@ -162,8 +124,6 @@ pub fn get_config_templates() -> ConfigTemplateResponse {
             description: "Minimal configuration with hash-based embeddings".to_string(),
             config: serde_json::json!({
                 "output_dir": "./output",
-                "chunk_size": 1000,
-                "chunk_overlap": 200,
                 "embeddings": {
                     "backend": "hash",
                     "dimension": 384,
@@ -196,13 +156,13 @@ pub fn get_config_templates() -> ConfigTemplateResponse {
                     "parallel_graph_ops": true,
                     "parallel_vector_ops": true
                 },
-                "ollama": {
+                "llm": {
                     "enabled": false,
-                    "host": "http://localhost",
-                    "port": 11434,
-                    "embedding_model": "nomic-embed-text",
-                    "chat_model": "llama3.2:3b",
-                    "timeout_seconds": 30,
+                    "base_url": "http://127.0.0.1:8080/v1",
+                    "embedding_base_url": "http://127.0.0.1:8081/v1",
+                    "embedding_model": "multilingual-e5-small",
+                    "chat_model": "qwen3.5-9b",
+                    "timeout_seconds": 120,
                     "max_retries": 3,
                     "fallback_to_hash": true
                 },
@@ -212,17 +172,17 @@ pub fn get_config_templates() -> ConfigTemplateResponse {
             }),
         },
         ConfigExample {
-            name: "ollama_production".to_string(),
-            description: "Production setup with Ollama LLM and real embeddings".to_string(),
+            name: "llama_cpp_production".to_string(),
+            description: "Production setup with llama.cpp LLM and multilingual-e5 embeddings"
+                .to_string(),
             config: serde_json::json!({
                 "output_dir": "./output",
-                "chunk_size": 800,
-                "chunk_overlap": 200,
                 "embeddings": {
-                    "backend": "ollama",
-                    "dimension": 768,
-                    "model": "nomic-embed-text",
-                    "fallback_to_hash": true,
+                    "backend": "llama_cpp",
+                    "dimension": 384,
+                    "model": "multilingual-e5-small",
+                    "api_endpoint": "http://127.0.0.1:8081/v1/embeddings",
+                    "fallback_to_hash": false,
                     "batch_size": 32
                 },
                 "graph": {
@@ -251,15 +211,15 @@ pub fn get_config_templates() -> ConfigTemplateResponse {
                     "parallel_graph_ops": true,
                     "parallel_vector_ops": true
                 },
-                "ollama": {
+                "llm": {
                     "enabled": true,
-                    "host": "http://localhost",
-                    "port": 11434,
-                    "embedding_model": "nomic-embed-text",
-                    "chat_model": "llama3.1:8b",
+                    "base_url": "http://127.0.0.1:8080/v1",
+                    "embedding_base_url": "http://127.0.0.1:8081/v1",
+                    "embedding_model": "multilingual-e5-small",
+                    "chat_model": "qwen3.5-9b",
                     "timeout_seconds": 300,
                     "max_retries": 3,
-                    "fallback_to_hash": true
+                    "fallback_to_hash": false
                 },
                 "enhancements": {
                     "enabled": true,
@@ -279,8 +239,6 @@ pub fn get_config_templates() -> ConfigTemplateResponse {
             description: "Optimized for speed with parallel processing".to_string(),
             config: serde_json::json!({
                 "output_dir": "./output",
-                "chunk_size": 512,
-                "chunk_overlap": 100,
                 "embeddings": {
                     "backend": "hash",
                     "dimension": 256,
@@ -313,7 +271,7 @@ pub fn get_config_templates() -> ConfigTemplateResponse {
                     "parallel_graph_ops": true,
                     "parallel_vector_ops": true
                 },
-                "ollama": {
+                "llm": {
                     "enabled": false
                 },
                 "enhancements": {
@@ -348,6 +306,16 @@ mod tests {
         let result = manager.set_from_json(&json).await;
         assert!(result.is_ok());
         assert!(manager.is_configured().await);
+    }
+
+    #[tokio::test]
+    async fn test_template_examples_are_valid_configs() {
+        for example in get_config_templates().examples {
+            let manager = ConfigManager::new();
+            let json = serde_json::to_string(&example.config).unwrap();
+            let result = manager.set_from_json(&json).await;
+            assert!(result.is_ok(), "{}: {:?}", example.name, result);
+        }
     }
 
     #[tokio::test]

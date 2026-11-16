@@ -39,7 +39,7 @@
 use crate::core::ChunkId;
 use crate::entity::BidirectionalIndex;
 use crate::lightrag::concept_graph::ConceptGraph;
-use crate::lightrag::query_refinement::{QueryRefinementConfig, QueryRefiner, RefinedQuery};
+use crate::lightrag::query_refinement::{QueryRefinementConfig, QueryRefiner};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -101,11 +101,6 @@ impl IterativeDeepeningSearch {
         }
     }
 
-    /// Create with default configuration
-    pub fn default() -> Self {
-        Self::new(SearchConfig::default())
-    }
-
     /// Perform iterative deepening search
     ///
     /// Returns search results with relevant chunks and search statistics
@@ -142,7 +137,7 @@ impl IterativeDeepeningSearch {
             );
 
             // Add results for this depth
-            results.add_depth_results(depth, depth_results.clone());
+            results.add_depth_results(depth_results.clone());
 
             // Check stopping conditions
             if visited_chunks.len() >= self.config.max_chunks {
@@ -190,7 +185,7 @@ impl IterativeDeepeningSearch {
         &self,
         depth: usize,
         concepts: &HashSet<String>,
-        concept_graph: &ConceptGraph,
+        _concept_graph: &ConceptGraph,
         bidirectional_index: &BidirectionalIndex,
         visited_chunks: &mut HashSet<ChunkId>,
     ) -> DepthResults {
@@ -337,7 +332,7 @@ pub struct SearchResults {
 }
 
 impl SearchResults {
-    fn new(query: String) -> Self {
+    pub(crate) fn new(query: String) -> Self {
         Self {
             query,
             depth_reached: 0,
@@ -349,7 +344,7 @@ impl SearchResults {
         }
     }
 
-    fn add_depth_results(&mut self, depth: usize, results: DepthResults) {
+    fn add_depth_results(&mut self, results: DepthResults) {
         self.depth_results.push(results);
     }
 
@@ -401,10 +396,16 @@ pub enum StopReason {
     NoMoreConcepts,
 }
 
+impl Default for IterativeDeepeningSearch {
+    fn default() -> Self {
+        Self::new(SearchConfig::default())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lightrag::concept_graph::{ConceptExtractor, ConceptGraphBuilder};
+    use crate::lightrag::concept_graph::ConceptGraphBuilder;
 
     #[test]
     fn test_iterative_deepening_basic() {

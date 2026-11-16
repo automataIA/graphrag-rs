@@ -1,5 +1,3 @@
-#![cfg_attr(not(feature = "async"), allow(unused_imports))]
-
 //! Late Chunking — context-preserving embeddings for RAG
 //!
 //! Standard RAG embeds each chunk in isolation, losing cross-chunk context.
@@ -12,7 +10,7 @@
 //! ```
 //!
 //! Each chunk's embedding "sees" the entire document during the attention pass,
-//! giving it +5-10% retrieval accuracy over standard chunking.
+//! while preserving document-level context for retrieval.
 //!
 //! ## Two usage modes
 //!
@@ -28,13 +26,15 @@
 //! | Model                  | Max tokens | Notes                          |
 //! |------------------------|------------|-------------------------------|
 //! | Jina v3 (default)      | 8 192      | Good for most documents        |
-//! | gte-Qwen2-7B-instruct  | 32 768     | Better quality, needs more GPU |
+//! | gte-Qwen2-7B-instruct  | 32 768     | Larger vectors, needs more GPU |
 //!
 //! For documents exceeding the limit use [`LateChunkingStrategy::split_into_sections`]
 //! to pre-divide the document and apply late chunking section-by-section.
 
+#[cfg(all(feature = "async", feature = "ureq"))]
+use crate::core::GraphRAGError;
 use crate::{
-    core::{ChunkId, ChunkingStrategy, DocumentId, GraphRAGError, TextChunk},
+    core::{ChunkId, ChunkingStrategy, DocumentId, TextChunk},
     text::chunking::HierarchicalChunker,
 };
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -219,15 +219,15 @@ impl ChunkingStrategy for LateChunkingStrategy {
 /// the concatenated inputs as a single sequence and returns per-input embeddings
 /// where each embedding reflects the full-document context.
 ///
-/// For fully **local** operation (no API key), configure Ollama with
-/// `rjmalagon/gte-qwen2-7b-instruct` — it provides excellent 32k-context
-/// embeddings without native late chunking but with a far larger context window.
+/// For local operation, use the core hash embedding fallback or configure the llama.cpp
+/// embeddings server separately. This client is an optional remote integration and requires an API key.
 ///
 /// # Examples
 ///
 /// ```rust,no_run
 /// use graphrag_core::text::late_chunking::JinaLateChunkingClient;
 ///
+/// # #[cfg(all(feature = "async", feature = "ureq"))]
 /// # async fn example(chunks: &[graphrag_core::TextChunk]) -> graphrag_core::Result<()> {
 /// let client = JinaLateChunkingClient::new("jina_xxxx".to_string());
 /// let embeddings = client.embed_with_late_chunking(chunks).await?;
@@ -237,20 +237,26 @@ impl ChunkingStrategy for LateChunkingStrategy {
 /// ```
 #[derive(Debug, Clone)]
 pub struct JinaLateChunkingClient {
-    #[cfg_attr(not(feature = "async"), allow(dead_code))]
+    #[cfg(all(feature = "async", feature = "ureq"))]
     api_key: String,
     /// Model name (default: `"jina-embeddings-v3"`)
     model: String,
 }
 
 impl JinaLateChunkingClient {
-    #[cfg(feature = "async")]
+    #[cfg(all(feature = "async", feature = "ureq"))]
     const ENDPOINT: &'static str = "https://api.jina.ai/v1/embeddings";
 
     /// Create a new client with a Jina API key
     pub fn new(api_key: impl Into<String>) -> Self {
+        #[cfg(all(feature = "async", feature = "ureq"))]
+        let api_key = api_key.into();
+        #[cfg(not(all(feature = "async", feature = "ureq")))]
+        let _ = api_key;
+
         Self {
-            api_key: api_key.into(),
+            #[cfg(all(feature = "async", feature = "ureq"))]
+            api_key,
             model: "jina-embeddings-v3".to_string(),
         }
     }
@@ -268,7 +274,7 @@ impl JinaLateChunkingClient {
     /// incorporates the full document context.
     ///
     /// Returns one embedding vector per chunk, in the same order as the input.
-    #[cfg(feature = "ureq")]
+    #[cfg(all(feature = "async", feature = "ureq"))]
     pub async fn embed_with_late_chunking(
         &self,
         chunks: &[TextChunk],

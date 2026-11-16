@@ -153,7 +153,8 @@ graphrag-wasm/dist/
 wasm-pack.log
 graphrag-wasm/pkg/
 # Large ML model (87 MB, downloadable) — do not track
-graphrag-wasm/models/
+graphrag-wasm/models/*
+!graphrag-wasm/models/README.md
 
 # ============================================
 # Documentation Generation
@@ -215,7 +216,20 @@ config_*.json
 # exclude auto-generated or specific md files if necessary,
 # but keep general .md (article.md, README.md, etc.)
 /*.md
+*.md
 !README.md
 
 # exclude files with hidden extensions
 .*.*
+
+# Versioned 0.3 implementation and verification record
+!/docs/
+/docs/*
+!/docs/implementation-0.3.md
+
+# Public facade manual page
+!/book/src/crates/facade.md
+
+# Versioned 0.3 migration and release verification guides
+!/book/src/reference/migration-0.2-to-0.3.md
+!/book/src/reference/release-0.3.md

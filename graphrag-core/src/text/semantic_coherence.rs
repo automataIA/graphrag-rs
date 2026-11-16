@@ -12,7 +12,7 @@
 //! ## References
 //!
 //! - BAR-RAG Paper: "Boundary-Aware Retrieval-Augmented Generation"
-//! - Target: +40% semantic coherence improvement
+//! - Target: improve semantic coherence according to the configured score
 
 use crate::core::error::{GraphRAGError, Result};
 use crate::embeddings::EmbeddingProvider;
@@ -434,7 +434,7 @@ impl SemanticCoherenceScorer {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "async"))]
 mod tests {
     use super::*;
     use crate::embeddings::EmbeddingProvider;
@@ -626,7 +626,7 @@ mod tests {
 
         // Long text
         let long_text = (0..100)
-            .map(|i| format!("Sentence {}.", i))
+            .map(|i| format!("Sentence {i}."))
             .collect::<Vec<_>>()
             .join(" ");
         let threshold_long = scorer.calculate_adaptive_threshold(&long_text);

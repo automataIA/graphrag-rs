@@ -1,0 +1,11 @@
+[package]
+name = "graphrag-quickstart-sync"
+version = "0.3.0"
+edition = "2021"
+rust-version = "1.88"
+publish = false
+
+[workspace]
+
+[dependencies]
+graphrag = { path = "../../graphrag", default-features = false, features = ["memory-storage", "basic-retrieval"] }
